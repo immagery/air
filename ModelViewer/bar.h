@@ -1,7 +1,7 @@
 #ifndef __BAR_H__
 #define __BAR_H__
 
-#include <qwidget.h>
+#include <QtWidgets/qwidget.h>
 
 class QImage;
 

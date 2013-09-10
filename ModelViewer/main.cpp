@@ -1,6 +1,6 @@
 #pragma warning(disable: 4002)
 
-#include <QApplication>
+#include <QtWidgets/QApplication>
 #include "mainwindow.h"
 
 //#include "test.h"

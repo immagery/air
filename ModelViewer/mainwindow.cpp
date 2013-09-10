@@ -3,12 +3,12 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QToolButton>
-#include <QToolBar>
+#include <QtWidgets/QToolButton>
+#include <QtWidgets/QToolBar>
 #include <QDir>
-#include <QFileDialog>
+#include <QtWidgets/QFileDialog>
 
-#include <QTreeView>
+#include <QtWidgets/QTreeView>
 #include <QStandardItem>
 
 #include "treeitem.h"

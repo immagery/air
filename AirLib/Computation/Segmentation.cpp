@@ -2473,7 +2473,7 @@ void normalizeDistances(Modelo& m)
 	}
 }
 
-bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches = false)
+bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 {
 	vector<binding*>& bds = model.bindings;
 
@@ -2536,7 +2536,7 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 	return true;
 }
 
-void SaveEmbeddings(Modelo& model, char* fileName, bool ascii = false)
+void SaveEmbeddings(Modelo& model, char* fileName, bool ascii)
 {
 	char asciiFile[100];
 	sprintf(asciiFile, "%s/bind_%s.txt", model.sPath.c_str(), model.sName.c_str());

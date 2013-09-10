@@ -10,7 +10,7 @@
 
 // Qt libraries
 #include <QDir>
-#include <QMessageBox>
+#include <QtWidgets/QMessageBox>
 #include <QColor>
 
 #include "GLWidget.h"
