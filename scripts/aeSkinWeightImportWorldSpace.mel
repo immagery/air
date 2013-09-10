@@ -1,0 +1,616 @@
+/* This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: aeSkinWeightsTransfer
+''    Author:  
+''    Last Updated: Jul 26, 2009
+''    Update/Change this file at:
+''    http://Highend3d.com/maya/downloads/mel_scripts/animation/2766.html
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+// aeSkinWeightImportWorldSpace.mel
+//
+// Procedure Name: aeSkinWeightImportWorldSpace
+// Version: 1.0
+// Author: Anders Egleus
+// Home Page: http://www.stannogen.com
+// Email: anders@stannogen.com
+// Creation date: 8 feb 2004
+//
+// Description: Import Skin Weights Exported by aeSkinWeightExportWorldSpace.
+
+// Usage: Select the object(s) that you wish to import skin weights to (no need to select Influence
+// Transforms, i.e. joints etc.) and run the procedure "aeSkinWeightImportWorldSpace;" to use default
+// or stored settings, or run the procedure "aeSkinWeightImportWorldSpaceUI;" to set the options 
+// in a user interface.
+//
+// Valid selections: Groups, Transforms, Shapes or Individual Control Points (vertices, CVs etc).
+// Selecting parent transforms means all children will be used to. Likewise, selecting a transform or 
+// shape overrides the selection of individual points on that shape, i.e. all points will be used.
+//
+// See aeSkinWeightImportWorldSpaceUI.mel for a more thorough documentation of the inputs.
+
+global proc aeSkinWeightsImportFile (string $fileName, string $fileType)
+{
+	global string $aeWeightsFile;
+	$aeWeightsFile = $fileName;
+}
+
+proc userAbort (string $message)
+{
+	progressWindow -endProgress;
+	error $message;
+}
+
+// some helper procedures for working with arrays.
+proc float [] subArray (float $fromArray [], int $start, int $length)
+{
+	float $outArray [];
+	for ($i = $start; $i < $start + $length; $i++)
+		$outArray [$i - $start] = $fromArray [$i];
+	return $outArray;
+}
+
+proc float arraySum (float $array [])
+{
+	float $sum;
+	for ($i in $array) $sum += $i;
+	return $sum;
+}
+
+proc float arrayMean (float $array [])
+{
+	float $sum;
+	for ($i in $array) $sum += $i;
+	return ($sum / size ($array));
+}
+
+proc float [] arrayMult (float $array [], float $mult)
+{
+	float $multArray [];
+	for ($i = 0; $i < size($array); $i++) $multArray [$i] = $array [$i] * $mult;
+	return $multArray;
+}
+
+proc float [] twoArrayMult (float $array1 [], float $array2 [])
+{
+	float $multArray [];
+	for ($i = 0; $i < size($array1); $i++) $multArray [$i] = $array1 [$i] * $array2 [$i];
+	return $multArray;
+}
+
+proc float twoArrayMultSum (float $array1 [], float $array2 [])
+{
+	float $multSum = 0.0;
+	for ($i = 0; $i < size($array1); $i++) $multSum += $array1 [$i] * $array2 [$i];
+	return $multSum;
+}
+
+proc float [] arrayDiv (float $array [], float $div)
+{
+	if ($div == 0) error "Cannot divide by 0";
+	float $divArray [];
+	for ($i = 0; $i < size($array); $i++) $divArray [$i] = $array [$i] / $div;
+	return $divArray;
+}
+
+proc float [] arrayInv (float $array [])
+{
+	float $invArray [];
+	for ($i = 0; $i < size($array); $i++)
+	{
+		if ($array [$i] == 0) error "Cannot divide by 0";
+		$invArray [$i] = 1 / $array [$i];
+	}
+	return $invArray;
+}
+
+proc float [] arrayNormalize (float $array [], float $sum)
+{
+	float $div;
+	float $normArray [];
+	for ($i in $array) $div += $i;
+	if ($div == 0) return $array;
+	for ($j = 0; $j < size($array); $j++) $normArray [$j] = $array [$j] / $div * $sum;
+	return $normArray;
+}
+
+proc float [] floatArrayCatenate (float $array1 [], float $array2 [])
+{
+	float $outArray [] = $array1;
+	for ($i = size($array1); $i < (size($array1) + size($array2)); $i++)
+		$outArray [$i] = $array2 [$i - size($array1)];
+	return $outArray;
+}
+
+proc float [] arrayEqualize (float $array [], float $amt)
+{
+	for ($i = 0; $i < size($array); $i++)
+		$array [$i] = $amt;
+	return $array;
+}
+
+// procedure for zeroing all weights but the highest ones. $maxInfl determines how many weights to keep.
+proc float [] removeInfl (float $weights [], int $maxInfl)
+{
+	float $sortedWeights [];
+	int $sortOrder [];
+	int $keep = size($weights) - $maxInfl;
+	for ($wt = 0; $wt < `size $weights`; $wt++)
+	{
+		int $inserted = 0;
+		for ($i = 0; $i < `size $sortedWeights`; $i++)
+			if ($weights [$wt]  < ($sortedWeights [$i]))
+			{
+				$sortedWeights = aeInsertFloat ($weights [$wt], $i, $sortedWeights, $keep);
+				$sortOrder = aeInsertInt ($wt, $i, $sortOrder, $keep);
+				$inserted = 1;
+				break;
+			}
+		if (!$inserted && `size $sortedWeights` < $keep)
+		{
+			$sortedWeights [`size $sortedWeights`] = $weights [$wt];
+			$sortOrder [`size $sortOrder`] = $wt;
+		}
+	}
+	for ($orderN in $sortOrder)
+		$weights [$orderN] = 0.0;
+	return $weights;
+}
+
+// Returns an array ($outArray) sorted as follows: 
+// Any element found in both $inArray1 and $inArray2 has the same index in $outArray as in $inArray1.
+// Any element found in $inArray1 but not in $inArray2 gets the string "" in $outArray.
+// Any element found in $inArray2 but not in $inArray1 is put last in $outArray.
+proc string [] overlapSortArray (string $inArray1 [], string $inArray2 [])
+{
+	string $lastArray [];
+	string $firstArray [];
+	for ($i in $inArray2)
+		if (!stringArrayCount($i, $inArray1)) $lastArray [size($lastArray)] = $i;
+	for ($j = 0; $j < size($inArray1); $j++)
+		if (stringArrayCount($inArray1 [$j], $inArray2)) $firstArray [$j] = $inArray1 [$j];
+		else $firstArray [$j] = "";
+	string $outArray [] = stringArrayCatenate ($firstArray, $lastArray);
+	return $outArray;
+}
+
+// Insert a float value ($element) into an array ($inArray) at the specified place ($atIndex).
+// Setting $keep to 0 allows the array to grow. Any other number will constrain the array to
+// the size set by $keep and delete the last element.
+global proc float [] aeInsertFloat  (float $element, int $atIndex, float $inArray [], int $keep)
+{
+		float $outArray [];
+		int $inSize = `size $inArray`;
+		for ($i = ($inSize - 1); $i >= $atIndex; $i--)
+			$inArray [($i + 1)] = $inArray [$i];
+		$inArray [$atIndex] = $element;
+		if ($keep && $inSize >= ($keep - 1))
+			for ($i = 0; $i < $keep; $i++) 
+				$outArray [$i] = $inArray [$i];
+		else $outArray = $inArray;
+		return $outArray;
+}
+
+// same as insertFloat but fot int values
+global proc int [] aeInsertInt (int $element, int $atIndex, int $inArray [], int $keep)
+{
+		int $outArray [];
+		int $inSize = `size $inArray`;
+		for ($i = ($inSize - 1); $i >= $atIndex; $i--)
+			$inArray [($i + 1)] = $inArray [$i];
+		$inArray [$atIndex] = $element;
+		if ($keep && $inSize >= ($keep - 1))
+			for ($i = 0; $i < $keep; $i++) 
+				$outArray [$i] = $inArray [$i];
+		else $outArray = $inArray;
+		return $outArray;
+}
+
+// Calculate the averaged weights of a single point, based on the exported weights.
+// Arguments:
+//			int $numPoints				- See "$avgPts" at the top of this file.
+// 			vector $cmprPt				- The world space position of the point to calculate the weights for.
+//			vector $cmprPts []			- The world space positions of the exported points.
+//			float $minDist				- See "$minAvgDist" at the top of this file.
+//			float $maxDist				- See "$maxDist" at the top of this file.
+//			int $numInfl				- See "$maxInflAll" at the top of this file.
+//			string $inflXformList []	- An array of the Influence Transforms of the Skin Cluster.
+//										  deforming the point to calculate the weights for.
+//			float $weightList []		- The array of exported Skin Weights.
+//			float $newWeights []		- The array of Skin Weights for this Skin Cluster's Influence Transforms
+//										  which were not found among the exported Influence Transforms.
+//			float $bias					- See "$bias" at the top of this file.
+//			int $ignoreBias				- See "$ignoreBias" at the top of this file.
+global proc float [] aeCalcExportWeights (int $numPoints, vector $cmprPt, vector $cmprPts [],
+										float $minDist, float $maxDist, int $numInfl,
+										string $inflXformList [], float $weightList [],
+										float $newWeights [], float $bias, int $ignoreBias)
+{
+// get the closest points
+	int $pointOrder [];
+	float $ptDists [];
+	float $outWeights [];
+// Iterate over all the exported points
+	for ($pt = 0; $pt < `size $cmprPts`; $pt++)
+	{
+// Get the exported point's distance from the import point
+		float $dist = `mag ($cmprPt - $cmprPts[$pt])`;
+// skip this exported point if it's too far away
+		if ($dist > $maxDist) continue;
+		int $inserted = 0;
+// Iterate over the list of the closest exported points found so far
+		for ($i = 0; $i < `size $ptDists`; $i++)
+		{
+// If this point is closer than any of the exported points found so far,
+// insert its distance into the distance list and its index into the order list
+ 			if ($dist < ($ptDists [$i]))
+			{
+				$ptDists = aeInsertFloat ($dist, $i, $ptDists, $numPoints);
+				$pointOrder = aeInsertInt ($pt, $i, $pointOrder, $numPoints);
+				$inserted = 1;
+				break;
+			}
+		}
+// If it wasn't closer than any of the points in the list, put it last if there's room for it
+		if (!$inserted && `size $ptDists` < $numPoints)
+		{
+			$ptDists [`size $ptDists`] = $dist;
+			$pointOrder [`size $pointOrder`] = $pt;
+		}
+	}
+// if no export points were within $maxDist, return an empty array
+	if (!`size $pointOrder`) return {}; 
+	float $origWtsAvgd [];
+// if the closest export point is closer than $minDist, and either $bias is 1 or $ignoreBias is on,
+// the weights can simply be copied from the matching export point:
+	if (($ptDists [0] <= $minDist) && (($bias > 0.9999999) ||  $ignoreBias))
+		$origWtsAvgd = subArray ($weightList, ($pointOrder [0] * $numInfl), $numInfl);
+	else
+	{
+// No need to calculate falloff multipliers if $bias is 0 or the closest export point is closer than $minDist.
+		if (($bias >= 0.0000001) && ($ptDists [0] > $minDist))
+		{
+			$ptDists = arrayInv ($ptDists);
+			$ptDists = arrayNormalize ($ptDists, 1);
+		}
+		for ($infl = 0; $infl < $numInfl; $infl++)
+		{
+// If none of the Skin Cluster's Influence Transforms match the exported influence transform, there's no need to calculate
+			if ($inflXformList [$infl] != "")
+			{
+				float $wtsToAvg [];
+// Get the weights to average between
+				for ($i = 0; $i < `size $pointOrder`; $i++)
+				{
+					$wtsToAvg [$i] = $weightList [($pointOrder [$i] * $numInfl + $infl)];
+				}
+// These conditions are to make sure no unnecessary calculations take place.
+				if ($bias < 0.0000001)
+					$origWtsAvgd [$infl] = arrayMean ($wtsToAvg);
+				else if ($ptDists [0] <= $minDist)
+					$origWtsAvgd [$infl] = (arrayMean ($wtsToAvg)) * $bias + $wtsToAvg [0] * (1 - $bias);
+				else if ($bias > .9999999)
+					$origWtsAvgd [$infl] = twoArrayMultSum ($wtsToAvg, $ptDists);
+				else
+					$origWtsAvgd [$infl] = (arrayMean ($wtsToAvg)) * $bias + (twoArrayMultSum ($wtsToAvg, $ptDists)) * (1 - $bias);
+			}
+		}
+	}
+// Add the "new" weights (if any)
+	if (size ($newWeights))
+	{
+		float $newWeightsTotal = arraySum ($newWeights);
+// If the total amount of the "new" weights for this import point is 1 or more, zero all the "original" weights
+		if ($newWeightsTotal > .9999999)
+			$origWtsAvgd = arrayEqualize ($origWtsAvgd, 0.0);
+		else
+			$origWtsAvgd = arrayNormalize ($origWtsAvgd, (1.0 - $newWeightsTotal));
+		$outWeights = floatArrayCatenate ($origWtsAvgd, $newWeights);
+	} else 
+		$outWeights = $origWtsAvgd;
+	return $outWeights;
+}
+
+global proc string aeSkinWeightImportWorldSpace ()
+{
+	global string $aeWeightsFile;
+	int $doImport = 1;
+	int $avgPts = 5;
+	float $maxDist = 2.0;
+	float $minAvgDist = 0.1;
+	float $bias = 1.0;
+	int $ignoreBias = 1;
+	int $removeNewInfl = 0;
+	int $setMaxInfl = 1;
+	int $maxInflAll = 0;
+	int $defMaxInfl = 3;
+// Get the stored values. If a value hasn't been stored, it will keep its default value.
+	if ( `optionVar -exists "S_aeWI_ImpWts"` )
+		$doImport = `optionVar -q "S_aeWI_ImpWts"`;
+	if ( `optionVar -exists "S_aeWI_AvgPts"` )
+		$avgPts = `optionVar -q "S_aeWI_AvgPts"`;
+	if ( `optionVar -exists "S_aeWI_FD"` )
+		$maxDist = `optionVar -q "S_aeWI_FD"`;
+	if ( `optionVar -exists "S_aeWI_MAD"` )
+		$minAvgDist = `optionVar -q "S_aeWI_MAD"`;
+	if ( `optionVar -exists "S_aeWI_Bias"` )
+		$bias = `optionVar -q "S_aeWI_Bias"`;
+	if ( `optionVar -exists "S_aeWI_Ignore"` )
+		$ignoreBias = `optionVar -q "S_aeWI_Ignore"`;
+	if ( `optionVar -exists "S_aeWI_RNI"` )
+		$removeNewInfl = `optionVar -q "S_aeWI_RNI"`;
+	if ( `optionVar -exists "S_aeWI_LNZW"` )
+		$setMaxInfl = `optionVar -q "S_aeWI_LNZW"`;
+	if ( `optionVar -exists "S_aeWI_qSkCl"` )
+		if ( `optionVar -q "S_aeWI_qSkCl"` )
+			$maxInflAll = 0;
+		else
+			if (`optionVar -exists "S_aeWI_MaxInfl"`)
+				$maxInflAll = `optionVar -q "S_aeWI_MaxInfl"`;
+			else
+				$maxInflAll = $defMaxInfl;
+				
+// Get the current selection, ignore anything that's not a transform, shape or control point.
+	string $objsSel [] = `ls -sl -l -fl -type transform -type shape`;
+	string $pointsSel [] = `ls -sl -l -fl -type float3 -type double3`;
+	if (size($objsSel) < 1 && size($pointsSel) < 1)
+	{
+		print "The selection does not contain any valid object(s). Accepted object types are:\n";
+		print "Transforms, Shapes and Control Points (Vertices or CV:s).\n";
+		error ("No valid object(s) selected. See script editor for details.");
+	}
+
+// Extract the selected shapes, and all shapes descending from the transforms in the selection
+// and get their immediate parent transforms
+	string $shapesInSel [] = `ls -l -typ shape $objsSel`;
+	string $shapesFromSel [] = `listRelatives -ad -f -typ shape $objsSel`;
+	string $selShapes [] = stringArrayCatenate ($shapesInSel, $shapesFromSel);
+	string $selTransf [] = `listRelatives -p -f $selShapes`;
+	$selTransf = `stringArrayRemoveDuplicates $selTransf`;
+	string $validSel [] = stringArrayCatenate ($selTransf, $pointsSel);
+// Remove any directly selected control points that are part of an already selected object.
+// Also, get the Skin Clusters connected to the selection and
+// remove any object from the lists that's not connected to a Skin Cluster;
+	string $skinClusterList [];
+	string $remove [];
+	for ($item in $validSel)
+	{
+		if (!`objectType -i "transform" $item`) // i.e. if it's not a transform, then it's a point.
+		{
+			string $pointParts [];
+			tokenize $item "\." $pointParts;
+			for ($transf in $selTransf)
+				if ($transf == $pointParts[0]) $remove [size($remove)] = $item;
+		}
+		string $itemHist [] = `listHistory $item`;
+		string $itemSkCl [] = `ls -type skinCluster $itemHist`;
+		if (!size($itemSkCl)) $remove [size($remove)] = $item;
+		for ($SkCl in $itemSkCl)
+			$skinClusterList [size($skinClusterList)] = $SkCl;
+	}
+	$validSel = stringArrayRemove ($remove, $validSel);
+	$skinClusterList = `stringArrayRemoveDuplicates $skinClusterList`;
+	if (!`size $skinClusterList`) error ("No skin clusters connected to selection");
+
+// Get the deformer sets connected to the Skin Clusters in the selection
+// and place them in an array so that each set's index is the same as the
+// corresponding Skin Cluster's index.
+	string $allSets [] = `listSets -t 2`;
+	int $pointsToDo = 0;
+	string $setList [];
+	for ($set in $allSets)
+	{
+		string $ConnectedSCs [] = `listConnections -t skinCluster $set`;
+		int $numCSC = 0;
+		int $setIndex = 0;
+		for ($CSC in $ConnectedSCs)
+			for ($SC = 0; $SC < size($skinClusterList); $SC++)
+				if ($CSC == $skinClusterList[$SC])
+				{
+					$setIndex = $SC;
+					$numCSC += 1;
+				}
+		if ($numCSC)
+		{
+			if ($numCSC > 1)
+			{
+				string $message = ("More than one selected Skin Cluster connected to " + $set + ".\n");
+				error $message;
+			} else 
+			{
+				$setList [$setIndex] = $set;
+				int $allMemb [] = `getAttr -s $set`;
+				$pointsToDo += `size $allMemb`;
+			}
+		}
+	}
+// If only Limit Number Of Non-Zero Weights is checked, there's no need to load the export file
+	int $impNumTransforms;
+	int $impNumPoints;
+	string $impInflTransformsList [];
+	vector $impPointPosList [];
+	float $impWeightList [];
+	if ($doImport || $removeNewInfl)
+	{
+// Choose and load the import file
+		$aeWeightsFile = "";
+		fileBrowser ("aeSkinWeightsImportFile", "Import", "", 0);
+		if ($aeWeightsFile == "") {print "No file selected.\n"; return "";}
+		print ("Import file: " + $aeWeightsFile + "\n");
+		$okToOpen = `filetest -r $aeWeightsFile`;
+		if (!$okToOpen) error ("Unable to open the file: " + $aeWeightsFile);
+		$fileIdImp = `fopen $aeWeightsFile "r"`;
+		
+// Import the number of transforms and the number of points
+		string $nextLine = `fgetline $fileIdImp`;
+		while ($nextLine != "Number of Transforms:\n")
+		{	
+			if (`feof $fileIdImp`)
+			{
+				fclose $fileIdImp;
+				error ("Unexpected file Contents.");
+			}
+			$nextLine = `fgetline $fileIdImp`;
+		}
+		$impNumTransforms = `fgetline $fileIdImp`; fgetline $fileIdImp; fgetline $fileIdImp;
+		$impNumPoints = `fgetline $fileIdImp`; fgetline $fileIdImp;  fgetline $fileIdImp;
+	
+// Import the transforms and their positions and put in arrays.
+//		vector $impInflTransformsListPos [];
+//		string $impInflTransformsListPosTemp [];
+		tokenize (`fgetline $fileIdImp`, $impInflTransformsList);
+// If no selected influence transform match any exported transform, halt execution, and
+// if Remove New Influence Transforms is on and any Influence Transform(s) connected to a
+// Skin Cluster is not found in the Exported Influence Transforms list, remove it.
+		int $matchAll = 0;
+		for ($skCl in $skinClusterList)
+		{
+			string $removeInfl [];
+			string $skClInflXForms [] = `skinCluster -q -inf $skCl`;
+			int $matchThis = 0;
+			for ($infl in $skClInflXForms)
+			{
+				if (stringArrayCount ($infl, $impInflTransformsList))
+				{
+					$matchThis = 1;
+					$matchAll = 1;
+				} else
+				{
+					$removeInfl [size($removeInfl)] = $infl;
+				}
+			}
+			if ($removeNewInfl && $matchThis && size($removeInfl))
+				for ($rInfl in $removeInfl)
+					catchQuiet (`skinCluster -e -ri $rInfl $skCl`);
+		}
+		if (!$matchAll)
+		{
+			fclose $fileIdImp;
+			print ("None of the Influence Transforms connected to (any of) the selected Skin Cluster(s)\n" +
+				  "matches any exported Influence Transform. No changes were made to the scene.");
+			error ("No matching import/export Influence Transforms. See Script Editor for details.");
+		}
+// If only Remove New Influence Transforms is checked, exit here
+		if (!$doImport && !$setMaxInfl)
+		{
+			fclose $fileIdImp;
+			print "Removed New Influence Transforms\n";
+			return "";
+		}
+//		tokenize `fgetline $fileIdImp` ";" $impInflTransformsListPosTemp;
+//		for ($XfP = 0; $XfP < size ($impInflTransformsListPosTemp); $XfP++)
+//			$impInflTransformsListPos [$XfP] = $impInflTransformsListPosTemp [$XfP];
+
+		fgetline $fileIdImp;  fgetline $fileIdImp; fgetline $fileIdImp;
+
+// Import the point positions and their weights and put in arrays.
+		if ($doImport)
+		{
+			for ($pointIndex = 0; $pointIndex < $impNumPoints; $pointIndex++)
+			{
+				string $pointsWeights [];
+				tokenize `fgetline $fileIdImp` ";" $pointsWeights;
+				$impPointPosList [$pointIndex] = $pointsWeights [0];
+				string $weightListStr [];
+				tokenize ($pointsWeights [1], $weightListStr);
+				int $weightListInSize = `size $impWeightList`;
+				for ($wt = 0; $wt < `size $weightListStr`; $wt++)
+					$impWeightList [($weightListInSize + $wt)] = $weightListStr [$wt];
+			}
+		}
+		fclose $fileIdImp;
+	}
+	string $pWinTitle = "Importing";
+	if ($setMaxInfl && !$doImport)
+		$pWinTitle = "Calculating";
+	progressWindow -t $pWinTitle -pr 0 -st "Calculating Weights..." -ii true;
+	float $progressAmt = 0.0;
+	int $progressInt = 0;
+	int $changedPoints = 0;
+	$startTime1 = `timerX`;
+
+// Iterate over every Skin Cluster / Skin Cluster Set
+	for ($setN = 0; $setN < size($setList); $setN++)
+	{
+		string $setMembers [] = `sets -q $setList [$setN]`;
+		string $setPoints [] = `ls -fl -l $setMembers`;
+		int $maxInfl;
+		if ($maxInflAll) $maxInfl = $maxInflAll;
+		else $maxInfl = `skinCluster -q -mi $skinClusterList [$setN]`;
+		
+// Generate a list of this skin cluster's influence transforms and sort them
+		string $setInflTransF [] = `skinCluster -q -inf $skinClusterList [$setN]`;
+		if ($doImport)
+		{
+			$setInflTransF = overlapSortArray ($impInflTransformsList, $setInflTransF);
+// If none of the Skin Cluster's Influence Transforms matches any exported Influence Transform,
+// skip this Skin Cluster
+			if (stringArrayCount ("", $setInflTransF) == $impNumTransforms)
+			{
+				string $skipWarning = ("Skipping " + $skinClusterList [$setN] + ". No matching import/export Influence Transforms.");
+				warning $skipWarning;
+				continue;
+			}
+		}
+// Iterate over all the points in the skin cluster set
+		for ($setPt in $setPoints)
+		{
+// If the point is selected, calcualte and apply the exported weights
+			string $pointParts [];
+			tokenize $setPt "\." $pointParts;
+			if (stringArrayCount ($pointParts [0], $validSel) || stringArrayCount ($setPt, $validSel))
+			{
+				float $weights [];
+				float $newWeights [];
+				if ($doImport)
+				{
+					float $ptPosA [3] = `xform -q -ws -t $setPt`;
+					vector $ptPos = <<$ptPosA [0], $ptPosA [1], $ptPosA [2]>>;
+// Get the weights of the influence transforms, if any,
+// that are not part of the exported influence transforms list
+					if (size($setInflTransF) > $impNumTransforms)
+						for ($inflN = $impNumTransforms; $inflN < size($setInflTransF); $inflN++)
+							$newWeights [$inflN - $impNumTransforms] = `skinPercent -t ($setInflTransF [$inflN]) -q ($skinClusterList [$setN]) $setPt`;
+// Calculate the weights to be applied to the current point
+	 				$weights = aeCalcExportWeights 
+											($avgPts, $ptPos, $impPointPosList, $minAvgDist,
+											$maxDist, $impNumTransforms, $setInflTransF, 
+											$impWeightList, $newWeights, $bias, $ignoreBias);
+// If aeCalcExportWeights returned an empty array, i.e no exported points were within $maxDist, skip this point. 
+					if (!size($weights)) continue;
+// If weights are not to be imported, just get the weights of the current point
+				} else
+				{
+					for ($inflN = 0; $inflN < size($setInflTransF); $inflN++)
+						$weights [$inflN] = `skinPercent -t ($setInflTransF [$inflN]) -q ($skinClusterList [$setN]) $setPt`;
+				}
+// Make sure to keep the number of influences with non-zero weighting within the maximum.
+				if ($setMaxInfl)
+					$weights = removeInfl ($weights, $maxInfl);
+				$weights = arrayNormalize ($weights, 1.0);
+// Building an evaluation string where all the weights are set at once is significantly faster than setting the
+// weight of one Influence Transform at a time.
+				string $evalString = "skinPercent";
+				for ($inflN = 0; $inflN < size($setInflTransF); $inflN++)
+					if ($setInflTransF [$inflN] != "")
+						$evalString += (" -tv " + $setInflTransF [$inflN] + " " + $weights [$inflN]);
+				$evalString += (" " + $skinClusterList [$setN] + " " + $setPt + ";");
+				eval $evalString;
+				$changedPoints += 1;
+			}
+			$progressAmt += 100.0 / $pointsToDo;
+			$progressInt = $progressAmt;
+			progressWindow -e -pr $progressInt;
+			if (`progressWindow -q -ic`) userAbort ("Import aborted by user.");
+		}
+	}
+	$endTime = `timerX -startTime $startTime1`;
+	progressWindow -endProgress;
+	print ($changedPoints + " Points were modified in " + $endTime + " seconds.\n");
+	return "";
+}

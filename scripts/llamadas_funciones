@@ -1,0 +1,27 @@
+ioAir.exportOFFMesh(filename="I:\\Chus\\phd_dev\\Data\\models\\007_harry_files\\esfera_completa.off")
+
+importWeights.importComputedWeights(filename="D:\\phd_dev\\Data\\models\\cilinder.weights")
+
+setAttr "skinCluster1.maintainMaxInfluences" 0;
+setAttr "skinCluster1.normalizeWeights" 0; # none
+setAttr "skinCluster1.normalizeWeights" 1; # interactive
+
+
+jointName = joint1_WNode;
+jointCount = 9;
+
+
+for idJoint in range(jointCount):
+	cmds.addAttr(jointName+"%3d"%idJoint, longName="twist",  attributeType= "double" );
+	cmds.setAttr(jointName+"%3d"%idJoint+".twist" , idJoint/(jointCount+1);
+
+
+
+shadingNode -asUtility multiplyDivide;
+connectAttr -f joint2.rotateX multiplyDivide1.input1X;
+connectAttr -f joint1_WNode009.twist multiplyDivide1.input2X;
+connectAttr -f multiplyDivide1.outputX joint1_WNode009.rotateX;
+
+ioAir.subdivideSkeleton(desiredSeparation=4)
+
+ioAir.exportSkeletonNodes(filename="D:\\phd_dev\\Data\\models\\cilinder2_interior_points.txt")

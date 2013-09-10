@@ -1,0 +1,652 @@
+/* This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: aeSkinWeightsTransfer
+''    Author:  
+''    Last Updated: Jul 26, 2009
+''    Update/Change this file at:
+''    http://Highend3d.com/maya/downloads/mel_scripts/animation/2766.html
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+// aeSkinWeightImportWorldSpaceUI.mel
+//
+// Procedure Name: aeSkinWeightImportWorldSpaceUI
+// Version: 1.0
+// Author: Anders Egleus
+// Home Page: http://www.stannogen.com
+// Email: anders@stannogen.com
+// Creation date: 11 feb 2004
+//
+// Description: Import a list of world space coordinates of exported points and the respective
+// smooth skin weights of their influence transforms. The points (CV:s or vertices)
+// of the shape to import to will have their smooth skin weights set to (or averaged between)
+// the closest imported point(s) in world space. 
+//
+// Useful for transfering skin weights between objects with roughly the same shape but with 
+// useless or dissimilar UV mapping, or different topology or type (e.g. from a NURBS object to
+// a polygon object or vice versa), or objects that have been combined or separated after exporting.
+//
+// Usage: Select the object(s) that you wish to import skin weights to (no need to select Influence
+// Transforms, i.e. Joints etc.) and run the procedure "aeSkinWeightImportWorldSpaceUI;", either from
+// the command line or script editor or by assigning it to a shelf button or hotkey (run
+// "aeSkinWeightTransferSetup;" to create Shelf Buttons automatically).
+// Note: The Import objects must be smooth skin bound to a skeleton before importing.
+//
+// Valid selections: Groups, Transforms, Shapes or Individual Control Points (vertices, CVs etc).
+// Selecting parent transforms means all children will be used too. Likewise, selecting a transform or 
+// shape overrides the selection of individual points on that shape, i.e. all its points will be used.
+//
+// Explanation of terms:
+//		Export Point:							- A Control Point (vertex, CV etc.) whose world space
+//												  position and skin weights were exported to the 
+//												  export (.weights) file.
+//		Import Point:							- A Control Point selected for importing Skin Weights to.
+//		Exported Influence Transforms:			- The Influence Transforms (joints etc.) connected to the
+//												  Skin Cluster(s) deforming the exported points.
+//		New Influence Transforms:				- Any Influence Transforms connected to the selection's
+//												  Skin Clusters which do not match any Exported Influence
+//												  Transform.
+// User interface controls:
+//
+// 	Averaging of Exported Weights:
+//		Import Weights							- Set whether to actually import weigts or not
+//												  (users may choose to only Remove New Influence
+//												  Transforms and/or Limit the Number of Non-Zero
+//												  Weights - see below).
+// 		Maximum Number of Averaged Points		- The maximum number of Export Points to average
+//												  Skin Weights between.
+//		Far Distance							- The maximum distance between an Import Point and
+//												  an Export Point. Only Export Points within this 
+//												  distance from the current Import Point will be
+//												  considered for averaging. If no Export Point is
+//												  found within this distance, the Skin Weights of
+//												  the Import Points won't be changed.
+//		Minimum Falloff Distance				- A minimum distance threshold for Falloff Averaging.
+//												  If the closest Export Point is within this distance
+//												  from the import point, Falloff Averaging will not be
+//												  used. Instead, the weights of the closest Export
+//												  Point will be applied in the falloff part of the 
+//												  averaging calculation. Unless Even/Falloff Bias is
+//												  1.0, or Ignore Bias For Close Points is on, the
+//												  weights will still be averaged evenly.
+//		Averaging Method: Even/Falloff Bias		- A value of 0.0 will average the weights of the
+//												  closest Export Points evenly. A value of 1.0 will
+//												  average the weights of the closest Export Points
+//												  based on their distance from the Import Points, i.e.
+//												  the closer an Export Point is to the Import Point,
+//												  the more the weights of the Export Point will affect
+//												  the weights of the Import Point. Any value in between
+//												  0.0 and 1.0 will result in a mix between Even and
+//												  Falloff averaging.
+//		Ignore Bias For Close Points			- If on, Even Averaging won't be used if the closest
+//												  Export Point is within the Minimum Falloff Distance
+//												  from the Import Point, even if Even/Falloff Bias is
+//												  lower than 1.0. The same is of course true if
+//												  Even/Falloff Bias is 1.0.
+//	Influence Transforms:
+//		Remove New Influence Transforms			- If on, remove any Influence Transform(s) connected to
+//												  the selection's Skin Cluster(s) if it is not found in
+//												  the Export file's Influence Transforms list.
+//		Limited Number of Non-Zero Weights		- If off, the script will not limit the Number of Non-
+//												  Zero Weights.
+//		Query each Skin Cluster					- If on, each Skin Cluster's maxInfluences attribute will
+//												  be used when limiting the maximum number of Influence
+//												  Transforms which can have non-zero weights on a point.
+//		Use for all Skin Clusters				- If Query each Skin Cluster is off, use this value for all
+//												  points.
+//
+// Note: If Import Weights is on, and no Export Points are found within the Far Distance of the current
+// Import Point, no changes will be made to the point, thus the Number of Non-Zero Weights for that point
+// won't be limited with this script.
+//
+// "Hidden features" - aeSkinWeightImportWorldSpace can perform a couple of useful tasks which may not be
+// too obvious:
+// 1) Removing unwanted Influence Transforms from all Skin Clusters in selection - if you turn off Import
+// Weights and turn Remove New Influence Transforms on, running the script will load the export file and
+// the list Influence Transforms which were connected to the original Skin Clusters when they were exported.
+// Any Influence Transforms connected to the Skin Clusters in current selection which are not found in the
+// Exported Influence Transforms list will be removed from the Skin Clusters. This can save a lot of time
+// compared to manually going through each Skin Cluster and selecting a joint followed by Skin/Edit Smooth
+// Skin/Remove influence.
+// 2) Limiting the Number of Non-Zero Weights for selected points - if you turn off Import Weights, turn
+// Limited Number of Non-Zero Weights on, turn Query each Skin Cluster off, and set Use for all Skin Clusters
+// to a number lower than the Skin Clusters' maxInfluences attribute, the number of Non-Zero weights for
+// the selected points will be restricted without changing Skin Clusters' maxInfluences attribute. Very
+// useful if you for instance want to make sure only one joint influences certain points.
+//
+// Needless to say, Import Weights, Remove New Influence Transforms and Limited Number of Non-Zero Weights
+// can all be used separately or in combination.
+
+
+global proc aeSkinWeightImportWorldSpaceUI()
+{
+	if (`window -ex aeImportUI`)
+		deleteUI aeImportUI;
+	if (!`window -ex aeImportUI`)
+	{
+		if (`optionVar -exists "S_aeWI_Reset"`)
+			if (`optionVar -q "S_aeWI_Reset"` && `windowPref -ex aeImportUI`)
+			{
+				windowPref -remove aeImportUI;
+				optionVar -remove "S_aeWI_Reset";
+			}
+		window
+			-title "Import Skin Weights"
+			-s true
+			-wh 330 450
+			-menuBar true
+			-menuBarVisible true
+			aeImportUI;
+		menu
+			-label "Edit"
+			-tearOff false;
+		menuItem
+	    		-label "Default Settings"
+	    		-c "aeWI_ManageUI (\"resetAll\", \"\"); deleteUI aeImportUI; aeSkinWeightImportWorldSpaceUI";
+		menu
+			-label "Help"
+			-tearOff 0;
+		menuItem
+	    		-label "About"
+	    		-c "aeWI_About";
+		menuItem
+			-divider 1;
+		menuItem
+	    		-label "Online Help"
+	    		-c "showHelp -a \"http://www.stannogen.com/Scripts/mel/Import_skin_weights\"";
+	 		string $aeWI_form = `formLayout
+	 			-numberOfDivisions 100`;
+				string $aeWI_scroll = `scrollLayout 
+					-childResizable true
+					-minChildWidth 274`;
+					columnLayout 
+						-rs 5 
+						-adjustableColumn true;
+						frameLayout
+							-label "Averaging of Exported Weights"
+							-cll true
+							-mh 5
+							-li 5
+							-w 294
+							-borderStyle "etchedIn"
+							-cc "aeWI_ManageUI (\"store\", \"AEW\")"
+							-ec "aeWI_ManageUI (\"store\", \"AEW\")"
+							-bv true
+							aeWI_AEW;
+	 						columnLayout -adjustableColumn true -rs 5;
+								rowLayout
+									-numberOfColumns 1
+									-cat 1 "left" 5
+									-columnWidth 1 200
+									-ann "Import Skin Weights and apply to Selection";
+									checkBox
+										-value on
+										-label "Import Weights"
+										-align "left"
+										-cc "aeWI_ManageUI (\"store\", \"ImpWts\")"
+										-ann "Import Skin Weights and apply to Selection"
+										aeWI_ImpWts;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 2
+									-cat 1 "right" 5
+									-columnWidth 1 200
+									-ann "The maximum number of Export Points to average Skin Weights between"
+									aeWI_MaxNumAvgPts;
+									text
+										-ann "The maximum number of Export Points to average Skin Weights between"
+										-l "Maximum Number of Averaged Points"
+										aeWI_AvgPtsLabel;
+									intField
+										-w 80
+										-value 5
+										-minValue 1
+										-step 1
+										-cc "aeWI_ManageUI (\"store\", \"AvgPts\")"
+										-ann "The maximum number of Export Points to average Skin Weights between"
+										aeWI_AvgPts;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 2
+									-cat 1 "right" 5
+									-columnWidth 1 200
+									-ann "The maximum distance between an Import Point and an Export Point"
+									aeWI_FarDistance;
+									text
+										-ann "The maximum distance between an Import Point and an Export Point"
+										-l "Far Distance"
+										aeWI_FDLabel;
+									floatField
+										-w 80
+										-value 2.0
+										-minValue 0.00001
+										-step 1.0
+										-precision 5
+										-cc "aeWI_ManageUI (\"store\", \"FD\")"
+										-ann "The maximum distance between an Import Point and an Export Point"
+										aeWI_FD;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 2
+									-cat 1 "right" 5
+									-columnWidth 1 200
+									-ann "The minimum distance threshold for Falloff Averaging"
+									aeWI_MinAvgDistance;
+									text
+										-ann "The minimum distance threshold for Falloff Averaging"
+										-l "Minimum Falloff Distance"
+										aeWI_MADLabel;
+									floatField
+										-w 80
+										-value 0.1
+										-minValue 0.000001
+										-step 0.1
+										-precision 6
+										-cc "aeWI_ManageUI (\"store\", \"MAD\")"
+										-ann "The minimum distance threshold for Falloff Averaging"
+										aeWI_MAD;
+									setParent ..;
+								separator -h 2;
+								rowLayout
+									-numberOfColumns 2
+									-cat 1 "left" 5
+									-cat 2 "left" 5
+									-columnWidth 2 50
+									-adjustableColumn2 1
+									aeWI_AvgMethod;
+									text
+										-ann "The Method by which the Weights of Export Points around the Import Point are Averaged"
+										-l "Averaging Method:"
+										aeWI_AvgMethLabel;
+									text
+										-l "Bias:"
+										aeWI_BiasLabel;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 4
+									-cat 1 "right" 5
+									-cat 2 "both" 5
+									-cat 3 "left" 5
+									-cat 4 "left" 5
+									-columnWidth 1 50
+									-columnWidth 3 50
+									-columnWidth 4 50
+									-adjustableColumn4 2
+									aeWI_AvgBias;
+									text
+										-ann "The Weights of Export Points are Averaged Evenly"
+										-l "Even"
+										aeWI_EvenLabel;
+									floatSlider
+										-minValue 0.0
+										-maxValue 1.0
+										-value 1.0
+										-cc ("floatField -e -v `floatSlider -q -v aeWI_AvgBiasS` aeWI_AvgBiasF; " +
+											"aeWI_ManageUI (\"store\", \"Bias\")")
+										-dc "floatField -e -v `floatSlider -q -v aeWI_AvgBiasS` aeWI_AvgBiasF"
+										aeWI_AvgBiasS;
+									text
+										-ann "The Weights of Export Points are Averaged based on their Distance from the Import Point"
+										-l "Falloff"
+										aeWI_FalloffLabel;
+									floatField
+										-w 40
+										-value 1.0
+										-minValue 0.0
+										-maxValue 1.0
+										-step 0.1
+										-precision 3
+										-cc ("floatSlider -e -v `floatField -q -v aeWI_AvgBiasF` aeWI_AvgBiasS; " +
+											"aeWI_ManageUI (\"store\", \"Bias\")")
+										-dc "floatSlider -e -v `floatField -q -v aeWI_AvgBiasF` aeWI_AvgBiasS"
+										aeWI_AvgBiasF;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 1
+									-cat 1 "left" 5
+									-columnWidth 1 200
+									-ann "Don't calculate Even Averaging if the closest Export Point is within the Minimum Falloff Distance";
+									checkBox
+										-value on
+										-label "Ignore Bias For Close Points"
+										-align "left"
+										-cc "aeWI_ManageUI (\"store\", \"Ignore\")"
+										-ann "Don't calculate Even Averaging if the closest Export Point is within the Minimum Falloff Distance"
+										aeWI_IgnoreCheck;
+									setParent ..;
+								setParent ..;
+							setParent ..;
+						frameLayout
+							-label "Influence Transforms"
+							-cll true
+							-mh 5
+							-li 5
+							-w 294
+							-borderStyle "etchedIn"
+							-cc "aeWI_ManageUI (\"store\", \"ITF\")"
+							-ec "aeWI_ManageUI (\"store\", \"ITF\")"
+							-bv true
+							aeWI_ITF;
+	 						columnLayout -adjustableColumn true -rs 5;
+								rowLayout
+									-numberOfColumns 1
+									-cat 1 "left" 5
+									-columnWidth 1 200
+									-ann "Remove any Influence Transforms from the selected Skin Cluster(s) if it is not found in the Export file";
+									checkBox
+										-value off
+										-label "Remove New Influence Transforms"
+										-align "left"
+										-cc "aeWI_ManageUI (\"store\", \"RNI\")"
+										-ann "Remove any Influence Transforms from the selected Skin Cluster(s) if it is not found in the Export file"
+										aeWI_RNI;
+									setParent ..;
+								separator -h 2;
+								rowLayout
+									-numberOfColumns 1
+									-cat 1 "left" 5
+									-columnWidth 1 200
+									-ann "Use the settings below to limit the Number of Influence Transforms with Non-Zero Weights";
+									checkBox
+										-value on
+										-label "Limit Number of Non-Zero Weights"
+										-align "left"
+										-cc "aeWI_ManageUI (\"store\", \"LNZW\")"
+										-ann "Use the settings below to limit the Number of Influence Transforms with Non-Zero Weights"
+										aeWI_LNZW;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 1
+									-cat 1 "left" 5
+									-columnWidth 1 200
+									-ann "Use each Skin Cluster's maxInfluences Attribute";
+									checkBox
+										-value on
+										-label "Query each Skin Cluster"
+										-align "left"
+										-cc "aeWI_ManageUI (\"store\", \"qSkCl\")"
+										-ann "Use each Skin Cluster's maxInfluences Attribute"
+										aeWI_qSkCl;
+									setParent ..;
+								rowLayout
+									-numberOfColumns 2
+									-cat 1 "right" 5
+									-columnWidth 1 200
+									-ann "Allow the same number of non-zero Weights for all Skin Clusters"
+									aeWI_MaximumNon0Infl;
+									text
+										-ann "Allow the same number of non-zero Weights for all Skin Clusters"
+										-enable off
+										-l "Use for all Skin Clusters"
+										aeWI_MaxInflLabel;
+									intField
+										-w 80
+										-value 3
+										-minValue 0
+										-enable off
+										-step 1
+										-cc "aeWI_ManageUI (\"store\", \"MaxInfl\")"
+										-ann "Allow the same number of non-zero Weights for all Skin Clusters"
+										aeWI_MaxInfl;
+									setParent ..;
+								setParent ..;
+							setParent ..;
+						setParent ..;
+					setParent ..;
+	
+				string $aeWI_GoButton = `button
+					-label "Import Skin Weights"
+					-command ("$ImpWts = `checkBox -q -v aeWI_ImpWts`; " +
+							 "$RNI = `checkBox -q -v aeWI_RNI`; " +
+							 "$LNZW = `checkBox -q -v aeWI_LNZW`; " +
+							 "deleteUI aeImportUI; " + 
+							 "if ($ImpWts || $RNI || $LNZW) aeSkinWeightImportWorldSpace;")`;
+					string $aeWI_CloseUIButton = `button
+					-label "Close"
+					-command "deleteUI aeImportUI"`;
+		formLayout -edit
+	
+			-attachForm $aeWI_scroll "top" 2
+			-attachForm $aeWI_scroll "left" 2
+			-attachControl $aeWI_scroll "bottom" 2 $aeWI_GoButton
+			-attachForm $aeWI_scroll "right" 2
+
+			-attachNone $aeWI_GoButton "top"
+			-attachForm $aeWI_GoButton "left" 2
+			-attachForm $aeWI_GoButton "bottom" 2
+			-attachPosition $aeWI_GoButton "right" 2 50
+	
+			-attachNone $aeWI_CloseUIButton "top"
+			-attachPosition $aeWI_CloseUIButton "left" 2 50
+			-attachForm $aeWI_CloseUIButton "bottom" 2
+			-attachForm $aeWI_CloseUIButton "right" 2
+			$aeWI_form;
+	}
+	aeWI_ManageUI ("getAll", "");
+	showWindow aeImportUI;
+}
+
+global proc aeWI_ManageUI ( string $mode, string $control)
+{
+// Default values:
+	int $AEW = 0;
+	int $ImpWts = 1;
+	int $AvgPts = 5;
+	float $FD = 2.0;
+	float $MAD = 0.1;
+	float $Bias = 1.0;
+	int $Ignore = 1;
+	int $ITF = 0;
+	int $RNI = 0;
+	int $LNZW = 1;
+	int $qSkCl = 1;
+	int $MaxInfl = 3;
+	if ($mode == "getAll")
+	{
+// Get the stored values. If a value hasn't been stored, it will keep its default value.
+		if ( `optionVar -exists "S_aeWI_AEW"` )
+			$AEW = `optionVar -q "S_aeWI_AEW"`;
+		if ( `optionVar -exists "S_aeWI_ImpWts"` )
+			$ImpWts = `optionVar -q "S_aeWI_ImpWts"`;
+		if ( `optionVar -exists "S_aeWI_AvgPts"` )
+			$AvgPts = `optionVar -q "S_aeWI_AvgPts"`;
+		if ( `optionVar -exists "S_aeWI_FD"` )
+			$FD = `optionVar -q "S_aeWI_FD"`;
+		if ( `optionVar -exists "S_aeWI_MAD"` )
+			$MAD = `optionVar -q "S_aeWI_MAD"`;
+		if ( `optionVar -exists "S_aeWI_Bias"` )
+			$Bias = `optionVar -q "S_aeWI_Bias"`;
+		if ( `optionVar -exists "S_aeWI_Ignore"` )
+			$Ignore = `optionVar -q "S_aeWI_Ignore"`;
+		if ( `optionVar -exists "S_aeWI_ITF"` )
+			$ITF = `optionVar -q "S_aeWI_ITF"`;
+		if ( `optionVar -exists "S_aeWI_RNI"` )
+			$RNI = `optionVar -q "S_aeWI_RNI"`;
+		if ( `optionVar -exists "S_aeWI_LNZW"` )
+			$LNZW = `optionVar -q "S_aeWI_LNZW"`;
+		if ( `optionVar -exists "S_aeWI_qSkCl"` )
+			$qSkCl = `optionVar -q "S_aeWI_qSkCl"`;
+		if ( `optionVar -exists "S_aeWI_MaxInfl"` )
+			$MaxInfl = `optionVar -q "S_aeWI_MaxInfl"`;
+// Update the UI
+		frameLayout -e -cl $AEW aeWI_AEW;
+		checkBox -e -v $ImpWts aeWI_ImpWts;
+		intField -e -v $AvgPts aeWI_AvgPts;
+		floatField -e -v $FD aeWI_FD;
+		floatField -e -v $MAD aeWI_MAD;
+		floatSlider -e -v $Bias aeWI_AvgBiasS;
+		floatField -e -v $Bias aeWI_AvgBiasF;
+		checkBox -e -v $Ignore aeWI_IgnoreCheck;
+		frameLayout -e -cl $ITF aeWI_ITF;
+		checkBox -e -v $RNI aeWI_RNI;
+		checkBox -e -v $LNZW aeWI_LNZW;
+		checkBox -e -v $qSkCl aeWI_qSkCl;
+		intField -e -v $MaxInfl aeWI_MaxInfl;
+		text -e -enable $ImpWts aeWI_AvgPtsLabel; 
+		intField -e -enable $ImpWts aeWI_AvgPts;
+		text -e -enable $ImpWts aeWI_FDLabel;
+		floatField -e -enable $ImpWts aeWI_FD;
+		text -e -enable $ImpWts aeWI_MADLabel;
+		floatField -e -enable $ImpWts aeWI_MAD;
+		text -e -enable $ImpWts aeWI_AvgMethLabel;
+		text -e -enable $ImpWts aeWI_BiasLabel;
+		text -e -enable $ImpWts aeWI_EvenLabel;
+		floatSlider -e -enable $ImpWts aeWI_AvgBiasS;
+		text -e -enable $ImpWts aeWI_FalloffLabel;
+		floatField -e -enable $ImpWts aeWI_AvgBiasF;
+		checkBox -e -enable $ImpWts aeWI_IgnoreCheck;
+		if ($LNZW)
+		{
+			checkBox -e -enable on aeWI_qSkCl;
+			if ($qSkCl)
+			{
+				text -e -enable off aeWI_MaxInflLabel;
+				intField -e -enable off aeWI_MaxInfl;
+			} else
+			{
+				text -e -enable on aeWI_MaxInflLabel;
+				intField -e -enable on aeWI_MaxInfl;
+			}
+		} else
+		{
+			checkBox -e -enable off aeWI_qSkCl;
+			text -e -enable off aeWI_MaxInflLabel;
+			intField -e -enable off aeWI_MaxInfl;
+		}
+	}
+	if ($mode == "resetAll")
+	{
+		optionVar -remove "S_aeWI_AEW";
+		optionVar -remove "S_aeWI_ImpWts";
+		optionVar -remove "S_aeWI_AvgPts";
+		optionVar -remove "S_aeWI_FD";
+		optionVar -remove "S_aeWI_MAD";
+		optionVar -remove "S_aeWI_Bias";
+		optionVar -remove "S_aeWI_Ignore";
+		optionVar -remove "S_aeWI_ITF";
+		optionVar -remove "S_aeWI_RNI";
+		optionVar -remove "S_aeWI_LNZW";
+		optionVar -remove "S_aeWI_qSkCl";
+		optionVar -remove "S_aeWI_MaxInfl";
+		optionVar -intValue "S_aeWI_Reset" 1;
+	}
+	if ($mode == "store")
+	{
+		if ($control == "AEW")
+			optionVar -intValue "S_aeWI_AEW" `frameLayout -q -cl aeWI_AEW`;
+		if ($control == "ImpWts")
+		{
+			optionVar -intValue "S_aeWI_ImpWts" `checkBox -q -value aeWI_ImpWts`;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_AvgPtsLabel; 
+			intField -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_AvgPts;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_FDLabel;
+			floatField -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_FD;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_MADLabel;
+			floatField -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_MAD;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_AvgMethLabel;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_BiasLabel;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_EvenLabel;
+			floatSlider -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_AvgBiasS;
+			text -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_FalloffLabel;
+			floatField -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_AvgBiasF;
+			checkBox -e -enable `checkBox -q -v aeWI_ImpWts` aeWI_IgnoreCheck;
+		}
+		if ($control == "AvgPts")
+			optionVar -intValue "S_aeWI_AvgPts" `intField -q -value aeWI_AvgPts`;
+		if ($control == "FD")
+			optionVar -floatValue "S_aeWI_FD" `floatField -q -value aeWI_FD`;
+		if ($control == "MAD")
+			optionVar -floatValue "S_aeWI_MAD" `floatField -q -value aeWI_MAD`;
+		if ($control == "Bias")
+			optionVar -floatValue "S_aeWI_Bias" `floatField -q -value aeWI_AvgBiasF`;
+		if ($control == "Ignore")
+			optionVar -intValue "S_aeWI_Ignore" `checkBox -q -value aeWI_IgnoreCheck`;
+		if ($control == "ITF")
+			optionVar -intValue "S_aeWI_ITF" `frameLayout -q -cl aeWI_ITF`;
+		if ($control == "RNI")
+			optionVar -intValue "S_aeWI_RNI" `checkBox -q -value aeWI_RNI`;
+		if ($control == "LNZW")
+		{
+			optionVar -intValue "S_aeWI_LNZW" `checkBox -q -value aeWI_LNZW`;
+			if (`checkBox -q -v aeWI_LNZW`)
+			{
+				checkBox -e -enable on aeWI_qSkCl;
+				if (`checkBox -q -v aeWI_qSkCl`)
+				{
+					text -e -enable off aeWI_MaxInflLabel;
+					intField -e -enable off aeWI_MaxInfl;
+				} else
+				{
+					text -e -enable on aeWI_MaxInflLabel;
+					intField -e -enable on aeWI_MaxInfl;
+				}
+			} else
+			{
+				checkBox -e -enable off aeWI_qSkCl;
+				text -e -enable off aeWI_MaxInflLabel;
+				intField -e -enable off aeWI_MaxInfl;
+			}
+		}
+		if ($control == "qSkCl")
+		{
+			optionVar -intValue "S_aeWI_qSkCl" `checkBox -q -value aeWI_qSkCl`;
+			text -e -enable (`checkBox -q -v aeWI_qSkCl` -1) aeWI_MaxInflLabel;
+			intField -e -enable (`checkBox -q -v aeWI_qSkCl` -1) aeWI_MaxInfl;
+		}
+		if ($control == "MaxInfl")
+			optionVar -intValue "S_aeWI_MaxInfl" `intField -q -value aeWI_MaxInfl`;
+	}
+}
+global proc aeWI_About ()
+{
+	if ( `window -exists aeWI_AboutWin` )
+		deleteUI aeWI_AboutWin;
+	if (`windowPref -ex aeWI_AboutWin`)
+		windowPref -remove aeWI_AboutWin;
+	window
+		-maximizeButton false
+		-title "About aeSkinWeightImportWorldSpace"
+		-s false
+		-wh 300 320
+		aeWI_AboutWin;
+		string $aeWI_AboutForm = `formLayout -numberOfDivisions 100`;
+			string $aeWI_AboutCol = `columnLayout -cat "both" 12 -adjustableColumn true -rowSpacing 6`;
+				text -align "center" aeWI_AboutText;
+				setParent ..;
+			setParent ..;
+		string $aeWI_AboutClose = `button
+			-label "Close"
+			-command "deleteUI aeWI_AboutWin"`;
+	formLayout -edit
+		-attachForm $aeWI_AboutCol "top" 4
+		-attachForm $aeWI_AboutCol "left" 4
+		-attachControl $aeWI_AboutCol "bottom" 4 $aeWI_AboutClose
+		-attachForm $aeWI_AboutCol "right" 4
+
+		-attachNone $aeWI_AboutClose "top"
+		-attachForm $aeWI_AboutClose "left" 4
+		-attachForm $aeWI_AboutClose "bottom" 4
+		-attachForm $aeWI_AboutClose "right" 4
+		$aeWI_AboutForm;
+	string $aeWI_AboutText =
+		"aeSkinWeightImportWorldSpace v1.0\n" + "\n" +
+		"Author: Anders Egleus\n" + "\n" +
+		"Home Page: http://www.stannogen.com\n" +
+		"Email: anders@stannogen.com.\n" +
+		"Creation date: 13 feb 2004\n" + "\n" +
+		"This script may be freely\n" +
+		"distributed and modified.\n" + "\n" +
+		"A lot of code and functunality\n" +
+		"in this script was written\n" +
+		"while peeking at scripts by\n" +
+		"Dirk Bialluch, Michael comet,\n" +
+		"David Gould, Michael Bazhutkin,\n" +
+		"Bryan Ewert and others. Thanks.\n";
+
+	text -e -label $aeWI_AboutText aeWI_AboutText;
+	showWindow aeWI_AboutWin;
+}

@@ -1,0 +1,5 @@
+## APPLICACION DE AIR ##
+
+var modelName = "FlourSac_mesh_tri";
+
+ApplyOp("ICETree", modelName, siNode, null, null, 0);

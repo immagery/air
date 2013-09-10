@@ -1,0 +1,54 @@
+/* This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: aeSkinWeightsTransfer
+''    Author:  
+''    Last Updated: Jul 26, 2009
+''    Update/Change this file at:
+''    http://Highend3d.com/maya/downloads/mel_scripts/animation/2766.html
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+// aeSkinWeightTransferSetup.mel
+//
+// Procedure Name: aeSkinWeightTransferSetup
+// Version: 1.0
+// Author: Anders Egleus
+// Home Page: http://www.stannogen.com
+// Email: anders@stannogen.com
+// Creation date: 11 feb 2004
+//
+// Description: Build Shelf Buttons for aeSkinWeightExportWorldSpace, aeSkinWeightImportWorldSpace and
+// aeSkinWeightImportWorldSpaceUI.
+// Usage: Open a Shelf where you want the Shelf Buttons to reside and run the procedure
+// "aeSkinWeightTransferSetup;" from the Command Line or Script Editor.
+// 
+// If you want an extra button which runs the Importer with Default or stored settings, just remove the
+// comments from the code below.
+//
+global proc aeSkinWeightTransferSetup ()
+{  
+	global string $gShelfTopLevel;
+	if (`tabLayout -exists $gShelfTopLevel`)
+	{
+		shelfButton
+			-parent ($gShelfTopLevel + "|" + `tabLayout -q -st $gShelfTopLevel`)
+			-command "aeSkinWeightExportWorldSpace"
+			-image1 "aeSkinWeightsExpWS.xpm"
+			-label "Export Skin Weights (Based On World Space Coordinates)";
+//		shelfButton
+//			-parent ($gShelfTopLevel + "|" + `tabLayout -q -st $gShelfTopLevel`)
+//			-command "aeSkinWeightImportWorldSpace"
+//			-image1 "aeSkinWeightsImpWS.xpm"
+//			-label "Import Skin Weights (Based On World Space Coordinates) with Default or Sstored settings";
+		shelfButton
+			-parent ($gShelfTopLevel + "|" + `tabLayout -q -st $gShelfTopLevel`)
+			-command "aeSkinWeightImportWorldSpaceUI"
+			-image1 "aeSkinWeightsImpWS.xpm"
+			-imageOverlayLabel "UI   "
+			-label "Import Skin Weights (Based On World Space Coordinates)";
+	} else	error "Please open a shelf and run \"aeSkinWeightTransferSetup;\" again\n";
+}

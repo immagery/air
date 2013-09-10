@@ -1,0 +1,66 @@
+#
+# Creation Core 1.6.1-beta
+# HelloWorld EDK Sample
+#
+# Copyright 2010-2013 Fabric Engine Inc. All rights reserved.
+#
+
+import os, sys
+
+try:
+  fabricEDKPath = os.environ['FABRIC_EDK_DIR']
+except:
+  print "You must set FABRIC_EDK_DIR in your environment."
+  print "Refer to README.txt for more information."
+  sys.exit(1)
+
+
+sourceFiles = [Split("""
+					#\\AirComputationWrapper.cpp
+					#\\..\\AirLib\\DataStructures\\Cage.cpp
+					#\\..\\AirLib\\DataStructures\\DataStructures.cpp
+					#\\..\\AirLib\\DataStructures\\Scene.cpp
+					#\\..\\AirLib\\render\\noGL\\gridRender.cpp
+					#\\..\\AirLib\\render\\noGL\\skeletonRender.cpp
+					#\\..\\AirLib\\render\\noGL\\geometryRender.cpp
+					#\\..\\AirLib\\render\\noGL\\shadingNode.cpp
+					#\\..\\AirLib\\DataStructures\\Modelo.cpp
+					#\\..\\AirLib\\DataStructures\\Object.cpp
+					#\\..\\AirLib\\DataStructures\\grid3D.cpp
+					#\\..\\AirLib\\DataStructures\\Node.cpp
+					#\\..\\AirLib\\DataStructures\\skeleton.cpp
+					#\\..\\AirLib\\DataStructures\\Geometry.cpp
+					#\\..\\AirLib\\Computation\\Segmentation.cpp
+					#\\..\\AirLib\\Computation\\mvc_interiorDistances.cpp
+					#\\..\\AirLib\\DataStructures\\InteriorDistancesData.cpp
+					#\\..\\AirLib\\utils\\util.cpp		
+					""")]
+
+SConscript(os.path.join(fabricEDKPath, 'SConscript'))
+
+Import('fabricBuildEnv')
+
+AirLibPath = Split("""
+					#\\..\\lib\\
+					""")
+AirLibPath.append(fabricEDKPath + "\\include\\")
+
+AirLibCodePath = Split("""
+						#\\..\\AirLib\\Computation\\
+						#\\..\\AirLib\\DataStructures\\
+						#\\..\\AirLib\\utils\\
+						#\\..\\AirLib\\render\\
+						#\\..\\AirLib\\ 
+						#\\..\\include\\vcglib\\
+						#\\..\\include\\
+						""")
+
+AirLibCodePath.append(fabricEDKPath + "\\include\\")
+
+#AirLibDependencies
+
+fabricBuildEnv['LIBPATH'] = AirLibPath
+#fabricBuildEnv['LIBS'] = AirLibDependencies
+fabricBuildEnv['CPPPATH'] = AirLibCodePath
+
+fabricBuildEnv.Extension('AirSkinning', sourceFiles)

@@ -1,0 +1,280 @@
+/* This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: aeSkinWeightsTransfer
+''    Author:  
+''    Last Updated: Jul 26, 2009
+''    Update/Change this file at:
+''    http://Highend3d.com/maya/downloads/mel_scripts/animation/2766.html
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+// aeSkinWeightExportWorldSpace.mel
+//
+// Procedure Name: aeSkinWeightExportWorldSpace
+// Version: 1.0
+// Author: Anders Egleus
+// Home Page: http://www.stannogen.com
+// Email: anders@stannogen.com
+// Creation date: 19 jan 2004
+//
+// Description: Export the influence transforms (e.g. joints) of selected objects and the
+// world space coordinates as well as the smooth skin weights of their points (vertices/CV:s).
+//
+// Useful for transfering skin weights between objects with roughly the same shape but
+// with useless or dissimilar UV mapping, or different topology or type
+// (e.g. from a NURBS object to a polygon object or vice versa),
+// or objects that have been combined or separated after exporting.
+//
+// Usage: Select the object(s) or control point(s) that you wish to export and run the procedure
+// "aeSkinWeightExportWorldSpace;", either from the command line or script editor or by assigning
+//  it to a shelf button or hotkey (run aeSkinWeightTransferSetup to create Shelf Buttons
+// automatically). You can give the export file any extention, but if none is provided, the file
+// will be given the default extention ".weights".
+//
+// See aeSkinWeightImportWorldSpaceUI.mel for info on importing.
+
+global proc aeSkinWeightsFile (string $fileName, string $fileType)
+{
+	global string $aeWeightsFile;
+	$aeWeightsFile = $fileName;
+}
+
+proc userAbort (string $filename, string $message)
+{
+	if (`size $filename`) sysFile -del $filename;
+	progressWindow -endProgress;
+	error $message;
+}
+
+global proc string aeSkinWeightExportWorldSpace ()
+{
+	$startTime1 = `timerX`;
+
+	global string $aeWeightsFile;
+// Get the current selection, ignore anything that's not a transform, shape or control point.
+	string $objsSel [] = `ls -sl -l -fl -type transform -type shape`;
+	string $pointsSel [] = `ls -sl -l -fl -type float3 -type double3`;
+	if (size($objsSel) < 1 && size($pointsSel) < 1)
+	{
+		print "The selection does not contain any valid object(s). Accepted object types are:\n";
+		print "Transforms, Shapes and Control Points (Vertices or CV:s).\n";
+		error ("No valid object(s) selected. See script editor for details.");
+	}
+
+// Extract the selected shapes, and all shapes descending from the transforms in the selection
+// and get their immediate parent transforms
+	string $shapesInSel [] = `ls -l -typ shape $objsSel`;
+	string $shapesFromSel [] = `listRelatives -ad -f -typ shape $objsSel`;
+	string $selShapes [] = stringArrayCatenate ($shapesInSel, $shapesFromSel);
+	string $selTransf [] = `listRelatives -p -f $selShapes`;
+	$selTransf = `stringArrayRemoveDuplicates $selTransf`;
+	string $validSel [] = stringArrayCatenate ($selTransf, $pointsSel);
+// Remove any directly selected control points that are part of an already selected object.
+// Also, get the Skin Clusters connected to the selection and
+// remove any object from the lists that's not connected to a Skin Cluster;
+	string $skinClusterList [];
+	string $remove [];
+	for ($item in $validSel)
+	{
+		if (!`objectType -i "transform" $item`) // i.e. if it's not a transform, then it's a point.
+		{
+			string $pointParts [];
+			tokenize $item "\." $pointParts;
+			for ($transf in $selTransf)
+				if ($transf == $pointParts[0]) $remove [size($remove)] = $item;
+		}
+		string $itemHist [] = `listHistory $item`;
+		string $itemSkCl [] = `ls -type skinCluster $itemHist`;
+		if (!size($itemSkCl)) $remove [size($remove)] = $item;
+		for ($SkCl in $itemSkCl)
+			$skinClusterList [size($skinClusterList)] = $SkCl;
+	}
+	$validSel = stringArrayRemove ($remove, $validSel);
+	$skinClusterList = `stringArrayRemoveDuplicates $skinClusterList`;
+	if (!`size $skinClusterList`) error ("No skin clusters connected to selection");
+
+// Get the deformer sets connected to the Skin Clusters in the selection and
+// and place them in an array so that each set's index is the same as the
+// corresponding Skin Cluster's index.
+	string $allSets [] = `listSets -t 2`;
+	int $pointsToDo = 0;
+	string $setList [];
+	for ($set in $allSets)
+	{
+		string $ConnectedSCs [] = `listConnections -t skinCluster $set`;
+		int $numCSC = 0;
+		int $setIndex = 0;
+		for ($CSC in $ConnectedSCs)
+			for ($SC = 0; $SC < size($skinClusterList); $SC++)
+				if ($CSC == $skinClusterList[$SC])
+				{
+					$setIndex = $SC;
+					$numCSC += 1;
+				}
+		if ($numCSC)
+			if ($numCSC > 1)
+			{
+				string $message = ("More than one selected Skin Cluster connected to " + $set + ".\n");
+				error $message;
+			} else 
+			{
+				$setList [$setIndex] = $set;
+				int $allMemb [] = `getAttr -s $set`;
+				$pointsToDo += `size $allMemb`;
+			}
+	}
+	$midTime = `timerX -startTime $startTime1`;
+	
+// Let the user choose a file for export
+	$aeWeightsFile = "";
+	fileBrowser ("aeSkinWeightsFile", "Export", "", 1);
+	if ($aeWeightsFile == "") return "";
+	print ("Export file: " + $aeWeightsFile + "\n");
+	string $fileParts [];
+	if (`tokenize $aeWeightsFile "." $fileParts` < 2) $aeWeightsFile += ".weights";
+	$aeTempFile = ($fileParts [0] + ".tmp");
+	$startTime = `timerX`;
+	int $fileIdTemp = `fopen $aeTempFile "w"`;
+	if ($fileIdTemp == 0)
+		error ("Unable to create temp file: " + $aeTempFile);
+	$startTime2 = `timerX`;
+
+	progressWindow -t "Exporting..." -pr 0 -st "Exporting Transforms." -ii true;
+
+// Start writing to tempfile
+	fprint $fileIdTemp "----oooOOooo---------------------------------------------------oooOOooo----\n";
+	fprint $fileIdTemp "----oooOO Text file generated by aeSkinWeightExportWorldSpace.mel OOooo----\n";
+	fprint $fileIdTemp "----oooOOooo---------------------------------------------------oooOOooo----\n";
+	fprint $fileIdTemp "---------------------------------------------------------------------------\n";
+	fprint $fileIdTemp "---- The file consists of two parts: --------------------------------------\n";
+	fprint $fileIdTemp "---- 1) List of all Transforms (e.g. Joints) influencing the skin, as -----\n";
+	fprint $fileIdTemp "----    well as their World Space Positions. ------------------------------\n";
+	fprint $fileIdTemp "----    NOTE: If any of the Transforms' names are different than their ----\n";
+	fprint $fileIdTemp "----    counter parts connected to the Import Skin Cluster(s), make sure --\n";
+	fprint $fileIdTemp "----    to replace it with the correct name in the Transforms list below. -\n";
+	fprint $fileIdTemp "----    WARNING!!! DO NOT CHANGE ANYTHING ELSE IN THIS FILE - DOING SO ----\n";
+	fprint $fileIdTemp "----    MAY CAUSE ERRORS DURING IMPORT!!! ---------------------------------\n";
+	fprint $fileIdTemp "---- 2) Point list of position and weights for every Control Point --------\n";
+	fprint $fileIdTemp "----    (vertex or CV) deformed by the smooth bound skin. -----------------\n";
+	fprint $fileIdTemp "----    The first three numbers in each row are the world space (x y z) ---\n";
+	fprint $fileIdTemp "----    position of the point; The rest of the numbers are the skin -------\n";
+	fprint $fileIdTemp "----    weights of the Control Point corresponding to the transforms ------\n";
+	fprint $fileIdTemp "----    in the Influence Transforms list. ---------------------------------\n";
+	
+// Write a list of all the transforms influencing the Control Points and their count.
+	fprint $fileIdTemp "\nNumber of Transforms:\n";
+	
+	int $totalPoints = 0;
+	string $inflTransformList [];
+	for ($skCl in $skinClusterList)
+	{
+		string $skClXForms [] = `skinCluster -q -inf $skCl`;
+		appendStringArray ($inflTransformList, $skClXForms, `size $skClXForms`);
+	}
+	$inflTransformList = `stringArrayRemoveDuplicates $inflTransformList`;
+	$inflTransformListSize = `size $inflTransformList`;
+	fprint $fileIdTemp ($inflTransformListSize + "\ninsert\n\n\nTransforms:\n");
+	string $inflTransfNames = "";
+	string $inflTransfPositions = "";
+	for ($inflTransf = 0; $inflTransf < $inflTransformListSize; $inflTransf++)
+	{
+// Names of the influence transforms
+		$inflTransfNames += ($inflTransformList [$inflTransf]);
+// World space positions of the influence transforms
+		$inflTransfPositions += "<<";
+		float $inflTransfPos [3] = `xform -q -ws -t ($inflTransformList [$inflTransf])`;
+		for ($curAxis = 0; $curAxis < 3; $curAxis++)
+		{
+			$inflTransfPositions += ($inflTransfPos [$curAxis]);
+			if ($curAxis < 2) $inflTransfPositions += ", ";
+		}
+		$inflTransfPositions += ">>";
+		if (($inflTransf + 1) < $inflTransformListSize)
+		{
+			$inflTransfNames += " ";
+			$inflTransfPositions += "; ";
+		}
+	}	
+	fprint $fileIdTemp $inflTransfNames;
+	fprint $fileIdTemp "\n";
+	fprint $fileIdTemp $inflTransfPositions;
+	fprint $fileIdTemp "\n\nPoint positions and weights:\n";
+	progressWindow -e -pr 5 -st "Exporting Points";
+	if ( `progressWindow -q -ic` ) {fclose $fileIdTemp; userAbort ($aeTempFile, "Export aborted by user. No file was (over)written.");}
+	float $progressAmt = 5.0;
+	int $progressInt = $progressAmt;
+
+// Iterate over all the valid deformer sets
+	int $numExpPts = 0;
+	for ($setNo = 0; $setNo < size($setList); $setNo++)
+	{
+		string $setMembers [] = `sets -q $setList [$setNo]`;
+		string $setPoints [] = `ls -fl -l $setMembers`;
+// Iterate over every point in the current deformer set
+		for ($point in $setPoints)
+		{
+			string $pointParts [];
+			tokenize $point "\." $pointParts;
+// If the point is also in the valid selection, write its values to the tempfile.
+			if (stringArrayCount ($pointParts [0], $validSel) || stringArrayCount ($point, $validSel))
+			{
+// Worldspace position of the point
+				fprint $fileIdTemp "<<";
+				float $cpPos [3] = `xform -q -ws -t $point`;
+				for ($curAxis = 0; $curAxis < 3; $curAxis++)
+				{
+					fprint $fileIdTemp $cpPos [$curAxis];
+					if ($curAxis < 2) fprint $fileIdTemp ", ";
+				}
+				fprint $fileIdTemp ">>;";
+// Influence weights of the point
+				for ($infl in $inflTransformList)
+				{
+					fprint $fileIdTemp " ";
+					float $weightValue = `skinPercent -t $infl -q ($skinClusterList [$setNo]) $point`;
+					fprint $fileIdTemp $weightValue;
+				}
+				$numExpPts += 1;
+				fprint $fileIdTemp "\n";
+			}
+			$progressAmt += 90.0 / $pointsToDo;
+			$progressInt = $progressAmt;
+			progressWindow -e -pr $progressInt;
+			if ( `progressWindow -q -ic` ) {fclose $fileIdTemp; userAbort ($aeTempFile, "Export aborted by user. No file was (over)written.");}
+		}
+	}
+
+// read from the tempfile and build the export file in the right order.
+	progressWindow -e -pr 95 -st "Rebuilding Export File";
+	fclose $fileIdTemp;
+	$fileIdTemp = `fopen $aeTempFile "r"`;
+	if ($fileIdTemp == 0)
+		error ("Unable to open temp file: " + $aeTempFile);
+	int $fileIdExp = `fopen $aeWeightsFile "w"`;
+	if ($fileIdExp == 0)
+		error ("Unable to create Export file: " + $aeTempFile);
+	string $nextLine = `fgetline $fileIdTemp`;
+	while ( $nextLine != "insert\n")
+	{
+		fprint $fileIdExp ( $nextLine );
+		$nextLine = `fgetline $fileIdTemp`;
+	}
+	fprint $fileIdExp ("\nNumber of points:\n" + $numExpPts);
+	while ( !feof($fileIdTemp) )
+		fprint $fileIdExp (`fgetline $fileIdTemp`);
+	fclose $fileIdTemp;
+	fclose $fileIdExp;
+	sysFile -del $aeTempFile;
+	progressWindow -e -pr 100 -st "Done.";
+	print ("\nNumber of transforms: " + `size $inflTransformList` + "; Number of points: " + $numExpPts + "\n");
+	$endTime = `timerX -startTime $startTime2`;
+	$totalTime = $midTime + $endTime;
+	print ("Export time: " + $totalTime + "\n");
+	print ("Skin Weights exported to " + $aeWeightsFile + ". See Script Editor for more details.\n");
+	progressWindow -endProgress;
+	return "";
+}
