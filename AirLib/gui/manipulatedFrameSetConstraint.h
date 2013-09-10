@@ -4,7 +4,7 @@
 #include "QGLViewer/constraint.h"
 #include "DrawObject.h"
 
-#include "DataStructures.h"
+#include "DataStructures/DataStructures.h"
 
 class ManipulatedFrameSetConstraint : public qglviewer::Constraint
 {

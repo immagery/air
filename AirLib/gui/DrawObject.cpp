@@ -1,4 +1,4 @@
-#include <qgl.h>
+#include <QtOpenGL/qgl.h>
 #ifdef WIN32
 #include <GL/glu.h>
 #endif

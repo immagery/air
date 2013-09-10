@@ -2,7 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QtWidgets/QMainWindow>
-#include <QModelIndex>
+#include <QtCore/QModelIndex>
 
 class TreeModel;
 class TreeItem;

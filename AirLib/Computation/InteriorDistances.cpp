@@ -7,9 +7,9 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/Geometry>
 
-#include <QTime>
-#include <QFile>
-#include <QTextStream>
+#include <QtCore/QTime>
+#include <QtCore/QFile>
+#include <QtCore/QTextStream>
 
 #include "../ArpackPlusLib/arpackpluslib.h"
 

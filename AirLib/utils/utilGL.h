@@ -18,7 +18,7 @@
 #include <glu.h>
 #endif
 
-#include <util.h>
+#include <utils/util.h>
 
 //void joint::update()
 //{

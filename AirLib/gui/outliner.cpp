@@ -1,8 +1,8 @@
 #include "outliner.h"
 
-#include "Scene.h"
-#include "Modelo.h"
-#include "skeleton.h"
+#include "dataStructures/Scene.h"
+#include "dataStructures/Modelo.h"
+#include "dataStructures/skeleton.h"
 
 void outliner::getSceneTree(joint* j,treeNode* root)
 {

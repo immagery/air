@@ -11,8 +11,8 @@ using Eigen::Vector3f;
 using Eigen::Vector3d;
 
 #include <utils/util.h>
-#include "Modelo.h"
-#include "SurfaceData.h"
+#include "DataStructures/Modelo.h"
+#include "DataStructures/SurfaceData.h"
 
 int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix& dists, bool withPatches)
 {

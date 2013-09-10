@@ -5,19 +5,19 @@
 
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QToolBar>
-#include <QDir>
+#include <QtCore/QDir>
 #include <QtWidgets/QFileDialog>
 
 #include <QtWidgets/QTreeView>
-#include <QStandardItem>
+#include <QtGui/QStandardItem>
 
 #include "treeitem.h"
 #include "treemodel.h"
 
 #include "outliner.h"
-#include "modelo.h"
+#include "DataStructures/modelo.h"
 
-#include "util.h"
+#include "utils/util.h"
 
 #include "globalDefinitions.h"
 

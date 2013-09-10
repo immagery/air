@@ -4,17 +4,16 @@
 //Std libraries
 #include <vector>
 
-#include <QGLWidget>
-#include <QGLShaderProgram>
-#include <QKeyEvent>
-#include <QMouseEvent>
+#include <QtOpenGL/QGLWidget>
+#include <QtGui/QKeyEvent>
+#include <QtGui/QMouseEvent>
 #include <QGLViewer/qglviewer.h>
 
 #include "QGLViewer/constraint.h"
 
 #include "DataStructures/DataStructures.h"
 
-#include "ui/SelectionManager.h"
+#include "SelectionManager.h"
 
 #include "DrawObject.h"
 

@@ -1,9 +1,9 @@
-#include <qimage.h>
-#include <qpainter.h>
-#include <QDir>
+#include <QtGui/qimage.h>
+#include <QtGui/qpainter.h>
+#include <QtCore/QDir>
 
 #include "bar.h"
-#include "util.h"
+#include "utils/util.h"
 
 colorBar::colorBar(QWidget *parent) : QWidget (parent) {
     qimage = new QImage;

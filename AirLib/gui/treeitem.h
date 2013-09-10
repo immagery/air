@@ -41,8 +41,8 @@
 #ifndef TREEITEM_H
 #define TREEITEM_H
 
-#include <QList>
-#include <QVariant>
+#include <QtCore/QList>
+#include <QtCore/QVariant>
 
 #include "outliner.h"
 

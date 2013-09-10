@@ -9,9 +9,9 @@
 #define VERBOSE false
 
 // Qt libraries
-#include <QDir>
+#include <QtCore/QDir>
 #include <QtWidgets/QMessageBox>
-#include <QColor>
+#include <QtGui/QColor>
 
 #include "GLWidget.h"
 
@@ -45,6 +45,8 @@
 
 #include <iostream>
 #include <fstream>
+
+#include <QtCore/QTextStream>
 
 #define ratioExpansion_DEF 0.7
 
