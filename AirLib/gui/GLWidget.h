@@ -59,9 +59,7 @@ public:
     void readScene(string fileName, string name, string path);
     void readDistances(QString fileName);
 
-    void readBone(skeleton *skt, joint *root, FILE *fout);
     void readSkeleton(string fileName);
-	void readSkeletons(string fileName, vector<skeleton*>& skts);
 
 	float calculateDistancesForISOLines(grid3d* grid, vector<double>&  embeddedPoint);
 
@@ -79,7 +77,6 @@ public:
     void testScene();
 
     void drawColored(QVector<QColor> colors);
-
 
     // VARIABLES
     vcg::Point3d m_ptCenter; // centro de la escena
@@ -126,18 +123,6 @@ public:
     MyMesh simpleCube;
     MyMesh littleCube;
 
-    /*
-    MyMesh modeloOriginal;
-    MyMesh newModeloGC;
-    MyMesh newModeloHC;
-
-    MyMesh cage;
-    MyMesh newCage;
-
-    QString sModelPath;
-    QString sModelPrefix;
-    */
-
     //vector< object*> modelos; // Todos los objetos que tendremos en la escena
     scene* escena; // Escena con jerarquía
 
@@ -148,10 +133,6 @@ public:
     bool showDeformedModel;
 
     unsigned int influenceDrawingIdx;
-
-    //std::vector< std::vector<float> > PerVertGC;
-    //std::vector< std::vector<float> > PerFaceGC;
-    //std::vector< std::vector<float> > PerVertHC;
 
     vector<float> selectionValuesForColorGC;
     vector<float> selectionValuesForColorHC;

@@ -66,7 +66,7 @@ void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductio
 	for(int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
 	{
         // Assegurar que los indices guardados en los vertices de la maya estan bien.
-        assert(VertIdx >= 0 && VertIdx < m.vn);
+        assert(VertIdx >= 0 && VertIdx < m.vn());
         PointData& pd = bd->pointData[VertIdx];
 
         if(pd.segmentId>=0)
@@ -1934,7 +1934,7 @@ void FusionBindings(Modelo& m, vector<vector<int> >& groupBindings)
 	// Guardamos una indirección para tener ordenados los pesos... esto podría variar
 	// para optimizar los cálculos.
 	int counter = 0;
-	m.globalIndirection.resize(m.vn);
+	m.globalIndirection.resize(m.vn());
 	for(int i = 0; i< m.bindings.size(); i++)
 	{
 		m.bindings[i]->globalIndirection.resize(m.bindings[i]->pointData.size());
@@ -2159,8 +2159,11 @@ void AddVirtualTriangles(Modelo& m)
 
 void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 {
-	//m->bindings.push_back(new binding(m->vn));
+	//m->bindings.push_back(new binding(m->vn()));
 
+	vector<GraphNode*>& nodes = m.nodes;
+
+	/*
 	vector<GraphNode*> nodes;
 	nodes.resize(m.vn);
 	for(int i = 0; i< nodes.size(); i++)
@@ -2189,14 +2192,15 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 			}
 		}
     }
+	*/
 
 	// Buscamos componentes conexas a la vez que nos quedamos
 	// con los datos para luego crear los grafos.
 	int idDispatcher = -1;
 	vector<int> connIds;
 	vector<bool> visIds;
-	visIds.resize(m.vn,false);
-	connIds.resize(m.vn, -1);
+	visIds.resize(m.nodes.size(),false);
+	connIds.resize(m.nodes.size(), -1);
 
 	for(int n = 0; n < nodes.size(); n++)
 	{
@@ -2328,21 +2332,19 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	assert(count == nodes.size());
 
 	// Recorremos los vertices y acumulamos el area de sus triangulos ponderado por 1/3 que le corresponde.
-    MyMesh::VertexIterator vi;  idx = 0;
-    for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi ) 
+    //MyMesh::VertexIterator vi;  idx = 0;
+    //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi ) 
+	for(int vi = 0; vi < m.nodes.size(); vi++)
 	{
-		int idVert = vi->IMark();
-
-		int idBind = m.modelVertexBind[idVert];
-		int idVertexInBind = m.modelVertexDataPoint[idVert];
-
-		m.bindings[idBind]->pointData[idVertexInBind].position = vi->P();
+		int idBind = m.modelVertexBind[m.nodes[vi]->id];
+		int idVertexInBind = m.modelVertexDataPoint[m.nodes[vi]->id];
+		m.bindings[idBind]->pointData[idVertexInBind].position = m.nodes[vi]->position;
     }
 
 	// Guardamos una indirección para tener ordenados los pesos... esto podría variar
 	// para optimizar los cálculos.
 	int counter = 0;
-	m.globalIndirection.resize(m.vn);
+	m.globalIndirection.resize(m.vn());
 	for(int i = 0; i< bindings.size(); i++)
 	{
 		for(int j = 0; j< bindings[i]->pointData.size(); j++)
@@ -2356,17 +2358,18 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	// Construimos una matriz de adyacencia que tambien
 	// recoge si una arista es borde(1) o no (2)
 	vector< vector<short> > edges; 
-	edges.resize(m.vn);
+	edges.resize(m.vn());
 	for(int i = 0; i< edges.size(); i++)
-		edges[i].resize(m.vn, 0);
+		edges[i].resize(m.vn(), 0);
 	
-	MyMesh::FaceIterator fj;
-    for(fj = m.face.begin(); fj!=m.face.end(); ++fj )
-    {
+	//MyMesh::FaceIterator fj;
+    //for(fj = m.face.begin(); fj!=m.face.end(); ++fj )
+	for(int fj = 0; fj < m.triangles.size(); fj++ )
+	{
         vcg::Point3d O, c, s;
         vcg::Point3i idVerts;
         for(int i = 0; i<3; i++) // Obtenemos los indices de los vertices de t
-			idVerts[i] = fj->V(i)->IMark();
+			idVerts[i] = m.triangles[fj]->verts[i]->id;
 
 		for(int i = 0; i<3; i++)
 			edges[idVerts[i]][idVerts[(i+1)%3]]++;

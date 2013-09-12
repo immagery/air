@@ -1,5 +1,68 @@
 #include "SurfaceData.h"
 
+
+bool BuildSurfaceFromOFFFile(SurfaceGraph& graph, string sFileName)
+{
+	FILE* fin;
+    fin = fopen(sFileName.c_str(), "r");
+
+	if(!fin) return false;
+
+	char str[1000];
+    fscanf(fin, "%s", str); // Format flag
+	string formatStr(str);
+	if(formatStr.compare("OFF") != 0) return false;
+
+	int num1, num2, num3;
+    fscanf(fin, "%d", &num1);
+    fscanf(fin, "%d", &num2);
+	fscanf(fin, "%d", &num3);
+
+	//Leemos los vertices
+	graph.nodes.resize(num1);
+	float value1, value2, value3;
+	for(int i = 0; i< num1; i++)
+	{
+		fscanf(fin, "%f", &value1);
+		fscanf(fin, "%f", &value2);
+		fscanf(fin, "%f", &value3);
+		graph.nodes[i] = new GraphNode(i);
+		graph.nodes[i]->position = Point3d(value1,value2,value3);
+	}
+
+	// Leemos las caras.
+	graph.triangles.resize(num2);
+	int polygonCount = 0;
+	int vertIdx = 0;
+	for(int i = 0; i< num2; i++)
+	{
+		fscanf(fin, "%i", &polygonCount);
+		graph.triangles[i] = new GraphNodePolygon(i);
+		graph.triangles[i]->verts.resize(polygonCount);
+
+		vector<int> indexes;
+		for(int j = 0; j< polygonCount; j++)
+		{
+			fscanf(fin, "%i", &vertIdx);
+			graph.triangles[i]->verts[j] = graph.nodes[vertIdx];
+			indexes.push_back(vertIdx);
+		}
+
+		for(int j = 0; j< polygonCount; j++)
+		{
+			graph.nodes[indexes[j]]->connections.push_back(graph.nodes[indexes[(j+1)%polygonCount]]);
+			graph.nodes[indexes[(j+1)%polygonCount]]->connections.push_back(graph.nodes[indexes[j]]);
+		}
+	}
+
+	//// De momento no leemos mas que vertices y caras.
+	//for(int i = 0; i< num3; i++)
+	//{
+	//}
+
+	 return true;
+}
+
 PointData::PointData()
 {
     influences.clear();

@@ -570,8 +570,8 @@ void GLWidget::paintPlaneWithData(bool compute)
 		Point3d AxisY(0,1,0);
 		Point3d AxisZ(0,0,1);
 
-		double length = (m.bbox.max - m.bbox.min).Norm();
-		Point3d center = (m.bbox.max + m.bbox.min)/2.0;
+		double length = (m.maxBBox - m.minBBox).Norm();
+		Point3d center = (m.maxBBox + m.minBBox)/2.0;
 		planeRender->minPoint = Point3d(center[0]-length/2,center[1]-length/2,center[2]-length/2);
 		planeRender->maxPoint = Point3d(center[0]+length/2,center[1]+length/2,center[2]+length/2);
 		planeRender->plane->addTranslation(center[0]-length/2,center[1]-length/2,center[2]-length/2);
@@ -606,9 +606,9 @@ void GLWidget::paintPlaneWithData(bool compute)
 
 	// Ordenamos los pesos de cada punto del plano
 	vector< vector<int> >weightsSort(weights.size());
-	for(int i = 0; i < weights.size(); i++) weightsSort[i].resize(m.vn);
+	for(int i = 0; i < weights.size(); i++) weightsSort[i].resize(m.vn());
 	vector< vector<bool> > weightsRepresentative(weights.size());
-	for(int i = 0; i < weights.size(); i++) weightsRepresentative[i].resize(m.vn);
+	for(int i = 0; i < weights.size(); i++) weightsRepresentative[i].resize(m.vn());
 	double threshold = -10;//1/pow(10.0, 3);
 
 	for(int i = 0; i < weights.size(); i++)
@@ -681,8 +681,8 @@ void GLWidget::paintModelWithData()
     {
 		Modelo* m = (Modelo*)escena->models[modelIdx];
 
-		if(m->shading->colors.size() != m->vn)
-			m->shading->colors.resize(m->vn);
+		if(m->shading->colors.size() != m->vn())
+			m->shading->colors.resize(m->vn());
 
 		m->cleanSpotVertexes();
 
@@ -692,15 +692,15 @@ void GLWidget::paintModelWithData()
 		maxDistances.resize(m->bindings.size());
 
 		vector<double> weights;
-		vector<int> weightsSort(m->vn);
-		vector<bool> weightsRepresentative(m->vn);
+		vector<int> weightsSort(m->vn());
+		vector<bool> weightsRepresentative(m->vn());
 
 		vector<double> completeDistances;
 		double threshold = escena->weightsThreshold;//1/pow(10.0, 3);
 
 		if(escena->iVisMode == VIS_ISODISTANCES || escena->iVisMode == VIS_POINTDISTANCES || escena->iVisMode == VIS_ERROR || escena->iVisMode == VIS_WEIGHT_INFLUENCE)
 		{
-			printf("Tiempos de computacion para %d vertices: \n", m->vn); fflush(0);
+			printf("Tiempos de computacion para %d vertices: \n", m->vn()); fflush(0);
 			/*for(int currentBinding = 0; currentBinding < m->bindings.size(); currentBinding++)
 			{		
 				for(int i = 0; i< m->bindings[currentBinding]->BihDistances.size; i++)
@@ -716,9 +716,9 @@ void GLWidget::paintModelWithData()
 			clock_t ini, fin;
 			ini = clock();
 
-			weights.resize(m->vn);
+			weights.resize(m->vn());
 			int currentBinding = 1;
-			pointDistances.resize(m->vn);
+			pointDistances.resize(m->vn());
 			//pointDistances.resize(m->bindings[currentBinding]->pointData.size());
 			//mvcSingleBinding(interiorPoint, weights, m->bindings[currentBinding], *m);
 			mvcAllBindings(interiorPoint, weights, m->bindings, *m);
@@ -778,7 +778,7 @@ void GLWidget::paintModelWithData()
 
 			if(escena->iVisMode == VIS_ERROR)
 			{
-				completeDistances.resize(m->vn);
+				completeDistances.resize(m->vn());
 				double preValue2 = 0;
 				for(int currentBinding = 0; currentBinding < m->bindings.size(); currentBinding++)
 				{
@@ -944,6 +944,7 @@ void GLWidget::paintModelWithData()
 
  void GLWidget::paintModelWithGrid()
  {
+	/*
     if(VERBOSE)
         printf(">> PaintModelWithGrid (for testing)\n");
 
@@ -958,7 +959,7 @@ void GLWidget::paintModelWithData()
 
         if(grRend == NULL || !grRend->Initialized) return;
 
-        m->shading->colors.resize(m->vn);
+        m->shading->colors.resize(m->vn());
 
         if(grRend->iVisMode == VIS_SEGMENTATION || grRend->iVisMode == VIS_WEIGHTS)
         {
@@ -1011,6 +1012,7 @@ void GLWidget::paintModelWithData()
             }
         }
     }
+	*/
  }
 
 
@@ -1096,13 +1098,17 @@ void GLWidget::paintModelWithData()
  
  void GLWidget::exportWeightsToMaya()
  {
+	 assert(false);
+	 // esta vinculado al grid
+
+	 /*
     gridRenderer* grRend = (gridRenderer*)escena->visualizers.back();
     Modelo* m = (Modelo*)escena->models.back();
     skeleton* skt = (skeleton*)escena->skeletons.back();
 
     vector< vector<float> > meshWeights;
 
-    meshWeights.resize(m->vn);
+    meshWeights.resize(m->vn());
 
     int idxCounter = 0;
     MyMesh::VertexIterator vi;
@@ -1126,6 +1132,7 @@ void GLWidget::paintModelWithData()
 
     string fileName = QString("%1%2.weights").arg(m->sPath.c_str()).arg(m->sName.c_str()).toStdString();
     saveWeightsToMayaByName(m, meshWeights, names, fileName);
+	*/
  }
 
 void GLWidget::setThreshold(double value)
@@ -1325,6 +1332,11 @@ void loadDataForDrawing(gridRenderer* grRend )
 
 void reportResults(Modelo& model, binding* bb)
 {
+	assert(false);
+	 // esta vinculado al grid
+
+	/*
+	
 	//printf("getting results %d points and %d nodes.\n",weights.points, weights.nodes);	
 	int count = 0;
 	float sum = 0;
@@ -1342,7 +1354,6 @@ void reportResults(Modelo& model, binding* bb)
         //TODO
         assert(false);
 
-        /*
 		// Obtener celda
 		Point3d ptPos = vi->P();
 		Point3i pt = grid.cellId(ptPos);
@@ -1371,8 +1382,10 @@ void reportResults(Modelo& model, binding* bb)
 		}
 		fprintf(fout, "\n\n"); fflush(fout);
 		count++;
-        */
+        
 	}
+
+	*/
 }
 
 
@@ -1747,8 +1760,8 @@ void GLWidget::doTests(string fileName, string name, string path)
 				// Calculo de distancias
 				vector<double> pointDistances;
 				vector<double> weights;
-				weights.resize(m->vn);
-				pointDistances.resize(m->vn);
+				weights.resize(m->vn());
+				pointDistances.resize(m->vn());
 				statistics[j].resize(thresholds.size());
 
 				ini = clock();
@@ -1762,8 +1775,8 @@ void GLWidget::doTests(string fileName, string name, string path)
 			
 				for(int k = 0; k < thresholds.size(); k++)
 				{
-					vector<int> weightsSort(m->vn);
-					vector<bool> weightsRepresentative(m->vn);
+					vector<int> weightsSort(m->vn());
+					vector<bool> weightsRepresentative(m->vn());
 
 					double currentTh = thresholds[k];
 
@@ -2007,130 +2020,15 @@ void GLWidget::computeProcess()
 }
 
 
- void GLWidget::readBone(skeleton* skt, joint* root, FILE* fout)
- {
-     int num1 = 0; char str[1000];
-     float posX, posY, posZ;
-     float rotX, rotY, rotZ;
-     float ojX, ojY, ojZ;
-     float wpX, wpY, wpZ;
-
-     fscanf(fout, "%s", &str[0]);
-     fscanf(fout, "%f", &posX);
-     fscanf(fout, "%f", &posY);
-     fscanf(fout, "%f", &posZ);
-
-     fscanf(fout, "%f", &rotX);
-     fscanf(fout, "%f", &rotY);
-     fscanf(fout, "%f", &rotZ);
-
-     fscanf(fout, "%f", &ojX);
-     fscanf(fout, "%f", &ojY);
-     fscanf(fout, "%f", &ojZ);
-
-     fscanf(fout, "%f", &wpX);
-     fscanf(fout, "%f", &wpY);
-     fscanf(fout, "%f", &wpZ);
-
-     fscanf(fout, "%d", &num1);
-
-     root->sName = str;
-     root->resetTransformation();
-     root->addTranslation(posX, posY, posZ);
-     root->addRotation(rotX, rotY, rotZ);
-     root->setJointOrientation(ojX,ojY,ojZ);
-
-     //root->setJointId(scene::getNewId());
-
-     root->setWorldPosition(Point3d(wpX, wpY, wpZ));
-     skt->joints.push_back(root);
-     skt->jointRef[root->nodeId] = root;
-
-     for(int i = 0; i< num1; i++)
-     {
-         joint* jt = new joint(root, escena->getNewId());
-         root->pushChild(jt);
-
-         //printf("anadimos el joint: %s %f %f %f con %d hijos\n",str, posX, posY-pos.Y(), posZ-pos.Z(),num1);
-         readBone(skt, jt, fout);
-     }
- }
-
-void GLWidget::readSkeletons(string fileName, vector<skeleton*>& skts)
-{
-     FILE* fout;
-     fout = fopen(fileName.c_str(), "r");
-
-     if(!fout) 
-	 {
-		 printf("No hay fichero de esqueleto.\n"); 
-		 fflush(0);
-		 return;
-	 }
-
-     int num1 = 0;
-
-     fscanf(fout, "%d", &num1);
-     for(int i = 0; i< num1; i++)
-     {
-         // Skeleton creation
-         skeleton* skt = new skeleton();
-         skt->sName = "skeleton" + i;
-
-         //Root joint Creation
-         skt->root = new joint(scene::getNewId());
-
-         readBone(skt, skt->root, fout);
-         skt->update();
-
-         skts.push_back(skt);
-     }
-
-     fclose(fout);
-}
-
 void GLWidget::readSkeleton(string fileName)
 {
-     FILE* fout;
-     fout = fopen(fileName.c_str(), "r");
+	vector<skeleton*> skts;
+	skts.resize(escena->skeletons.size());
+	
+	for(int i = 0; i< skts.size(); i++)
+		skts[i] = (skeleton*)escena->skeletons[i];
 
-     if(!fout) 
-	 {
-		 printf("No hay fichero de esqueleto.\n"); 
-		 fflush(0);
-		 return;
-	 }
-
-     int num1 = 0;
-
-     fscanf(fout, "%d", &num1);
-
-     for(int i = 0; i< num1; i++)
-     {
-         // Skeleton creation
-         skeleton* skt = new skeleton();
-         skt->sName = "skeleton" + i;
-
-         //Root joint Creation
-         skt->root = new joint(scene::getNewId());
-
-         readBone(skt, skt->root, fout);
-         skt->update();
-
-         //printf("Map size: %d\n", skt->jointRef.size()); fflush(0);
-         //map<int, joint*>::iterator it = skt->jointRef.begin();
-         /*for(int jr = 0; jr < skt->jointRef.size(); jr++)
-         {
-             printf("  Key: %d, Value: %d\n", (*it).first, ((joint*)((*it).second))->nodeId); fflush(0);
-             it++;
-         }
-		 */
-
-         //readBones(skt, fout);
-         escena->skeletons.push_back((object*)skt);
-     }
-
-     fclose(fout);
+	readSkeletons(fileName, skts);
 
      emit updateSceneView();
  }
@@ -2190,7 +2088,7 @@ void GLWidget::readSkeleton(string fileName)
 
          ((Modelo*)escena->models.back())->loadModel(fileName, name, ext.toStdString(), path);
 
-
+		 /*
          if(((Modelo*)escena->models.back())->cleanModel())
          {
              printf("Se ha guardado un nuevo modelo limpio...\n");
@@ -2200,6 +2098,7 @@ void GLWidget::readSkeleton(string fileName)
          {
              printf("El modelo est� limpio...\n");
          }
+		 */
 
          /*
          escena->models.push_back((object*)new Modelo(escena->getNewId()));

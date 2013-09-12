@@ -2,6 +2,9 @@
 
 void saveWeightsToMaya(Geometry* mesh, vector< vector<float> >& meshWeights,vector<string>& names, vector<Point3d>& points, string sFile)
 {
+	//TODO
+	assert(false);
+	/*
     FILE* fout;
     fout = fopen(sFile.c_str(), "w");
 
@@ -49,10 +52,15 @@ void saveWeightsToMaya(Geometry* mesh, vector< vector<float> >& meshWeights,vect
     }
 
     fclose(fout);
+	*/
 }
 
 void saveWeightsToMayaByName(Geometry* mesh, vector< vector<float> >& meshWeights,vector<string>& names, string sFile)
 {
+	//TODO
+	assert(false);
+
+	/*
     FILE* fout;
     fout = fopen(sFile.c_str(), "w");
 
@@ -93,5 +101,6 @@ void saveWeightsToMayaByName(Geometry* mesh, vector< vector<float> >& meshWeight
     }
 
     fclose(fout);
+	*/
 }
 

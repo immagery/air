@@ -13,6 +13,7 @@
 
 void GeometryRender::drawFunc(object* obj)
 {
+	
     // transformaciones
     beforeDraw(obj);
 
@@ -36,13 +37,14 @@ void GeometryRender::drawFunc(object* obj)
         if(size<=0)
             glColor4f(color[0]*blend, color[1]*blend, color[2]*blend,blend);
 
-        MyMesh::FaceIterator fi;
-        for(fi = geom->face.begin(); fi!= geom->face.end(); ++fi )
-         {
+        //MyMesh::FaceIterator fi;
+        //for(fi = geom->face.begin(); fi!= geom->face.end(); ++fi )
+		for(int tr = 0; tr< geom->triangles.size(); tr++ )
+		{
              //glNormal3dv(&(*fi).N()[0]);
              for(int i = 0; i<3; i++)
              {
-                 int pIdx = fi->V(i)->IMark();
+				 int pIdx = geom->triangles[tr]->verts[i]->id; //fi->V(i)->IMark();
 
                  if(size > 0 && pIdx < size)
                  {
@@ -57,9 +59,9 @@ void GeometryRender::drawFunc(object* obj)
                      else
                         glColor4f(color[0]*blend, color[1]*blend, color[2]*blend,blend);
                  }
-
-                 glNormal(fi->V(i)->N());
-                 glVertex(fi->V(i)->P());
+			
+                 glNormal(/*fi->V(i)->N()*/ geom->vertNormals[pIdx]);
+                 glVertex(geom->nodes[pIdx]->position);
              }
          }
         glEnd();
@@ -77,10 +79,11 @@ void GeometryRender::drawFunc(object* obj)
 			glBegin(GL_POINTS);
 			int countSV= 0;
 			// vertices normales
-			MyMesh::VertexIterator vi;
-			for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+			//MyMesh::VertexIterator vi;
+			for(int vi = 0; vi < geom->nodes.size(); vi++ )
+			//for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
 			{
-				int pIdx = vi->IMark();
+				int pIdx = geom->nodes[vi]->id;
 
 				//if(colors.size() > 0 && colors[pIdx].size()== 3)
 				//	glColor4f(colors[pIdx][0], colors[pIdx][1], colors[pIdx][2], 1.0);
@@ -88,7 +91,7 @@ void GeometryRender::drawFunc(object* obj)
 				{
 					if(pIdx == spotVertexes[sv])
 					{
-						glVertex((*vi).P());
+						glVertex(geom->nodes[vi]->position);
 						countSV++;
 						break;
 					}
@@ -109,15 +112,16 @@ void GeometryRender::drawFunc(object* obj)
 
 			glBegin(GL_POINTS);
 			// vertices normales
-			MyMesh::VertexIterator vi;
-			for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+			//MyMesh::VertexIterator vi;
+			//for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+			for(int vi = 0; vi < geom->nodes.size(); vi++ )
 			{
-				int pIdx = vi->IMark();
+				int pIdx = geom->nodes[vi]->id;
 
 				//if(colors.size() > 0 && colors[pIdx].size()== 3)
 				//	glColor4f(colors[pIdx][0], colors[pIdx][1], colors[pIdx][2], 1.0);
 				if(pIdx == spotVertex)
-					glVertex((*vi).P());
+					glVertex(geom->nodes[vi]->position);
 			}
 			glEnd();
 			glEnable(GL_LIGHTING);
@@ -131,25 +135,16 @@ void GeometryRender::drawFunc(object* obj)
     }
     else if(shtype == T_LINES && !selected)
     {
-        /*
-        glBegin(GL_LINES);
-        MyMesh::EdgeIterator ei;
-        for(ei = edge.begin(); ei!= edge.end(); ++ei)
-        {
-            glVertex(ei->V(0)->P());
-            glVertex(ei->V(1)->P());
-        }
-        glEnd();
-        */
 
         glDisable(GL_LIGHTING);
         glColor3f(color[0], color[1], color[2]);
-        MyMesh::FaceIterator fi;
-        for(fi = geom->face.begin(); fi!=geom->face.end(); ++fi )
-        {
+        //MyMesh::FaceIterator fi;
+		//for(fi = geom->face.begin(); fi!=geom->face.end(); ++fi )
+        for(int tr = 0; tr< geom->triangles.size(); tr++ )
+		{
              glBegin(GL_LINE_LOOP);
              glLineWidth(10.0);
-             for(int i = 0; i<=3; i++) glVertex((*fi).V(i%3)->P());
+             for(int i = 0; i<=3; i++) glVertex(geom->triangles[tr]->verts[i%3]->position);
              glEnd();
         }
         glEnable(GL_LIGHTING);
@@ -161,13 +156,15 @@ void GeometryRender::drawFunc(object* obj)
 
 		glBegin(GL_POINTS);
 		// vertices normales
-		MyMesh::VertexIterator vi;
-		for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+		//MyMesh::VertexIterator vi;
+		//for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+		for(int vi = 0; vi < geom->nodes.size(); vi++ )
 		{
-			int pIdx = vi->IMark();
+			int pIdx = geom->nodes[vi]->id;
 			if(colors.size() > 0 && colors[pIdx].size()== 3)
 				glColor4f(colors[pIdx][0], colors[pIdx][1], colors[pIdx][2], 1.0);
-			glVertex((*vi).P());
+
+			glVertex(geom->nodes[vi]->position);
 		}
 		glEnd();
 		glEnable(GL_LIGHTING);
@@ -184,23 +181,16 @@ void GeometryRender::drawFunc(object* obj)
         else
             glColor3f(0.2, 1.0, 0.2);
 
-        /*
-        glBegin(GL_LINES);
-        MyMesh::EdgeIterator ei;
-        for(ei = edge.begin(); ei!= edge.end(); ++ei)
-        {
-            glVertex(ei->V(0)->P());
-            glVertex(ei->V(1)->P());
-        }
-        glEnd();
-        */
-
-        MyMesh::FaceIterator fi;
-        for(fi = geom->face.begin(); fi!=geom->face.end(); ++fi )
-        {
+        //MyMesh::FaceIterator fi;
+        //for(fi = geom->face.begin(); fi!=geom->face.end(); ++fi )
+        for(int tr = 0; tr< geom->triangles.size(); tr++ )
+		{
              glBegin(GL_LINE_LOOP);
              glLineWidth(10.0);
-             for(int i = 0; i<=3; i++) glVertex((*fi).V(i%3)->P());
+             for(int i = 0; i<=3; i++) 
+			 {
+				glVertex(geom->triangles[tr]->verts[i%3]->position);
+			 }
              glEnd();
         }
 
@@ -213,10 +203,11 @@ void GeometryRender::drawFunc(object* obj)
 
             glBegin(GL_POINTS);
             // vertices normales
-            MyMesh::VertexIterator vi;
-            for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
-            {
-                 glVertex((*vi).P());
+            //MyMesh::VertexIterator vi;
+            //for(vi = geom->vert.begin(); vi!=geom->vert.end(); ++vi )
+            for(int vi = 0; vi < geom->nodes.size(); vi++ )
+			{
+                glVertex(geom->nodes[vi]->position);
             }
             glEnd();
 
@@ -226,7 +217,7 @@ void GeometryRender::drawFunc(object* obj)
             // vertices seleccionados
             for(unsigned int sel = 0; sel < selectedIds.size(); sel++ )
             {
-                glVertex(geom->vert[selectedIds[sel]].P());
+                glVertex(geom->nodes[selectedIds[sel]]->position);
             }
             glEnd();
 
@@ -235,4 +226,5 @@ void GeometryRender::drawFunc(object* obj)
     }
 
     afterDraw(obj);
+	
 }

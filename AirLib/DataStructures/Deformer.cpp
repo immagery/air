@@ -41,6 +41,7 @@ MVCDeformer::MVCDeformer(Modelo* inGeom1, Modelo* inGeom2)
 
 bool MVCDeformer::processCoords()
 {
+	/*
     targetModel->Clear();
     vcg::tri::Append<MyMesh, MyMesh>::Mesh(*targetModel,*sourceModel, false);
 
@@ -59,12 +60,14 @@ bool MVCDeformer::processCoords()
         myfile.close();
         CalculateMeanValueCoords( *sourceModel, *(sourceModel->modelCage), PerVertMVC, sMVCSavedGrid);
     }
+	*/
 
     return true;
 }
 
 bool MVCDeformer::deformMesh()
 {
+	/*
     if(dirtyFlag)
     {
         // hay que computar las coordenadas, propagar la actualización hacia arriba
@@ -74,6 +77,8 @@ bool MVCDeformer::deformMesh()
     if(newCage == NULL) return false;
 
     deformMeshWithMVC(*sourceModel, *sourceModel->modelCage, *targetModel, *newCage, PerVertMVC);
+
+	*/
 
     // Este nodo está actualizado
     dirtyFlag = true;
@@ -94,6 +99,8 @@ HCDeformer::HCDeformer(Modelo* inGeom1, Modelo* inGeom2)
 
 bool HCDeformer::processCoords()
 {
+	assert(false);
+	/*
     if(!sourceModel || !targetModel)
         return false;
 
@@ -111,15 +118,16 @@ bool HCDeformer::processCoords()
     {
         myfile.close();
         //deformMeshWithHC(*sourceModel, cage, newModeloHC, *newCage, PerVertHC);
-        loadHarmonicCoordinates(*sourceModel, HCgrid, PerVertHC, sHCSavedGrid);
+        //loadHarmonicCoordinates(*sourceModel, HCgrid, PerVertHC, sHCSavedGrid);
         return false;
     }
     else
     {
         myfile.close();
-        getHarmonicCoordinates(*sourceModel, *(sourceModel->modelCage), HCgrid, PerVertHC, resolution, sHCSavedGrid);
+        //getHarmonicCoordinates(*sourceModel, *(sourceModel->modelCage), HCgrid, PerVertHC, resolution, sHCSavedGrid);
     }
 
+	*/
     return true;
 }
 
@@ -130,13 +138,17 @@ bool HCDeformer::deformMesh()
         // hay que computar las coordenadas, propagar la actualización hacia arriba
     }
 
+	assert(false);
+	/*
     MyMesh* newCage = targetModel->modelCage; //para un modelo target, su cage es un puntero al objetivo.
     if(newCage == NULL) return false;
 
     deformMeshWithHC(*sourceModel, *(sourceModel->modelCage), *targetModel, *newCage, PerVertHC);
+	*/
 
     // Este nodo está actualizado
     dirtyFlag = true;
+	
 
     return true;
 }
@@ -154,6 +166,8 @@ GCDeformer::GCDeformer(Modelo* inGeom1, Modelo* inGeom2)
 
 bool GCDeformer::processCoords()
 {
+	assert(false);
+	/*
     if(!sourceModel || !targetModel)
         return false;
 
@@ -177,11 +191,14 @@ bool GCDeformer::processCoords()
         gpCalculateGreenCoordinates( *sourceModel, *(sourceModel->modelCage), PerVertGC, PerFaceGC, sGCSavedCoords);
     }
 
+	*/
     return true;
 }
 
 bool GCDeformer::deformMesh()
 {
+	assert(false);
+	/*
     if(dirtyFlag)
     {
         // hay que computar las coordenadas, propagar la actualización hacia arriba
@@ -195,5 +212,6 @@ bool GCDeformer::deformMesh()
     // Este nodo está actualizado
     dirtyFlag = true;
 
+	*/
     return true;
 }

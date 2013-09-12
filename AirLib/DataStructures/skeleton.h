@@ -111,6 +111,9 @@ class skeleton : public object
 
 };
 
+void readSkeletons(string fileName, vector<skeleton*>& skts);
+void readBone(FILE* fin, skeleton* skt, joint* root);
+
 class Modelo;
 class sceneUpdatingFlags;
 

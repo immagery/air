@@ -3,7 +3,7 @@
 
 #include <vcg/complex/complex.h>
 #include "Node.h"
-#include <render/ShadingNode.h>
+#include <render/shadingNode.h>
 
 using namespace std;
 using namespace vcg;

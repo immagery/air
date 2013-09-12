@@ -58,6 +58,9 @@ public:
 	void setSpotVertexes(vector<int>& indices);
 	void addSpotVertex(int i);
 	void cleanSpotVertexes();
+
+	int vn() {return nodes.size();}
+	int fn() {return triangles.size();}
 };
 
 

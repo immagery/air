@@ -115,7 +115,36 @@ public:
 	int id;
 	vector<GraphNode* > connections;
 
+	Point3d position;
+
 	bool visited;
+};
+
+/////////////////////////////////////////
+/// \brief The Polygon (open or not) class over the graph
+/////////////////////////////////////////
+class GraphNodePolygon
+{
+
+public:
+	GraphNodePolygon(int _id)
+	{
+		verts.clear();
+		id = _id;
+		visited = false;
+	}
+
+	GraphNodePolygon()
+	{
+		verts.clear();
+		visited = false;
+	}
+
+	bool visited;
+	bool isClosed;
+	int id;
+
+	vector<GraphNode* > verts;
 };
 
 class SurfaceGraph
@@ -127,8 +156,12 @@ public:
 	}
 
 	vector<GraphNode*> nodes;
+	vector<GraphNodePolygon* > triangles;
 };
 
+// Builds the Sruface Graph form an OFF file
+// The file needs to be in a correct OFF format.
+bool BuildSurfaceFromOFFFile(SurfaceGraph& graph, string sFileName);
 
 /////////////////////////////////////////
 /// \brief The PointData class

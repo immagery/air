@@ -329,13 +329,54 @@ void joint::select(bool bToogle, int id)
         childs[i]->select(bToogle, id);
 }
 
-// SKELETON
-//void skeleton::update()
-//{
+ void readBone(FILE* fin, skeleton* skt, joint* root)
+ {
+     int num1 = 0; char str[1000];
+     float posX, posY, posZ;
+     float rotX, rotY, rotZ;
+     float ojX, ojY, ojZ;
+     float wpX, wpY, wpZ;
 
-    // Calcular matrix de transformacion
-//    dirtyFlag = false;
-//}
+     fscanf(fin, "%s", &str[0]);
+     fscanf(fin, "%f", &posX);
+     fscanf(fin, "%f", &posY);
+     fscanf(fin, "%f", &posZ);
+
+     fscanf(fin, "%f", &rotX);
+     fscanf(fin, "%f", &rotY);
+     fscanf(fin, "%f", &rotZ);
+
+     fscanf(fin, "%f", &ojX);
+     fscanf(fin, "%f", &ojY);
+     fscanf(fin, "%f", &ojZ);
+
+     fscanf(fin, "%f", &wpX);
+     fscanf(fin, "%f", &wpY);
+     fscanf(fin, "%f", &wpZ);
+
+     fscanf(fin, "%d", &num1);
+
+     root->sName = str;
+     root->resetTransformation();
+     root->addTranslation(posX, posY, posZ);
+     root->addRotation(rotX, rotY, rotZ);
+     root->setJointOrientation(ojX,ojY,ojZ);
+
+     //root->setJointId(scene::getNewId());
+
+     root->setWorldPosition(Point3d(wpX, wpY, wpZ));
+     skt->joints.push_back(root);
+     skt->jointRef[root->nodeId] = root;
+
+     for(int i = 0; i< num1; i++)
+     {
+         joint* jt = new joint(root, scene::getNewId());
+         root->pushChild(jt);
+
+         //printf("anadimos el joint: %s %f %f %f con %d hijos\n",str, posX, posY-pos.Y(), posZ-pos.Z(),num1);
+         readBone(fin, skt, jt);
+     }
+ }
 
 skeleton::skeleton() : object()
 {
@@ -402,23 +443,38 @@ bool skeleton::update()
     return true;
 }
 
-/*
-vector<DefNode>& nodes = ((gridRenderer*)escena->visualizers[i])->grid->v.intPoints;
-
-for(unsigned int n = 0; n< nodes.size(); n++)
+void readSkeletons(string fileName, vector<skeleton*>& skts)
 {
-    if(((DefNode)nodes[n]).boneId == (int)jt->nodeId)
-    {
-        if(((DefNode)nodes[n]).ratio < ratioExpansion_DEF)
-        {
-            float ratio2 = (((DefNode)nodes[n]).ratio/ratioExpansion_DEF);
-            float dif = 1-expValue;
-            float newValue =  expValue + dif*ratio2;
-            nodes[n].expansion = newValue;
-        }
-    }
+     FILE* fin;
+     fin = fopen(fileName.c_str(), "r");
+
+     if(!fin) 
+	 {
+		 printf("No hay fichero de esqueleto.\n"); 
+		 fflush(0);
+		 return;
+	 }
+
+     int num1 = 0;
+
+     fscanf(fin, "%d", &num1);
+     for(int i = 0; i< num1; i++)
+     {
+         // Skeleton creation
+         skeleton* skt = new skeleton();
+         skt->sName = "skeleton" + i;
+
+         //Root joint Creation
+         skt->root = new joint(scene::getNewId());
+
+         readBone(fin, skt, skt->root);
+         skt->update();
+
+         skts.push_back(skt);
+     }
+
+     fclose(fin);
 }
-*/
 
 int subdivideBone(joint* parent, joint* child,
 				  //Point3d origen, Point3d fin,

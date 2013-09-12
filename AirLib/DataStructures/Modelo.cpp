@@ -130,10 +130,10 @@ void initgrid()
 
 void Modelo::Clear()
 {
+	// Hay que revisarlo.
+	assert(false);
 
-    // Modelo original que cargamos en memoria.
-    MyMesh::Clear();
-
+	/*
     // Cajas para hacer la deformacion
     if(modelCage)
         modelCage->Clear(); // Caja envolvente original
@@ -167,6 +167,7 @@ void Modelo::Clear()
     //newModeloMVC.Clear();
 
     currentCage = NULL;
+	*/
 }
 
 void Modelo::drawFunc()

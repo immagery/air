@@ -6,10 +6,12 @@
 #include "Object.h"
 #include "DataStructures.h"
 
+#include "SurfaceData.h"
+
 using namespace std;
 
 // GEOMETRY
-class Geometry : public object , public MyMesh
+class Geometry : public object , public SurfaceGraph
 {    
     public:
         Geometry();
@@ -26,6 +28,16 @@ class Geometry : public object , public MyMesh
 
         virtual Point3d getSelCenter();
         virtual bool getBoundingBox(Point3d& minAuxPt,Point3d& maxAuxPt);
+
+		Point3d minBBox;
+		Point3d maxBBox;
+
+		void computeFaceNormals();
+		void computeVertNormals();
+		void computeNormals();
+
+		vector<Point3d> faceNormals;
+		vector<Point3d> vertNormals;
 
 };
 
