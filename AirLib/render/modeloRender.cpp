@@ -30,9 +30,9 @@ void ModeloRender::drawFunc(object* obj)
     {
 		for(unsigned int trs = 0; trs < m->bindings[bds]->virtualTriangles.size(); trs++ )
 		{
-			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[0]->position);
-			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[1]->position);
-			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[2]->position);
+			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[0]->node->position);
+			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[1]->node->position);
+			glVertex( m->bindings[bds]->virtualTriangles[trs].pts[2]->node->position);
 		}
 	}
     glEnable(GL_LIGHTING);

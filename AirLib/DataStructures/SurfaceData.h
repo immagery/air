@@ -185,8 +185,10 @@ class PointData
     // Color para representar varias cosas.
     Point3f color;
 
+	GraphNode* node;
+
 	// Esta es la posición del punto que representa.
-	Point3d position;
+	//Point3d position;
 
     // Segmentation labels
     vector<double> embedding;
@@ -218,7 +220,7 @@ class PointData
 	bool isBorder;
 
 	// Reference to model vertex index
-	int modelVert;
+	//int modelVert;
 
     // Influences assigned to this cell
     vector<weight> influences;

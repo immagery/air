@@ -344,7 +344,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 				}
 
 				// Distancia entre puntos... cuando tenga biharmonic distances ya estará calculado.
-				Point3d vec = pd.position - bd->pointData[snNeighbour->id].position;
+				Point3d vec = pd.node->position - bd->pointData[snNeighbour->id].node->position;
 				float edgeDistance = vec.Norm();
 				float distanceWeight = computeWeightProportional(edgeDistance, smoothPropagationRatio, true);
 
@@ -885,7 +885,7 @@ void ComputeSkining(Modelo& m)
 
 	printf("Weights Threshold Computed\n"); fflush(0);
 
-	FILE* foutLog = fopen("C:/DATA/phd_dev/data/models_for_test/outLog.txt", "a");
+	FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
 	fclose(foutLog);
 
@@ -970,7 +970,7 @@ void ComputeSkining(Modelo& m)
 	}
 
 	fin = clock();
-	foutLog = fopen("C:/DATA/phd_dev/data/models_for_test/outLog.txt", "a");
+	foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
 	fclose(foutLog);
 
@@ -1484,7 +1484,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 		segmentVolumeWithEmbedding(m, m.bindings[i]);
 
 	clock_t fin = clock();
-	FILE* foutLog = fopen("C:/DATA/phd_dev/data/models_for_test/outLog.txt", "a");
+	FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 	fprintf(foutLog, "%f\n", double(timelapse(fin,ini))); fflush(0);
 	fclose(foutLog);
 
@@ -1502,7 +1502,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 		computeHierarchicalSkinning(m, m.bindings[i]);
 
 	fin = clock();
-	foutLog = fopen("C:/DATA/phd_dev/data/models_for_test/outLog.txt", "a");
+	foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));fflush(0);
 	fclose(foutLog);
 
@@ -1885,6 +1885,7 @@ int contains(vector<int>& values, int value)
 
 void FusionBindings(Modelo& m, vector<vector<int> >& groupBindings)
 {	
+	/*
 	vector<binding*> oldBindings;
 	oldBindings.resize(m.bindings.size());
 	for(int i = 0; i< m.bindings.size(); i++)
@@ -1965,10 +1966,12 @@ void FusionBindings(Modelo& m, vector<vector<int> >& groupBindings)
 		oldBindings[i]=NULL;
 	}
 	oldBindings.clear();
+	*/
 }
 
 void AddVirtualTriangles(Modelo& m)
 {
+	/*
 	vector<binding*>& bindings = m.bindings;
 
 	vector<TriangleData>& virtualTriangles = m.virtualTriangles;
@@ -2114,6 +2117,7 @@ void AddVirtualTriangles(Modelo& m)
 		printf("Grupo %d: %d elementos\n", grp, m.bindings[grp]->pointData.size());
 	}
 	fflush(0);
+	*/
 	/*
 	for(int i = 0; i< bindings.size(); i++ )
 	{
@@ -2154,7 +2158,7 @@ void AddVirtualTriangles(Modelo& m)
 	}
 	*/
 
-	printf("Hemos creado %d triangulos\n", virtualTriangles.size());
+	//printf("Hemos creado %d triangulos\n", virtualTriangles.size());
 }
 
 void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
@@ -2162,6 +2166,7 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	//m->bindings.push_back(new binding(m->vn()));
 
 	vector<GraphNode*>& nodes = m.nodes;
+	vector<GraphNodePolygon*>& triangles = m.triangles;
 
 	/*
 	vector<GraphNode*> nodes;
@@ -2260,56 +2265,70 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	vector<int> graphNodesCounter;
 	graphNodesCounter.resize(relateId);
 
-
 	for(int i = 0; i< connIds.size(); i++)
 	{
 		connIds[i] = relateGraphId[connIds[i]];
 		graphNodesCounter[connIds[i]]++;
 	}
 
-	for(int i = 0; i < graphNodesCounter.size(); i++)
+	for(int i = 0; i < graphNodesCounter.size(); i++) 
 		printf("[Connected part %d]-> %d# nodes\n", i, graphNodesCounter[i]);
 
 	bindings.resize(graphNodesCounter.size());
+	m.modelVertexDataPoint.resize(nodes.size());
+	m.modelVertexBind.resize(nodes.size());
+
 	for(int bbIdx = 0; bbIdx < bindings.size(); bbIdx++)
 	{
 		bindings[bbIdx] = new binding(graphNodesCounter[bbIdx]);
 		bindings[bbIdx]->bindId = bbIdx;
+
 		bindings[bbIdx]->surface.nodes.resize(graphNodesCounter[bbIdx]);
 
-		for(int i = 0; i< bindings[bbIdx]->surface.nodes.size(); i++)
-			bindings[bbIdx]->surface.nodes[i] = new GraphNode(i);
+		//for(int i = 0; i< bindings[bbIdx]->surface.nodes.size(); i++)
+		//	bindings[bbIdx]->surface.nodes[i] = new GraphNode(i);
 
-		vector<GraphNode*> subGraph;
-		subGraph.resize(nodes.size(), NULL);
+		//vector<GraphNode*> subGraph;
+		//subGraph.resize(nodes.size(), NULL);
 		int count = 0;
 		for(int i = 0; i< nodes.size(); i++)
 		{
 			if(connIds[i] == bbIdx)
 			{
-				subGraph[i] = bindings[bbIdx]->surface.nodes[count];
+				bindings[bbIdx]->surface.nodes[count] = nodes[i];
+				bindings[bbIdx]->pointData[count].node = nodes[i];
+
+				m.modelVertexBind[nodes[i]->id] = bbIdx;
+				m.modelVertexDataPoint[nodes[i]->id] = count;
 				count++;
 			}
 		}
 
 		assert(count == graphNodesCounter[bbIdx]);
-		
-		for(int i = 0; i< nodes.size(); i++)
-		{
-			if(!subGraph[nodes[i]->id]) continue;
 
-			subGraph[nodes[i]->id]->connections.resize(nodes[i]->connections.size());
-			for(int j = 0; j< nodes[i]->connections.size(); j++)
+		bindings[bbIdx]->surface.triangles.resize(triangles.size());
+		count = 0;
+		for(int i = 0; i< triangles.size(); i++)
+		{
+			bool found = true;
+			for(int trTemp = 0; trTemp < triangles[i]->verts.size(); trTemp++)
 			{
-				subGraph[nodes[i]->id]->connections[j] = subGraph[nodes[i]->connections[j]->id];
+				int vertId = triangles[i]->verts[trTemp]->id;
+				found &= (m.modelVertexBind[vertId] == bbIdx);
 			}
 
-			// Guardamos la referencia al punto de la maya con un indice.
-			bindings[bbIdx]->pointData[subGraph[nodes[i]->id]->id].modelVert = nodes[i]->id;
-			bindings[bbIdx]->pointData[subGraph[nodes[i]->id]->id].component = connIds[i];
+			if(found)
+			{
+				bindings[bbIdx]->surface.triangles[count] = triangles[i];
+				count++;
+			}
 		}
+
+		bindings[bbIdx]->surface.triangles.resize(count);
+		
 	}
 
+	/*
 	// Construimos estos dos vectores de referencias para ir más rápido en otras
 	// computaciones.
 	vector<int>& modelVertexDataPoint = m.modelVertexDataPoint;
@@ -2330,16 +2349,18 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	}
 
 	assert(count == nodes.size());
+	*/
 
 	// Recorremos los vertices y acumulamos el area de sus triangulos ponderado por 1/3 que le corresponde.
     //MyMesh::VertexIterator vi;  idx = 0;
     //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi ) 
-	for(int vi = 0; vi < m.nodes.size(); vi++)
+	/*for(int vi = 0; vi < m.nodes.size(); vi++)
 	{
 		int idBind = m.modelVertexBind[m.nodes[vi]->id];
 		int idVertexInBind = m.modelVertexDataPoint[m.nodes[vi]->id];
 		m.bindings[idBind]->pointData[idVertexInBind].position = m.nodes[vi]->position;
     }
+	*/
 
 	// Guardamos una indirección para tener ordenados los pesos... esto podría variar
 	// para optimizar los cálculos.
@@ -2350,7 +2371,7 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 		for(int j = 0; j< bindings[i]->pointData.size(); j++)
 		{
 			bindings[i]->globalIndirection[j] = counter;
-			m.globalIndirection[bindings[i]->pointData[j].modelVert] = counter;
+			m.globalIndirection[bindings[i]->pointData[j].node->id] = counter;
 			counter++;
 		}
 	}
@@ -2379,11 +2400,11 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	{
 		for(int pt = 0; pt < bindings[i]->pointData.size(); pt++)
 		{
-			int vert = bindings[i]->pointData[pt].modelVert;
+			int vert = bindings[i]->pointData[pt].node->id;
 			for(int con = 0; con< bindings[i]->surface.nodes[pt]->connections.size(); con++)
 			{
 				int conected = bindings[i]->surface.nodes[pt]->connections[con]->id;
-				int modelVertConected = bindings[i]->pointData[conected].modelVert;
+				int modelVertConected = bindings[i]->pointData[conected].node->id;
 				int count = edges[vert][modelVertConected]+edges[modelVertConected][vert];
 
 				// Comprobamos si es un borde -> si hay conexion deberia tener valor de mas de uno.
@@ -2426,7 +2447,7 @@ void normalizeDistances(Modelo& m)
 						maxY = idY;
 					}
 
-					double distance1 = (bindings[i]->pointData[idX].position - bindings[i]->pointData[idY].position).Norm();
+					double distance1 = (bindings[i]->pointData[idX].node->position - bindings[i]->pointData[idY].node->position).Norm();
 					double ratio1 = distance1/bindings[i]->BihDistances.get(idX,idY);
 					int stop = 0;
 				}
@@ -2453,7 +2474,7 @@ void normalizeDistances(Modelo& m)
 			}
 			*/
 
-			double distance = (bindings[i]->pointData[maxX].position - bindings[i]->pointData[maxY].position).Norm();
+			double distance = (bindings[i]->pointData[maxX].node->position - bindings[i]->pointData[maxY].node->position).Norm();
 			
 			if(maxX == maxY) // la diagonal es 0 -> no deberia dar.
 				continue;
@@ -2487,7 +2508,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		for(int idx = 0; idx < bds[bind]->pointData.size(); idx++)
 		{
 			//indices.push_back(idx);
-			indices.push_back(bds[bind]->pointData[idx].modelVert);
+			indices.push_back(bds[bind]->pointData[idx].node->id);
 		}
 
 		printf("\n\nCalculo de A para embeding %d: [%d puntos]\n", bind, bds[bind]->pointData.size());

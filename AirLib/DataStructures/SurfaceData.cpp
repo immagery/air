@@ -86,7 +86,7 @@ PointData::PointData()
     assigned = false;
     validated = false;
 
-	modelVert = -1;
+	//modelVert = -1;
 
     color = Point3f(0,0,0);
 
@@ -124,10 +124,10 @@ PointData::PointData(const PointData& pd)
     assigned = pd.assigned;
     validated = pd.validated;
 
-	modelVert = pd.modelVert;
+	//modelVert = pd.modelVert;
 
     color = pd.color;
-	position = pd.position;
+	node = pd.node;
 
 	isBorder = pd.isBorder;
 

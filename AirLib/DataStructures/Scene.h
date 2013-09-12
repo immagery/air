@@ -166,7 +166,7 @@ class scene
 
 	// Skeleton
 	map<int, joint*> deformerRef; // A reference to all the joints from id.
-	vector< object* > skeletons;
+	vector< skeleton* > skeletons;
 
 	procState state;
 

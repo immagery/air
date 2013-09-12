@@ -806,7 +806,7 @@ void GLWidget::paintModelWithData()
 			for(int count = 0; count< m->bindings[currentBinding]->pointData.size(); count++)
 			{	
 				if(m->bindings[currentBinding]->pointData[count].isBorder)
-					m->addSpotVertex(m->bindings[currentBinding]->pointData[count].modelVert);
+					m->addSpotVertex(m->bindings[currentBinding]->pointData[count].node->id);
 
 				float value = 0.0;
 				// Deberia ser al reves, recorrer el binding y este pinta los puntos del modelo. 
@@ -895,13 +895,13 @@ void GLWidget::paintModelWithData()
 						value = 0;
 					else
 					{
-						int modelVert = m->bindings[currentBinding]->pointData[count].modelVert;
+						int modelVert = m->bindings[currentBinding]->pointData[count].node->id;
 						value = pointDistances[modelVert] / maxDistances[currentBinding];
 					}
 				}
 				else if(escena->iVisMode == VIS_ERROR)
 				{
-					int modelVert = m->bindings[currentBinding]->pointData[count].modelVert;
+					int modelVert = m->bindings[currentBinding]->pointData[count].node->id;
 					
 					if(completeDistances[modelVert] > 0)
 						value = pointDistances[modelVert] - completeDistances[modelVert];
@@ -911,7 +911,7 @@ void GLWidget::paintModelWithData()
 				}
 				else if(escena->iVisMode == VIS_WEIGHT_INFLUENCE)
 				{
-					int modelVert = m->bindings[currentBinding]->pointData[count].modelVert;
+					int modelVert = m->bindings[currentBinding]->pointData[count].node->id;
 					value = weights[modelVert];
 					//if(maxDistance <= 0)
 					//	value = 0;
@@ -929,10 +929,10 @@ void GLWidget::paintModelWithData()
 				float r,g,b;
 				GetColourGlobal(value,0.0,1.0, r, g, b);
 				//QColor c(r,g,b);
-				m->shading->colors[pd.modelVert].resize(3);
-				m->shading->colors[pd.modelVert][0] = r;
-				m->shading->colors[pd.modelVert][1] = g;
-				m->shading->colors[pd.modelVert][2] = b;
+				m->shading->colors[bd->surface.nodes[count]->id].resize(3);
+				m->shading->colors[bd->surface.nodes[count]->id][0] = r;
+				m->shading->colors[bd->surface.nodes[count]->id][1] = g;
+				m->shading->colors[bd->surface.nodes[count]->id][2] = b;
 			}
 		}
 
@@ -1625,7 +1625,7 @@ void GLWidget::getStatisticsFromData(string fileName, string name, string path)
 				}
 			}
 
-			FILE* fout = fopen("C:/DATA/phd_dev/data/models_for_test/stats_aciertos.txt", "a");
+			FILE* fout = fopen((string(DIR_MODELS_FOR_TEST) + "stats_aciertos.txt").c_str(), "a");
 			fprintf(fout, "Results: %s\n", fileNames[i][j].toStdString().c_str());
 			for(int l = 1; l < labels.size(); l++)
 			{
@@ -1874,7 +1874,7 @@ void GLWidget::doTests(string fileName, string name, string path)
 			if(!pesosFile.open(QFile::WriteOnly)) return;
 			QTextStream outPesos(&pesosFile);
 
-			FILE* foutLog = fopen("C:/DATA/phd_dev/data/models_for_test/outLog.txt", "a");
+			FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 			fprintf(foutLog, "%s\n", modelFiles[i][mf].toStdString().c_str()); fflush(0);
 			fclose(foutLog);
 
@@ -1953,7 +1953,7 @@ void GLWidget::computeProcess()
 		//if(m->embedding.size() == 0)
 		if(!m->computedBindings)
 		{
-			/*
+			
 			char bindingFileName[150];
 			char bindingFileNameComplete[150];
 			sprintf(bindingFileName, "%s/bind_%s", m->sPath.c_str(), m->sName.c_str());
@@ -1983,9 +1983,8 @@ void GLWidget::computeProcess()
 				}
 				else SaveEmbeddings(*m, bindingFileName, ascii);
 			}
-			*/
-
-			bool success = ComputeEmbeddingWithBD(*m, usePatches);
+			
+			//bool success = ComputeEmbeddingWithBD(*m, usePatches);
 		}
 
 		//normalizeDistances(*m);
@@ -2022,13 +2021,7 @@ void GLWidget::computeProcess()
 
 void GLWidget::readSkeleton(string fileName)
 {
-	vector<skeleton*> skts;
-	skts.resize(escena->skeletons.size());
-	
-	for(int i = 0; i< skts.size(); i++)
-		skts[i] = (skeleton*)escena->skeletons[i];
-
-	readSkeletons(fileName, skts);
+	readSkeletons(fileName, escena->skeletons);
 
      emit updateSceneView();
  }
@@ -2063,7 +2056,7 @@ void GLWidget::readSkeleton(string fileName)
         readSkeleton((newPath+sSkeletonFile).toStdString());
 
         // Leer embedding
-        ReadEmbedding((newPath+sEmbeddingFile).toStdString(), m->embedding);
+        //ReadEmbedding((newPath+sEmbeddingFile).toStdString(), m->embedding);
 
         modelDefFile.close();
     }
@@ -2083,48 +2076,7 @@ void GLWidget::readSkeleton(string fileName)
      if(ext == QString("off") || ext == QString("obj")) // cargar modelo simple
      {
          escena->models.push_back((object*)new Modelo(escena->getNewId()));
-
-         printf("%s\n%s\n%s\n%s\n",fileName.c_str(),name.c_str(),ext.toStdString().c_str(),path.c_str() ); fflush(0);
-
          ((Modelo*)escena->models.back())->loadModel(fileName, name, ext.toStdString(), path);
-
-		 /*
-         if(((Modelo*)escena->models.back())->cleanModel())
-         {
-             printf("Se ha guardado un nuevo modelo limpio...\n");
-             ((Modelo*)escena->models.back())->saveModel(QString("%1%2_cleaned.%3").arg(path.c_str()).arg(name.c_str()).arg(ext).toStdString(), name, ext.toStdString(), path);
-         }
-         else
-         {
-             printf("El modelo est� limpio...\n");
-         }
-		 */
-
-         /*
-         escena->models.push_back((object*)new Modelo(escena->getNewId()));
-         ((Modelo*)escena->models.back())->loadModel(fileName, name, ext.toStdString(), path);
-         ((Modelo*)escena->models.back())->addTranslation(1,0,0);
-         ((Modelo*)escena->models.back())->freezeTransformations();
-         //((Modelo*)escena->models.back())->shading->selected = true;
-         //((Modelo*)escena->models.back())->shading->subObjectmode = true;
-
-         //for(int i = 100; i< 200; i++)
-         //   ((Modelo*)escena->models.back())->shading->selectedIds.push_back(i);
-
-
-
-         escena->models.push_back((object*)new Modelo(escena->getNewId()));
-         ((Modelo*)escena->models.back())->loadModel(fileName, name, ext.toStdString(), path);
-         ((Modelo*)escena->models.back())->addRotation(0,90,0);
-         ((Modelo*)escena->models.back())->addTranslation(-1,0,0);
-         ((Modelo*)escena->models.back())->freezeTransformations();
-
-         escena->models.push_back((object*)new Modelo(escena->getNewId()));
-         ((Modelo*)escena->models.back())->loadModel(fileName, name, ext.toStdString(), path);
-         ((Modelo*)escena->models.back())->addTranslation(1.5,0,0);
-         ((Modelo*)escena->models.back())->freezeTransformations();
-         */
-
      }
      else if(ext == QString("txt")) // Cargamos una configuracion
      {
