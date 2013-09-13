@@ -153,6 +153,7 @@ public:
 	SurfaceGraph()
 	{
 		nodes.clear();
+		triangles.clear();
 	}
 
 	vector<GraphNode*> nodes;

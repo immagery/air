@@ -304,8 +304,8 @@ SICALLBACK WeightComputation_Update( CRef& in_ctxt )
 
 			for(unsigned int i = 0; i< escena->models.size(); i++)
 			{
-				int nverts = ((Modelo*)escena->models[i])->vn;
-				int nfacets = ((Modelo*)escena->models[i])->fn;
+				int nverts = ((Modelo*)escena->models[i])->vn();
+				int nfacets = ((Modelo*)escena->models[i])->fn();
 
 				Application().LogMessage(L"Modelo: " + CString((int)i),siInfoMsg);
 				Application().LogMessage(L"   Vertices: " + CString(nverts),siInfoMsg);
