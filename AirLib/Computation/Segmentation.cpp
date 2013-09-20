@@ -1,15 +1,16 @@
 #include "Segmentation.h"
-
-#include "utils/util.h"
-#include "DataStructures/InteriorDistancesData.h"
 #include "mvc_interiorDistances.h"
 
-#include "DataStructures/skeleton.h"
-#include "render/gridRender.h"
-#include "DataStructures/modelo.h"
-#include "DataStructures/scene.h"
-#include "../DataStructures/SurfaceData.h"
-#include "Computation/BiharmonicDistances.h"
+#include <DataStructures/InteriorDistancesData.h>
+#include <DataStructures/skeleton.h>
+#include <DataStructures/modelo.h>
+#include <DataStructures/scene.h>
+#include <DataStructures/SurfaceData.h>
+
+#include <utils/util.h>
+#include <render/gridRender.h>
+
+#include <Computation/BiharmonicDistances.h>
 
 #include <cmath>
 using namespace std;

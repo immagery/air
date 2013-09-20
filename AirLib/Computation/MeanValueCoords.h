@@ -2,7 +2,7 @@
 #define MEANVALUECOORDS_H
 
 #include <vector>
-#include "..\DataStructures\DataStructures.h"
+#include <DataStructures\DataStructures.h>
 
 using namespace std;
 

@@ -1,8 +1,8 @@
 #ifndef HARMONICCOORDS_H
 #define HARMONICCOORDS_H
 
-#include "..\DataStructures\grid3D.h"
-#include "..\DataStructures\DataStructures.h"
+#include <DataStructures\grid3D.h>
+#include <DataStructures\DataStructures.h>
 
 #include <vector>
 
