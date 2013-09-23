@@ -335,7 +335,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 			weightsSum = 0;
 			weightsCount = 0;
             // Para cada elemento del frente realizamos la expansión.
-			for(int neighboursIdx = 0; neighboursIdx < sn->connections.size(); neighboursIdx++)
+			for(unsigned int neighboursIdx = 0; neighboursIdx < sn->connections.size(); neighboursIdx++)
             {
 				GraphNode* snNeighbour =  sn->connections[neighboursIdx];
 				if(!snNeighbour->visited)
@@ -481,7 +481,7 @@ void PrecomputeDistances(vector< vector<double> >& embeddedPoints, vector< vecto
 	double threshold = 1/pow(10.0,5);
 
 	int size = BihDistances.size;
-	for(int i = 0; i< embeddedPoints.size(); i++)
+	for(unsigned int i = 0; i< embeddedPoints.size(); i++)
 	{
 		intPoints[i].precomputedDistances = PrecomputeDistancesSingular_sorted(embeddedPoints[i], sortedWeights[i], BihDistances, threshold) *-1;
 		/*vector<double>& weights = embeddedPoints[i];
@@ -538,7 +538,7 @@ void doubleArrangeElements_wS_fast(vector<double>& weights, vector<int>& ordered
 	int countNegValues = 0;
 	double sumNegValues = 0;
 		
-	for(int g = 0; g < weights.size(); g++)
+	for(unsigned int g = 0; g < weights.size(); g++)
 	{
 		double value = weights[g];
 		
@@ -621,7 +621,7 @@ void doubleArrangeElements_withStatistics(vector<double>& weights, vector<int>& 
 	double sumNegValues = 0;
 	double sumPosValues = 0;
 		
-	for(int g = 0; g < weights.size(); g++)
+	for(unsigned int g = 0; g < weights.size(); g++)
 	{
 		double value = weights[g];
 		
@@ -734,7 +734,7 @@ void doubleArrangeElements(vector<double>& weights, vector<int>& orderedIndirect
 	double sumOutValues = 0;
 	double sumNegValues = 0;
 		
-	for(int g = 0; g < weights.size(); g++)
+	for(unsigned int g = 0; g < weights.size(); g++)
 	{
 		double value = weights[g];
 
@@ -894,7 +894,7 @@ void ComputeSkining(Modelo& m)
     //mvc_embedding(auxPoints, bb->embeddedPoints, m.embedding, m);
 
 	// hasta aquí todo es comun, o lo consideramos asi. Ahora copiamos lo calculado.
-	for(int i = 1; i< m.bindings.size(); i++)
+	for(unsigned int i = 1; i< m.bindings.size(); i++)
 	{
 		// la primera parte la copio tal cual para simplificar... me imagino que no sera
 		// asi en el caso de asignar huesos a cada parte para simplificar los calculos.
@@ -948,10 +948,10 @@ void ComputeSkining(Modelo& m)
 		}
 	}
 
-	for(int bbIdx = 0; bbIdx < m.bindings.size(); bbIdx++)
+	for(unsigned int bbIdx = 0; bbIdx < m.bindings.size(); bbIdx++)
 	{
 		binding* otherbb = m.bindings[bbIdx];
-		for(int i = 0; i< otherbb->embeddedPoints.size(); i++)
+		for(unsigned int i = 0; i< otherbb->embeddedPoints.size(); i++)
 		{
 			int iniIdx = otherbb->globalIndirection.front();
 			int finIdx = otherbb->globalIndirection.back();
@@ -1222,7 +1222,7 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
 
         // Assegurar que los indices guardados en los vertices de la maya estan bien.
     //    assert(VertIdx >= 0 && VertIdx < m.vn);
-	for(int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
+	for(unsigned int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
 	{
 		PointData& pd = bd->pointData[VertIdx];
 
@@ -1481,7 +1481,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 	clock_t ini = clock();fflush(0);
 
 	// SEGMENTATION (Realizamos una segmentacion y luego trataremos los ids)
-	for(int i = 0; i< m.bindings.size(); i++)
+	for(unsigned int i = 0; i< m.bindings.size(); i++)
 		segmentVolumeWithEmbedding(m, m.bindings[i]);
 
 	clock_t fin = clock();
@@ -1499,7 +1499,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 
 	ini = clock();
 	// Hierarchical weight computation
-	for(int i = 0; i< m.bindings.size(); i++)
+	for(unsigned int i = 0; i< m.bindings.size(); i++)
 		computeHierarchicalSkinning(m, m.bindings[i]);
 
 	fin = clock();
@@ -1588,7 +1588,7 @@ void vectorDiference(vector<double >& v1,vector<double >& v2, vector<double >& r
 	if(v1.size() != v2.size()) return;
 
 	ret.resize(v1.size());
-	for(int i = 0; i< v1.size(); i++)
+	for(unsigned int i = 0; i< v1.size(); i++)
 	{
 		ret[i] = v1[i] - v2[i];
 	}
@@ -1597,7 +1597,7 @@ void vectorDiference(vector<double >& v1,vector<double >& v2, vector<double >& r
 double norm(vector<double>& v)
 {
 	double sum = 0;
-	for(int i = 0; i< v.size(); i++) 
+	for(unsigned int i = 0; i< v.size(); i++) 
 		sum += v[i]*v[i];
 	return sqrt(sum);
 }
@@ -1606,7 +1606,7 @@ void unit(vector<double >& v,vector<double >& unitVector)
 {
 	double n = norm(v);
 	unitVector.resize(v.size());
-	for(int i = 0; i< v.size(); i++) unitVector[i] = v[i]/n;
+	for(unsigned int i = 0; i< v.size(); i++) unitVector[i] = v[i]/n;
 }
 
 double dotProduct(vector<double >& v1,vector<double >& v2)
@@ -1844,12 +1844,12 @@ void propagateIdFromNode(int id, vector<int>& frontIds,vector<int>& harvestIds,v
 		{
 			connIds[newId] = id;
 			visIds[newId] = true;
-			for(int neigh = 0; neigh < nodes[newId]->connections.size(); neigh++)
+			for(unsigned int neigh = 0; neigh < nodes[newId]->connections.size(); neigh++)
 					frontIds.push_back(nodes[newId]->connections[neigh]->id);
 		}
 		else if(connId != id)
 		{
-			for(int i = 0; i< connIds.size(); i++)
+			for(unsigned int i = 0; i< connIds.size(); i++)
 				if(connIds[i] == connId) 
 				{
 					connIds[i] = id;
@@ -1863,7 +1863,7 @@ void propagateIdFromNode(int id, vector<int>& frontIds,vector<int>& harvestIds,v
 
 void renameLinks(vector<int>& links, int group, int newGroup)
 {
-	for(int i = 0; i< links.size(); i++)
+	for(unsigned int i = 0; i< links.size(); i++)
 	{
 		if(links[i] == group)
 		{
@@ -1874,7 +1874,7 @@ void renameLinks(vector<int>& links, int group, int newGroup)
 
 int contains(vector<int>& values, int value)
 {
-	for(int i = 0; i< values.size(); i++)
+	for(unsigned int i = 0; i< values.size(); i++)
 	{
 		if(values[i] == value)
 		{
@@ -2208,7 +2208,7 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	visIds.resize(m.nodes.size(),false);
 	connIds.resize(m.nodes.size(), -1);
 
-	for(int n = 0; n < nodes.size(); n++)
+	for(unsigned int n = 0; n < nodes.size(); n++)
 	{
 		// todavia no se ha trabajado, debe ser nuevo
 		if(connIds[n] < 0)
@@ -2218,7 +2218,7 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 			connIds[n] = idDispatcher;
 
 			// Iniciamos variables de recorrido
-			for(int v = 0; v < visIds.size(); v++)
+			for(unsigned int v = 0; v < visIds.size(); v++)
 				visIds[v] = false;
 
 			visIds[n] = true;
@@ -2505,11 +2505,13 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 	for(int bind = 0; bind < bds.size(); bind++)
 	{	
 		// Computation indices
-		vector<int> indices;  
+		vector<int> indices;
+		indices.resize(bds[bind]->pointData.size());
 		for(int idx = 0; idx < bds[bind]->pointData.size(); idx++)
 		{
 			//indices.push_back(idx);
-			indices.push_back(bds[bind]->pointData[idx].node->id);
+			//indices.push_back(bds[bind]->pointData[idx].node->id);
+			indices[idx] = bds[bind]->pointData[idx].node->id;
 		}
 
 		printf("\n\nCalculo de A para embeding %d: [%d puntos]\n", bind, bds[bind]->pointData.size());
