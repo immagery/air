@@ -16,6 +16,7 @@ using Eigen::Vector3d;
 
 int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix& dists, bool withPatches)
 {
+	/*
 	printf("computing Biharmonic distances.\n");
 	fflush(0);
 
@@ -133,14 +134,43 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 
     VectorXd AM(nopts);
     AM << VectorXd::Zero(nopts);
+	*/
 
-    // Recorremos los vŽrtices y acumulamos el area de sus tri‡ngulos ponderado por 1/3 que le corresponde.
-    MyMesh::VertexIterator vi;  idx = 0;
+    // Recorremos los vertices y acumulamos el area de sus triangulos ponderado por 1/3 que le corresponde.
+    /*
+	MyMesh::VertexIterator vi;  idx = 0;
     for(vi = modelo.vert.begin(); vi!=modelo.vert.end(); ++vi ) 
 	{
 		int idVert = vi->IMark();
 		if(modelo.modelVertexBind[idVert] != bd->bindId)
 			continue;
+
+         vcg::face::VFIterator<MyFace> vfi(&(*vi)); //initialize the iterator to the first face
+		 for(;!vfi.End();++vfi) 
+		 {       
+			MyFace* f = vfi.F();
+			int faceIdx = f->IMark();
+            AM(idx) += trgarea(f->IMark())/3;
+         }
+		 idx++;
+    }
+	*/
+
+	/*
+	MyMesh::VertexIterator vi;  idx = 0;
+	for(int vi = 0; vi < modelo.triangles.size(); vi++) 
+	{
+		bool binded = false;
+		for(int iTemp = 0; iTemp < modelo.triangles[vi]->verts.size() && !binded; iTemp++ )
+			binded |= modelo.modelVertexBind[modelo.triangles[vi]->verts[iTemp]->id] = bd->bindId;
+
+		if(!binded) continue;
+
+		for(int iTemp = 0; iTemp < modelo.triangles[vi]->verts.size() && !binded; iTemp++ )
+		{
+			AM(idx) += trgarea(vi)/3;
+		}
+		
 
          vcg::face::VFIterator<MyFace> vfi(&(*vi)); //initialize the iterator to the first face
 		 for(;!vfi.End();++vfi) 
@@ -474,6 +504,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 	printf("Guardar valores(podriamos considerarla simetrica): %f segs.\n", timelapse(end,begin)); fflush(0);
 	begin = clock();
 
+	*/
 	return 0;
 }
 

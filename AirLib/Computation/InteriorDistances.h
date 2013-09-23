@@ -1,7 +1,7 @@
 #ifndef INTERIORDISTANCES_H
 #define INTERIORDISTANCES_H
 
-#include "..\DataStructures\DataStructures.h"
+#include <DataStructures\DataStructures.h>
 
 #define EIGEN_YES_I_KNOW_SPARSE_MODULE_IS_NOT_STABLE_YET
 #define EIGEN_SUPERLU_SUPPORT

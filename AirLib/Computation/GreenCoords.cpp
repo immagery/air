@@ -3,7 +3,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "..\utils\util.h"
+#include <utils\util.h>
 #include <cmath>
 
 using namespace std;

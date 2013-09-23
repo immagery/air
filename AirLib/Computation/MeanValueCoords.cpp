@@ -3,7 +3,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "../Utils/util.h"
+#include <Utils/util.h>
 
 using namespace std;
 

@@ -19,7 +19,7 @@ void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, vector<binding
     const double tresh3 = 0.0001;
 
 	// We use all the model
-    int nopts = modelo.vn;
+    int nopts = modelo.vn();
     if(nopts == 0)
     {
         printf("ERROR!: El modelo no está bien inicializado!\n");
@@ -34,13 +34,14 @@ void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, vector<binding
     unitVectors.resize(nopts);
     normas.resize(nopts);
 
-    MyMesh::VertexIterator vertIt;
-    for(vertIt = modelo.vert.begin(); vertIt!=modelo.vert.end(); ++vertIt )
-    {
+    //MyMesh::VertexIterator vertIt;
+    //for(vertIt = modelo.vert.begin(); vertIt!=modelo.vert.end(); ++vertIt )
+	for(int vertIt = 0; vertIt < modelo.nodes.size(); vertIt++ )
+	{
 		//Point3d dirVec = vertIt->P() - point;
-		Point3d dirVec = point - vertIt->P();
+		Point3d dirVec = point - modelo.nodes[vertIt]->position;
         double norm = dirVec.Norm();
-        int idVert = vertIt->IMark();
+		int idVert = modelo.nodes[vertIt]->id;
 
         assert(idVert >= 0 && idVert < nopts); // Comprobaci—n de los valors de IMark
 		
@@ -57,18 +58,19 @@ void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, vector<binding
 
     double totalW = 0;
 
-    MyMesh::FaceIterator fj;
-    for(fj = modelo.face.begin(); fj!=modelo.face.end(); ++fj )
-    {
+    //MyMesh::FaceIterator fj;
+    //for(fj = modelo.face.begin(); fj!=modelo.face.end(); ++fj )
+	for(int fj = 0; fj < modelo.triangles.size(); fj++ )
+	{
         vcg::Point3d O, c, s;
         vcg::Point3i idVerts;
         //for(int i = 0; i<3; i++) // Obtenemos los indices de los vertices de t
 			//idVerts[i] = fj->V(i)->IMark();
 			//idVerts[2-i] = fj->V(i)->IMark();
 
-		idVerts[0] = fj->V(0)->IMark();
-		idVerts[1] = fj->V(2)->IMark();
-		idVerts[2] = fj->V(1)->IMark();
+		idVerts[0] = modelo.triangles[fj]->verts[0]->id;
+		idVerts[1] = modelo.triangles[fj]->verts[2]->id;
+		idVerts[2] = modelo.triangles[fj]->verts[1]->id;
 
         for(int i = 0; i<3; i++)
         {
@@ -171,6 +173,7 @@ void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, vector<binding
 // Computes mvc for each binding.
 void mvcSingleBinding(vcg::Point3d& point, vector<double>& weights, binding* bd, Modelo& modelo)
 {
+	/*
 	const double tresh1 = 0.0001;
     const double tresh2 = 0.001;
     const double tresh3 = 0.0001;
@@ -282,6 +285,8 @@ void mvcSingleBinding(vcg::Point3d& point, vector<double>& weights, binding* bd,
     //for(int i = 0; i< nofuncs; i++)
 	for(int i = 0; i< nopts; i++)
         weights[i] = weights[i]/totalW;
+
+	*/
 }
 
 void mvcEmbedPoint(vcg::Point3d& point, vector<double>& embeddedPoint, vector< vector<double> >& V, MyMesh& modelo)
