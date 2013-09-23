@@ -574,6 +574,55 @@ bool LoadSoftImageModel(XSI::Geometry& geom_soft, scene* escena)
 
 bool LoadICEModel(XSI::CICEGeometry& geom, Modelo* m_air, scene* escena)
 {
+	ULONG totalVerts = geom.GetPointPositionCount();
+	ULONG totalTriangles = geom.GetPolygonCount();
+
+	//Leemos los vertices
+	CDoubleArray vertPos;
+	geom.GetPointPositions(vertPos);
+
+	m_air->nodes.resize(totalVerts);
+	for (long p=0; p<totalVerts; p++ )
+	{
+		m_air->nodes[p] = new GraphNode(p);
+		m_air->nodes[p]->position = Point3d(vertPos[p*3],vertPos[p*3+1],vertPos[p*3+2]);
+	}
+
+	// Leemos las caras.
+	m_air->triangles.resize(totalTriangles);
+	CLongArray sizes;   // sizes holds the number of points per polygon
+	CLongArray indices; // indices holds the polygon indices and are used for indexing the point values
+	geom.GetPolygonIndices( sizes, indices );
+
+	ULONG nOffset = 0;
+	for (ULONG f=0; f<totalTriangles; f++ )
+	{
+		m_air->triangles[f] = new GraphNodePolygon(f);
+		m_air->triangles[f]->verts.resize(sizes[f]);
+
+		vector<int> indexes;
+		for(int j = 0; j< sizes[f]; j++)
+		{
+			int idx = indices[nOffset];
+			m_air->triangles[f]->verts[j] = m_air->nodes[idx];
+			indexes.push_back(idx);
+			nOffset++;
+		}
+
+		for(int j = 0; j< sizes[f]; j++)
+		{
+			m_air->nodes[indexes[j]]->connections.push_back(m_air->nodes[indexes[(j+1)%sizes[f]]]);
+			m_air->nodes[indexes[(j+1)%sizes[f]]]->connections.push_back(m_air->nodes[indexes[j]]);
+		}
+	}
+
+	escena->modelLoaded = true;
+
+	return true;
+}
+
+bool CreateICEModel(XSI::CICEGeometry& geom, Modelo* m_air, scene* escena)
+{
 	//CVector3Array posArray(geom_soft.GetPoints().GetPositionArray());
 	//Application().LogMessage( L"LoadSoftImageModel verts: " + CString(posArray.GetCount()) ,siInfoMsg);
 
@@ -1189,8 +1238,7 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 				break;
 			}
 
-			assert(false);
-			// Hay que revisar el codigo.. deberia estar inicializado?
+
 			Modelo* m = NULL; // = (Modelo*)escena->models.back();
 
 			// B. If the model is not loaded -> load it from disc using in model.
@@ -1198,6 +1246,9 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 			if(!escena->initialized && !escena->modelLoaded)
 			{
 				Application().LogMessage(CString(L"Loading model..."));
+				m = new Modelo(escena->getNewId());
+				escena->models.push_back(m);
+
 				LoadICEModel(inModel, m, escena);
 
 				// Construimos tantos grafos como partes tiene el modelo
@@ -1206,10 +1257,12 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 
 			// C. If the embedding is not loaded -> load from disc.
 			//    If the grid is not loaded and there is a disc file -> load from disc.
+			/*
 			if(!escena->initialized && !escena->embeddingLoaded && escena->modelLoaded)
 			{
 				LoadDataFromDiscICE(escena, inDataFileName[0]);
 			}
+			*/
 
 			// Si no se solicita actualizacion no hacemos nada.
 			if(inRiggAnimFlag[0] || inEvaluate[0] != escena->evaluate)
@@ -1254,6 +1307,62 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 				// Only one time ever
 				if(!escena->initialized)
 				{
+					Application app;
+					Project proj = app.GetActiveProject();
+					CString sProjPath = proj.GetPath();
+
+					CString sProjName = proj.GetName();
+
+					char bindingFileName[150];
+					char bindingFileNameComplete[150];
+					sprintf(bindingFileName, "%s/bind_%s", sProjPath.GetAsciiString(), sProjName.GetAsciiString());
+					sprintf(bindingFileNameComplete, "%s.bin", bindingFileName);
+
+					m->sPath =  string(sProjPath.GetAsciiString());
+					m->sName =  string(sProjName.GetAsciiString());
+
+					bool ascii = false;
+
+					// A. Intentamos cargarlo
+					ifstream myfile;
+					myfile.open (bindingFileNameComplete, ios::in |ios::binary);
+					bool loaded = false;
+					if (myfile.is_open())
+					{
+						// En el caso de existir simplemente tenemos que cargar las distancias.
+						loaded = LoadEmbeddings(*m, bindingFileNameComplete);
+					}
+
+					//B. En el caso de que no se haya cargado o haya incongruencias con lo real, lo recomputamos.
+					if(!loaded)
+					{
+						bool usePatches = false;
+						bool success = ComputeEmbeddingWithBD(*m, usePatches);
+						if(!success)
+						{
+							printf("[ERROR - computeProcess] No se ha conseguido computar el embedding\n");
+							fflush(0);
+							return false;
+						}
+						else SaveEmbeddings(*m, bindingFileName, ascii);
+					}
+
+					//
+					for(int i = 0; i< escena->skeletons.size(); i++)
+					{
+						float minValue = GetMinSegmentLenght(getMinSkeletonSize((skeleton*)escena->skeletons[i]),0);
+						((skeleton*)escena->skeletons[i])->minSegmentLength = minValue;
+
+						for(int bind = 0; bind< m->bindings.size(); bind++)
+							m->bindings[bind]->bindedSkeletons.push_back((skeleton*)escena->skeletons[i]);
+					}
+
+					for(int i = 0; i< m->bindings.size(); i++)
+					{
+						m->bindings[i]->weightsCutThreshold = escena->weightsThreshold;
+					}
+
+
 					// Grid Building
 					//m->grid = new grid3d();
 
@@ -1267,8 +1376,6 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 					// Voxelization
 					//printf("Voxelization: only one time.\n"); fflush(0);
 					//Voxelize(escena, m, gridResolution, sceneScale);
-					bool usePatches = false;
-					bool success = ComputeEmbeddingWithBD(*m, usePatches);
 					escena->initialized = true;
 				}
 				else
@@ -1300,19 +1407,13 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 			//gridRenderer* grRend = (gridRenderer*)escena->visualizers.back();
 			CDataArray2DFloat::Accessor outAccessor = outData.Resize( it, nPointCount * inNodeSetSize);
 
-			//TODO - he comentado para compilar solo
-			assert(false);
-			grid3d* grid = NULL;// = m->grid;
-			if(!grid) return CStatus::OK;
-
+			
 			for (ULONG nPointID=0; nPointID < nPointCount; nPointID++)
 			{
 				//if(escena->weightsUpdated)
 				//	bar.PutValue(90+(int)(((float)nPointID/(float)nPointCount)*10.0));
 
 				Point3d ptPos(vertPos[nPointID*3], vertPos[nPointID*3+1], vertPos[nPointID*3+2]);
-				Point3i pt = grid->cellId(ptPos);
-				cell3d* cell = grid->cells[pt.X()][pt.Y()][pt.Z()];
 
 				// Reset Output array
 				for(ULONG j = 0; j< inNodeSetSize; j++)
@@ -1320,13 +1421,17 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 					outAccessor[nPointID*inNodeSetSize+j] = 0.0;
 				}
 
-				if(!cell->data)
-					printf("Este punto no tiene asignado ningún dato... curioso...\n");
+				//Point3i pt = grid->cellId(ptPos);
+				//cell3d* cell = grid->cells[pt.X()][pt.Y()][pt.Z()];
 
-				if(escena->weightsUpdated && cell->data)
+				//if(!cell->data)
+				//	printf("Este punto no tiene asignado ningún dato... curioso...\n");
+
+				if(escena->weightsUpdated /*&& cell->data*/)
 				{				
 					float sum = 0;
 					// Set Only the corresponding influences
+					
 					for(unsigned int w = 0; w< cell->data->influences.size(); w++)
 					{
 						// >> Obtenemos el valor de influencia.

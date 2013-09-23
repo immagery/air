@@ -163,6 +163,8 @@ void readSkeleton(string fileName, scene* escena);
 bool LoadSoftImageModel(XSI::Geometry& geom_soft, scene* escena);
 bool LoadICEModel(XSI::CICEGeometry& geom_soft, Modelo* m_air, scene* escena);
 
+bool CreateICEModel(XSI::CICEGeometry& geom, Modelo* m_air, scene* escena);
+
 //bool LoadDataFromDisc(scene* escena, CString sFileName, OperatorContext& ctxt);
 bool LoadDataFromDiscICE(scene* escena, CString sFileName);
 
