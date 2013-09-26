@@ -308,6 +308,18 @@ void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, i
 }
 
 // Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
+void weightsNoSmooting(Modelo& m, binding* bd,
+                      vector< int >& front,
+                      int idFront)
+{
+	for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
+    {
+		PointData& pd = bd->pointData[front[frIdx]];
+		pd.auxInfluences.push_back(weight(idFront, pd.ownerWeight));
+	}
+}
+
+// Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
 void weightsSmoothing(Modelo& m, binding* bd,
                       vector< int >& front,
                       float smoothPropagationRatio,
@@ -317,9 +329,12 @@ void weightsSmoothing(Modelo& m, binding* bd,
     int iter = 0;
 	int distance = 1;
 
-	// Ahora es fijo,
-	// pero deberia estar parametrizado
-	smoothPropagationRatio = 10;
+	//FixedValue only for test... seems that there is no effects while the value is enough big.
+	// I think that this is because it scales all the values, maybe I can use the biggest one
+	// for preserving the precision. I can do it at the beginning with the biggest edge length.
+	// By now, only for test i will use a big value;
+
+	smoothPropagationRatio = 100;
 
 	double weightsSum = 0;
 	float weightsCount = 0;
@@ -394,10 +409,14 @@ void SmoothFromSegment(Modelo& m, binding* bd, int frontId)
 	if(VERBOSE) printf("-- Smoothing -- \n"); fflush(0);
 
 	//float realSmooth = grid.smoothPropagationRatio* grid.worldScale;
-	int smoothingPasses = 2;
-	float realSmooth = 1.0;
+	//int smoothingPasses = 2;
+	//float realSmooth = 0.15;
 
-    weightsSmoothing(m, bd, front, realSmooth /*grRend->smoothPropagationRatio*/, frontId, smoothingPasses);
+	int smoothingPasses = bd->smoothingPasses;
+	float realSmooth = bd->smoothPropagationRatio;
+
+    weightsSmoothing(m, bd, front, realSmooth, frontId, smoothingPasses);
+	//weightsNoSmooting(m, bd, front, frontId);
 }
 
 ////////////////////////////////////////////////////
@@ -801,6 +820,21 @@ void doubleArrangeElements(vector<double>& weights, vector<int>& orderedIndirect
 
 }
 
+void clearOlderComputations(Modelo& m)
+{
+	// Clear all older computed influences
+	for(int bind = 0; bind< m.bindings.size(); bind++)
+	{
+		for(int ptIdx = 0; ptIdx< m.bindings[bind]->pointData.size(); ptIdx++)
+		{
+			m.bindings[bind]->pointData[ptIdx].influences.clear();
+		}
+	}
+
+	//TODEBUG:
+	// Other actions for cleaning and setting up the data.
+}
+
 // update: 10 de junio de 2013
 // Computacion del skinning usando directamente la maya... nada de grid
 // Solo procesamos el binding que entra como parametro
@@ -809,6 +843,9 @@ void ComputeSkining(Modelo& m)
 	clock_t ini = clock();
 
 	clock_t begin, end;
+
+
+	if(m.bindings.size() <= 0) return; 
 
 	binding* bb = m.bindings[0];
 	if(VERBOSE) printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size()); fflush(0);
@@ -1128,6 +1165,8 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 {
 	if(VERBOSE)printf("compute Hierarchical at first level\n"); fflush(0);
 
+	clearOlderComputations(m);
+
 	// 1. Establecemos el dominio
 	if(VERBOSE)printf("1. Domain initzialization\n"); fflush(0);
 	//initDomainForId(grRend, -1); // Al ser el primer elemento iniciamos todo a 1 pasando el id -1.
@@ -1177,7 +1216,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 	// 3. Smooth entre hijos cortando según el dominio
 	if(bPropagate)
 	{
-		if(VERBOSE)printf("3. Segments smoothing\n"); fflush(0);
+		if(VERBOSE){printf("3. Segments smoothing\n"); fflush(0);}
 		for(unsigned int i = 0; i< segmentationIds.size(); i++)
 		{
             SmoothFromSegment(m, bb, segmentationIds[i]);

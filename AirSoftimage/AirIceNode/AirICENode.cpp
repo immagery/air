@@ -1245,7 +1245,7 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 			// Done only one time.
 			if(!escena->initialized && !escena->modelLoaded)
 			{
-				Application().LogMessage(CString(L"Loading model..."));
+				Application().LogMessage(CString(L"Loading & processing the model..."));
 				m = new Modelo(escena->getNewId());
 				escena->models.push_back(m);
 
@@ -1253,6 +1253,10 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 
 				// Construimos tantos grafos como partes tiene el modelo
 				BuildSurfaceGraphs(*m, m->bindings);
+			}
+			else
+			{
+				m = (Modelo*)escena->models.back();
 			}
 
 			// C. If the embedding is not loaded -> load from disc.
@@ -1432,12 +1436,16 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 					float sum = 0;
 					// Set Only the corresponding influences
 					
-					for(unsigned int w = 0; w< cell->data->influences.size(); w++)
+					// de entrada cogeremos el primer binding
+					if(!m || m->bindings.size() <= 0) continue;
+
+					for(unsigned int w = 0; w< m->bindings[0]->pointData[nPointID].influences.size(); w++)
 					{
 						// >> Obtenemos el valor de influencia.
-						float auxWeight = cell->data->influences[w].weightValue;
+						float auxWeight =  m->bindings[0]->pointData[nPointID].influences[w].weightValue;
+
 						sum += auxWeight;
-						int idDeformer = cell->data->influences[w].label;
+						int idDeformer = m->bindings[0]->pointData[nPointID].influences[w].label;
 							
 						// >> Se pueden ordenar los valores de dos maneras diferentes:
 
