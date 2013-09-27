@@ -1392,6 +1392,9 @@ SICALLBACK AirICENode_Evaluate( ICENodeContext& in_ctxt )
 				bar.PutValue(30);
 				bar.PutStatusText( L"computing skinning." );
 
+				for(int bd = 0; bd < m->bindings.size(); bd++)
+					m->bindings[bd]->smoothingPasses = sceneScale;
+
 				ComputeSkining(*m);
 				escena->evaluate = inEvaluate[0];
 

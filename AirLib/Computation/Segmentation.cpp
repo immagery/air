@@ -91,15 +91,7 @@ int segmentVolumeWithEmbedding(Modelo& m, binding* bd)
     vector< vector<double> >& embeddedPoints = bd->embeddedPoints;
 	vector< vector<int> >& sortedWeights = bd->weightsSort;
 
-    // Recorrer cada vertice de la maya con un iterador y clasificar los vertices.
-    //MyMesh::VertexIterator vi;
-    //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi )
-    //{
-    //    Point3d pt = vi->P();
-    //    int VertIdx = vi->IMark();
-        // Assegurar que los indices guardados en los vertices de la maya estan bien.
-    //    assert(VertIdx >= 0 && VertIdx < m.vn);
-    //    PointData& pd = bd->pointData[VertIdx];
+
 	clock_t begin, end;
 	double timeMean = 0;
 	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
@@ -153,29 +145,29 @@ int segmentVolumeWithEmbedding(Modelo& m, binding* bd)
                 sid = lid;
                 lid = id;
             }
-            else
-            {
-                // We test if is worst than the first but better than the second
-                if(newDist < secondDistance)
-                {
-                    secondDistance = newDist;
-                    secondLabel = points[id].nodeId;
+            //else
+            //{
+            //    // We test if is worst than the first but better than the second
+            //    if(newDist < secondDistance)
+            //    {
+            //        secondDistance = newDist;
+            //        secondLabel = points[id].nodeId;
 
-                    sid = id;
-                }
-            }
+            //        sid = id;
+            //    }
+            //}
         }
 
         pd.segmentId = label;
         //pd->distanceToPos = distance;
 
-        if(distance > 0)
-        {
-            float proportionalDistance = distancesFromEbeddedPointsExtended(embeddedPoints[lid],embeddedPoints[sid], 1.0);
-            pd.confidenceLevel = ((secondDistance-distance)/proportionalDistance)/*/distance*/;
-        }
-        else
-            pd.confidenceLevel = 10;
+        //if(distance > 0)
+        //{
+        //    float proportionalDistance = distancesFromEbeddedPointsExtended(embeddedPoints[lid],embeddedPoints[sid], 1.0);
+        //    pd.confidenceLevel = ((secondDistance-distance)/proportionalDistance)/*/distance*/;
+        //}
+        //else
+        //    pd.confidenceLevel = 10;
 
 		//if(pointId%50 == 0)
 		//{
@@ -1034,8 +1026,7 @@ void ComputeSkining(Modelo& m)
 	updateSkinningWithHierarchy(m);
 
 	// Calculamos pesos secundarios sobre lo calculado anteriormente.
-    // TODO
-    //computeSecondaryWeights(m);
+    //computeSecondaryWeights(&m);
 
 	// Actualizamos el grid para renderiazar.
 	//grRend->propagateDirtyness();
@@ -1656,14 +1647,159 @@ double dotProduct(vector<double >& v1,vector<double >& v2)
 	return res;
 }
 
+int indexOfNode(int nodeId, vector<DefNode>& nodes)
+{
+	for(int i = 0; i< nodes.size(); i++)
+	{
+		if(nodes[i].nodeId == nodeId) return i;
+	}
+
+	return -1;
+}
+
 void computeSecondaryWeights(Modelo* m)
 {
     // No hay ningun binding
     if(m->bindings.size() == 0 )
         return;
 
-    //TO DO: He cambiado el grid por la maya... hay que hacerlo.
-    assert(false);
+	for(int bind = 0; bind < m->bindings.size(); bind++)
+	{
+		binding* bd =  m->bindings[bind];
+		vector< DefNode >& points = bd->intPoints;
+		vector< vector<double> >& weights = bd->embeddedPoints;
+		vector< vector<int> >& sortedWeights = bd->weightsSort;
+		
+		for(int pt = 0; pt < bd->pointData.size(); pt++)
+		{
+			PointData& dp = bd->pointData[pt];
+			dp.secondInfluences.resize(dp.influences.size());
+			for(int infl = 0; infl< dp.influences.size(); infl++)
+			{
+				int idInfl = dp.influences[infl].label;
+
+				// 1. Buscamos el joint de influencia
+				joint* jt = NULL;
+				for(int sktId = 0; sktId < bd->bindedSkeletons.size(); sktId++)
+				{
+					jt = bd->bindedSkeletons[sktId]->getJoint(idInfl);
+					if(jt) break;
+				}
+
+				if(!jt)
+				{
+					printf("Debería existir la influencia...!\n"); fflush(0);
+				}
+
+				// 2.Recorremos el hueso y cogemos los dos más cercanos.
+				if(jt->nodes.size() <= 1)
+				{
+					// Caso base: devolvemos peso = 1
+					dp.secondInfluences[infl] = 1.0;
+					continue;
+				}
+
+				double thresh = bd->weightsCutThreshold;
+				
+				float bestDistance = 9999999;
+				int bestNode = -1;
+
+				float secondDistance = 99999099;
+				int secondNode = -1;
+
+				// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
+
+				for(int node = 0; node < jt->nodes.size(); node++)
+				{
+					int idxNode = indexOfNode(jt->nodes[node]->nodeId, bd->intPoints);
+
+					float distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], idxNode, bd, jt->nodes[node]->expansion, jt->nodes[node]->precomputedDistances, thresh);
+					if(bestNode == -1 || bestDistance > distance)
+					{
+						secondNode = bestNode;
+						secondDistance = bestDistance;
+
+						bestNode = node;
+						bestDistance = distance;
+					}
+					else if(secondNode == -1 || secondDistance > distance)
+					{
+						secondNode = node;
+						secondDistance = distance;
+					}
+				}
+
+				// Comprovacion que refuerza la hipotesis de que es una parabola con 
+				// un unico mínimo en un espacio suficientemente pequeño. 
+				assert(fabs((double)secondNode-bestNode) == 1.0);
+
+				// 3. Obtenemos la derivada en los dos puntos
+				float threshold = 0.001;
+				
+				Point3d dir = points[secondNode].pos - points[bestNode].pos;
+
+				float distSegment = dir.Norm();
+				float dist = (dir*threshold).Norm();
+
+				vector< Point3d > auxPoints; auxPoints.resize(2);
+				auxPoints[0] = points[bestNode].pos + dir*threshold;
+				auxPoints[1] = points[secondNode].pos - dir*threshold;
+
+				// Obtener valores de distancia para estos dos puntos
+				vector< vector<double> > weightsTemp; weightsTemp.resize(2);
+				vector< vector<int> > weightsSort; weightsSort.resize(2);
+
+				float values[2];
+				for(unsigned int i = 0; i< auxPoints.size(); i++)
+				{
+					mvcAllBindings(auxPoints[i], weightsTemp[i], m->bindings, *m);
+					doubleArrangeElements_wS_fast(weightsTemp[i],weightsSort[i], thresh);
+				
+					float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp[i], weightsSort[i], bd->BihDistances, thresh);
+					values[i] = -BiharmonicDistanceP2P_sorted(weights[i], weightsSort[i], 0, bd, 1.0, precompDist, thresh);
+				}
+
+				// Obtener derivadas
+				float d1, d2;
+				
+				d1 = (values[0]-bestDistance)/dist;
+				d2 = (secondDistance-values[1])/dist;
+
+				// Calcular punto exacto y guardarlo como parámetro
+				float x = (-d1*distSegment)/(d2-d1);
+
+				//TODEBUG: the key point is that it may be only tested with 2 node bone.
+				if(x < 0)
+				{
+					// Se proyecta antes del segmento
+					dp.secondInfluences[infl] = 1.0;
+				}
+				else if(x > distSegment)
+				{
+					// Se proyecta despues del segmento... ver si es 0 lo que toda, quizás depende de la orientación del hueso.
+					dp.secondInfluences[infl] = 0.0;
+				}
+				else
+				{
+					// Cae dentro del segmento y hemos averiguado la posición exacta, o bastante aproximada.
+					dp.secondInfluences[infl] = 1-(x/distSegment);
+				}
+
+				// Hacer comprobacion para ver que es la menor distancia posible.
+				vector<double> weightsTemp2;
+				Point3d newPoint = points[bestNode].pos + dir*(x/distSegment); 
+				vector<int> weightsSort2; 
+
+				mvcAllBindings(newPoint, weightsTemp2, m->bindings, *m);
+				doubleArrangeElements_wS_fast(weightsTemp2,weightsSort2, thresh);
+				
+				float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp2, weightsSort2, bd->BihDistances, thresh);
+				float val = -BiharmonicDistanceP2P_sorted(weightsTemp2, weightsSort2, 0, bd, 1.0, precompDist, thresh);			
+				
+				assert(val < bestDistance && val < secondDistance);
+			}
+		}
+	}
 
     /*
 	for(int i = 0; i < m->grid->bindedSkeletons.size(); i++)
