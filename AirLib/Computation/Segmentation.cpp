@@ -844,7 +844,7 @@ void ComputeSkining(Modelo& m)
 
 	// Crearemos los nodos a partir de los huesos.
     proposeNodes(bb->bindedSkeletons, bb->intPoints);
-    if(VERBOSE) printf("Proposed nodes: %d\n", bb->intPoints.size()); fflush(0);
+    /*if(VERBOSE)*/ printf("Proposed nodes: %d\n", bb->intPoints.size()); fflush(0);
 
 	// Creamos la tabla de traducción general.
     bb->traductionTable.resize(bb->intPoints.size());
@@ -1026,7 +1026,7 @@ void ComputeSkining(Modelo& m)
 	updateSkinningWithHierarchy(m);
 
 	// Calculamos pesos secundarios sobre lo calculado anteriormente.
-    //computeSecondaryWeights(&m);
+    computeSecondaryWeights(&m);
 
 	// Actualizamos el grid para renderiazar.
 	//grRend->propagateDirtyness();
@@ -1670,8 +1670,15 @@ void computeSecondaryWeights(Modelo* m)
 		vector< vector<double> >& weights = bd->embeddedPoints;
 		vector< vector<int> >& sortedWeights = bd->weightsSort;
 		
+		printf("Calculo de pesos secundarios del binding %d: \n", bind); fflush(0);
 		for(int pt = 0; pt < bd->pointData.size(); pt++)
 		{
+			if(pt%300 == 0)
+			{
+				printf("%fp.\n", (float)pt/(float)bd->pointData.size());
+				fflush(0);
+			}
+
 			PointData& dp = bd->pointData[pt];
 			dp.secondInfluences.resize(dp.influences.size());
 			for(int infl = 0; infl< dp.influences.size(); infl++)
@@ -1691,112 +1698,184 @@ void computeSecondaryWeights(Modelo* m)
 					printf("Debería existir la influencia...!\n"); fflush(0);
 				}
 
-				// 2.Recorremos el hueso y cogemos los dos más cercanos.
-				if(jt->nodes.size() <= 1)
+				dp.secondInfluences[infl].resize(jt->childs.size(), 0.0);
+				// Caso base: 1 solo joint -> no guardamos pesos secundarios porque no tiene hijo
+
+				for(int childIdx = 0; childIdx < jt->childs.size(); childIdx++)
 				{
-					// Caso base: devolvemos peso = 1
-					dp.secondInfluences[infl] = 1.0;
+					// Recogemos los nodos relevantes.
+					vector<DefNode*> relevantNodes;
+					for(int candidateNodes = 0; candidateNodes < jt->nodes.size(); candidateNodes++)
+					{
+						if(jt->nodes[candidateNodes]->childBoneId < 0)
+						{
+							relevantNodes.push_back(jt->nodes[candidateNodes]);
+							continue;
+						}
+						else if(jt->nodes[candidateNodes]->childBoneId == jt->childs[childIdx]->nodeId)
+						{
+							relevantNodes.push_back(jt->nodes[candidateNodes]);
+						}
+					}
+					// Debería haber al menos 1 nodo.
+					// Lo empilamos para evaluar todo el segmento.
+					//relevantNodes.push_back(jt->childs[childIdx]->nodes[0]);
+
+					double thresh = -10;// bd->weightsCutThreshold;
+				
+					float bestDistance = 9999999;
+					int bestNode = -1;
+
+					float secondDistance = 99999099;
+					int secondNode = -1;
+
+					// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
+
+					for(int node = 0; node < relevantNodes.size(); node++)
+					{
+						int idxNode = indexOfNode(relevantNodes[node]->nodeId, bd->intPoints);
+
+						assert(idxNode >= 0);
+
+						float distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+						if(bestNode == -1 || bestDistance > distance)
+						{
+							secondNode = bestNode;
+							secondDistance = bestDistance;
+
+							bestNode = node;
+							bestDistance = distance;
+						}
+						else if(secondNode == -1 || secondDistance > distance)
+						{
+							secondNode = node;
+							secondDistance = distance;
+						}
+					}
+
+					dp.secondInfluences[infl][childIdx] = 1-((float)bestNode/((float)relevantNodes.size()-1));
 					continue;
-				}
 
-				double thresh = bd->weightsCutThreshold;
-				
-				float bestDistance = 9999999;
-				int bestNode = -1;
+					// Comprovacion que refuerza la hipotesis de que es una parabola con 
+					// un unico mínimo en un espacio suficientemente pequeño. 
+					
+					DefNode* bestNodePtr = relevantNodes[bestNode];
+					DefNode* secondNodePtr = relevantNodes[secondNode];
 
-				float secondDistance = 99999099;
-				int secondNode = -1;
+					DefNode *firstNodePtr, *nextNodePtr;
+					float firstDistance, nextDistance;
 
-				// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
-
-				for(int node = 0; node < jt->nodes.size(); node++)
-				{
-					int idxNode = indexOfNode(jt->nodes[node]->nodeId, bd->intPoints);
-
-					float distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], idxNode, bd, jt->nodes[node]->expansion, jt->nodes[node]->precomputedDistances, thresh);
-					if(bestNode == -1 || bestDistance > distance)
+					if(bestNode <= secondNode)
 					{
-						secondNode = bestNode;
-						secondDistance = bestDistance;
-
-						bestNode = node;
-						bestDistance = distance;
+						firstNodePtr = bestNodePtr;
+						nextNodePtr = secondNodePtr;
+						firstDistance = bestDistance;
+						nextDistance = secondDistance;
 					}
-					else if(secondNode == -1 || secondDistance > distance)
+					else
 					{
-						secondNode = node;
-						secondDistance = distance;
+						nextNodePtr = bestNodePtr;
+						firstNodePtr = secondNodePtr;
+						nextDistance = bestDistance;
+						firstDistance = secondDistance;
 					}
-				}
 
-				// Comprovacion que refuerza la hipotesis de que es una parabola con 
-				// un unico mínimo en un espacio suficientemente pequeño. 
-				assert(fabs((double)secondNode-bestNode) == 1.0);
+					// >> no se porque peta...
+					assert(fabs((double)secondNode-bestNode) == 1.0);
 
-				// 3. Obtenemos la derivada en los dos puntos
-				float threshold = 0.001;
+					// 3. Obtenemos la derivada en los dos puntos
+					float threshold = 0.001;
 				
-				Point3d dir = points[secondNode].pos - points[bestNode].pos;
+					Point3d dir = nextNodePtr->pos - firstNodePtr->pos;
 
-				float distSegment = dir.Norm();
-				float dist = (dir*threshold).Norm();
+					float distSegment = dir.Norm();
+					float dist = (dir*threshold).Norm();
 
-				vector< Point3d > auxPoints; auxPoints.resize(2);
-				auxPoints[0] = points[bestNode].pos + dir*threshold;
-				auxPoints[1] = points[secondNode].pos - dir*threshold;
+					vector< Point3d > auxPoints; auxPoints.resize(2);
+					auxPoints[0] = firstNodePtr->pos - dir*threshold;
+					auxPoints[1] = nextNodePtr->pos + dir*threshold;
 
-				// Obtener valores de distancia para estos dos puntos
-				vector< vector<double> > weightsTemp; weightsTemp.resize(2);
-				vector< vector<int> > weightsSort; weightsSort.resize(2);
+					//auxPoints[2] = bestNodePtr->pos - dir*threshold;
+					//auxPoints[3] = secondNodePtr->pos + dir*threshold;
 
-				float values[2];
-				for(unsigned int i = 0; i< auxPoints.size(); i++)
-				{
-					mvcAllBindings(auxPoints[i], weightsTemp[i], m->bindings, *m);
-					doubleArrangeElements_wS_fast(weightsTemp[i],weightsSort[i], thresh);
+					// Obtener valores de distancia para estos dos puntos
+					vector< vector<double> > weightsTemp; weightsTemp.resize(2);
+					vector< vector<int> > weightsSort; weightsSort.resize(2);
+
+					float values[2];
+					for(unsigned int i = 0; i< auxPoints.size(); i++)
+					{
+						mvcAllBindings(auxPoints[i], weightsTemp[i], m->bindings, *m);
+						//thresh = 1;
+						doubleArrangeElements_wS_fast(weightsTemp[i],weightsSort[i], thresh);
 				
-					float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp[i], weightsSort[i], bd->BihDistances, thresh);
-					values[i] = -BiharmonicDistanceP2P_sorted(weights[i], weightsSort[i], 0, bd, 1.0, precompDist, thresh);
-				}
+						float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp[i], weightsSort[i], bd->BihDistances, thresh);
+						values[i] = -BiharmonicDistanceP2P_sorted(weightsTemp[i], weightsSort[i],  dp.node->id, bd, 1.0, precompDist, thresh);
+					}
 
-				// Obtener derivadas
-				float d1, d2;
+					// Obtener derivadas
+					float d1, d2;
 				
-				d1 = (values[0]-bestDistance)/dist;
-				d2 = (secondDistance-values[1])/dist;
+					d1 = (firstDistance-values[0])/dist;
+					d2 = (values[1]-nextDistance)/dist;
 
-				// Calcular punto exacto y guardarlo como parámetro
-				float x = (-d1*distSegment)/(d2-d1);
+					// Calcular punto exacto y guardarlo como parámetro
+					float x = (-d1*(distSegment+dist))/(d2-d1);
+					//float x = (-d1*(distSegment))/(d2-d1);
 
-				//TODEBUG: the key point is that it may be only tested with 2 node bone.
-				if(x < 0)
-				{
-					// Se proyecta antes del segmento
-					dp.secondInfluences[infl] = 1.0;
-				}
-				else if(x > distSegment)
-				{
-					// Se proyecta despues del segmento... ver si es 0 lo que toda, quizás depende de la orientación del hueso.
-					dp.secondInfluences[infl] = 0.0;
-				}
-				else
-				{
+					float iniSegment = (firstNodePtr->pos- jt->nodes[0]->pos).Norm();
+
 					// Cae dentro del segmento y hemos averiguado la posición exacta, o bastante aproximada.
-					dp.secondInfluences[infl] = 1-(x/distSegment);
+					float posRel = x - dist/2.0 + iniSegment;
+					float totalLength = (jt->nodes.back()->pos- jt->nodes[0]->pos).Norm();
+
+					int pointIdx = dp.node->id;
+
+					if(d1 > 0 && d2 > 0 )
+					{
+						// No hay minimo.
+						if(bestNode == 0)
+							dp.secondInfluences[infl][childIdx] = 1.0;
+						else if(bestNode == relevantNodes.size()-1)
+							dp.secondInfluences[infl][childIdx] = 0.0;
+
+						continue;
+					}
+					else if(idInfl == 102 && infl == 0)
+						int stop = 0; 
+
+					//TODEBUG: the key point is that it may be only tested with 2 node bone.
+					if(posRel <= 0)
+					{
+						// Se proyecta antes del segmento
+						dp.secondInfluences[infl][childIdx] = 1.0;
+					}
+					else if(posRel >= totalLength)
+					{
+						// Se proyecta despues del segmento... ver si es 0 lo que toda, quizás depende de la orientación del hueso.
+						dp.secondInfluences[infl][childIdx] = 0.0;
+					}
+					else
+					{
+						//dp.secondInfluences[infl][childIdx] = 1-(x/distSegment);
+						dp.secondInfluences[infl][childIdx] = 1-(posRel/totalLength);
+						//dp.secondInfluences[infl][childIdx] = 1-((float)bestNode/((float)relevantNodes.size()-1));
+
+						// Hacer comprobacion para ver que es la menor distancia posible.
+						/*vector<double> weightsTemp2;
+						Point3d newPoint = bestNodePtr->pos + dir*(x/distSegment); 
+						vector<int> weightsSort2; 
+
+						mvcAllBindings(newPoint, weightsTemp2, m->bindings, *m);
+						doubleArrangeElements_wS_fast(weightsTemp2,weightsSort2, thresh);
+				
+						float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp2, weightsSort2, bd->BihDistances, thresh);
+						float val = -BiharmonicDistanceP2P_sorted(weightsTemp2, weightsSort2, dp.node->id , bd, 1.0, precompDist, thresh);			
+				
+						assert(val - bestDistance < threshold && val - secondDistance < threshold);*/
+					}
+
 				}
-
-				// Hacer comprobacion para ver que es la menor distancia posible.
-				vector<double> weightsTemp2;
-				Point3d newPoint = points[bestNode].pos + dir*(x/distSegment); 
-				vector<int> weightsSort2; 
-
-				mvcAllBindings(newPoint, weightsTemp2, m->bindings, *m);
-				doubleArrangeElements_wS_fast(weightsTemp2,weightsSort2, thresh);
-				
-				float precompDist = PrecomputeDistancesSingular_sorted(weightsTemp2, weightsSort2, bd->BihDistances, thresh);
-				float val = -BiharmonicDistanceP2P_sorted(weightsTemp2, weightsSort2, 0, bd, 1.0, precompDist, thresh);			
-				
-				assert(val < bestDistance && val < secondDistance);
 			}
 		}
 	}
@@ -2448,7 +2527,9 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 	}
 
 	for(int i = 0; i < graphNodesCounter.size(); i++) 
+	{
 		printf("[Connected part %d]-> %d# nodes\n", i, graphNodesCounter[i]);
+	}
 
 	bindings.resize(graphNodesCounter.size());
 	m.modelVertexDataPoint.resize(nodes.size());
@@ -2478,6 +2559,7 @@ void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
 				m.modelVertexDataPoint[nodes[i]->id] = count;
 				count++;
 			}
+
 		}
 
 		assert(count == graphNodesCounter[bbIdx]);

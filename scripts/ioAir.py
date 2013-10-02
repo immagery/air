@@ -212,11 +212,16 @@ def exportBoneData( jointNode, childsCount, output) :
 	rot = cmds.getAttr(jointName+".rotate");
 	ojoint = cmds.getAttr(jointName+".jointOrient");
 	worldPos = cmds.xform( jointNode, query = True, worldSpace = True,  translation = True);
-	worldOrient = cmds.xform( jointNode, query = True, worldSpace = True,  orientation = True);
 
 	print pos;
 	print rot;
-	output.write("%s %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %d\n" % (jointName, pos[0][0], pos[0][1], pos[0][2], rot[0][0], rot[0][1], rot[0][2], ojoint[0][0], ojoint[0][1], ojoint[0][2], worldPos[0], worldPos[1], worldPos[2], worldOrient[0], worldOrient[1], worldOrient[2], childsCount));
+	print "estoy aqui"
+	output.write("%s %f %f %f %f %f %f %f %f %f %f %f %f %d\n" % (jointName, 
+																  pos[0][0], pos[0][1], pos[0][2], 
+																  rot[0][0], rot[0][1], rot[0][2], 
+																  ojoint[0][0], ojoint[0][1], ojoint[0][2], 
+																  worldPos[0], worldPos[1], worldPos[2], 
+																  childsCount));
 
 # exportar los nodos de un hueso y sus hijos sucesivamente
 def exportBone( rootJoint , output, writing) :

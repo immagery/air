@@ -1,4 +1,4 @@
-ioAir.exportOFFMesh(filename="I:\\Chus\\phd_dev\\Data\\models\\007_harry_files\\esfera_completa.off")
+ioAir.exportOFFMesh(filename="C:\\Users\\chus\\Documents\\dev\\Data\\models\\011_cilinder2_files\\cilinder2.off")
 
 importWeights.importComputedWeights(filename="D:\\phd_dev\\Data\\models\\cilinder.weights")
 
