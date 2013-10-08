@@ -1,5 +1,7 @@
 #include "HarmonicCoords.h"
 
+#include <DataStructures/Modelo.h>
+
 using namespace vcg;
 
 void deformMeshWithHC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCage, std::vector< std::vector<float> >& PerVertHC)
@@ -82,9 +84,9 @@ void getHarmonicCoordinates(MyMesh& mesh, MyMesh& cage, grid3d& grid, std::vecto
 {
     // Agrandamos un 1% la caja contenedora
     Box3d newBound = cage.bbox;
-    double plusX = newBound.DimX()*0.05;
-    double plusY = newBound.DimY()*0.05;
-    double plusZ = newBound.DimZ()*0.05;
+    double plusX = newBound.DimX()*0.005;
+    double plusY = newBound.DimY()*0.005;
+    double plusZ = newBound.DimZ()*0.005;
 
     newBound.min -= Point3d(plusX, plusY, plusZ);
     newBound.max += Point3d(plusX, plusY, plusZ);
@@ -137,6 +139,113 @@ void getHarmonicCoordinates(MyMesh& mesh, MyMesh& cage, grid3d& grid, std::vecto
 
     setHarmonicCoordsToModel(grid, mesh, PerVertHC);
 
+    if(!sSavingFile.empty())
+        grid.SaveGridToFile(sSavingFile.c_str());
+
+    printf("Fin del proceso!!!\n");fflush(0);
+
+}
+
+
+void updateBoundingBox(Modelo& m)
+{
+	double minx = -9999, miny = -9999, minz = -9999;
+	double maxx = 9999,  maxy = 9999,  maxz = 9999;
+
+	for(int i = 0; i< m.nodes.size(); i++)
+	{
+		minx = min(minx, m.nodes[i]->position.X());
+		miny = min(miny, m.nodes[i]->position.Y());
+		minz = min(minz, m.nodes[i]->position.Z());
+
+		maxx = max(maxx, m.nodes[i]->position.X());
+		maxy = max(maxy, m.nodes[i]->position.Y());
+		maxz = max(maxz, m.nodes[i]->position.Z());
+	}
+
+	m.maxBBox = Point3d(maxx,maxy,maxz);
+	m.minBBox = Point3d(minx,miny,minz);
+}
+
+void getHC_insideModel(Modelo& m, 
+					   grid3d& grid, 
+					   unsigned int resolution,
+					   string sSavingFile,
+					   float boxEnlarge// 1% de agandamiento
+					   )
+{
+	// Obtenemos la caja envolvente para recoger el modelo
+
+    // Agrandamos un 1% la caja contenedora
+	updateBoundingBox(m);
+	Box3d newBound(m.minBBox, m.maxBBox);
+
+    double plusX = newBound.DimX()*boxEnlarge;
+    double plusY = newBound.DimY()*boxEnlarge;
+    double plusZ = newBound.DimZ()*boxEnlarge;
+
+    newBound.min -= Point3d(plusX, plusY, plusZ);
+    newBound.max += Point3d(plusX, plusY, plusZ);
+
+    Point3i res(resolution, resolution, resolution);
+
+    //Iniciamos el grid
+    double cellSize = 0;
+    if(newBound.DimX() > newBound.DimY())
+    {
+        if(newBound.DimX() > newBound.DimZ())
+        {
+            cellSize = newBound.DimX()/resolution;
+            res.Y() = (int)ceil(newBound.DimY()/cellSize);
+            res.Z() = (int)ceil(newBound.DimZ()/cellSize);
+
+        }
+        else
+        {
+            cellSize = newBound.DimZ()/resolution;
+            res.Y() = (int)ceil(newBound.DimY()/cellSize);
+            res.X() = (int)ceil(newBound.DimX()/cellSize);
+        }
+    }
+    else
+    {
+        if(newBound.DimY() > newBound.DimZ())
+        {
+            cellSize = newBound.DimY()/resolution;
+            res.X() = (int)ceil(newBound.DimX()/cellSize);
+            res.Z() = (int)ceil(newBound.DimZ()/cellSize);
+        }
+        else
+        {
+            cellSize = newBound.DimZ()/resolution;
+            res.Y() = (int)ceil(newBound.DimY()/cellSize);
+            res.X() = (int)ceil(newBound.DimX()/cellSize);
+        }
+    }
+
+	printf("BoundingBox: (%f,%f,%f) -> (%f,%f,%f)\n",newBound.min.X(),newBound.min.Y(),newBound.min.Z(),
+													newBound.max.X(),newBound.max.Y(),newBound.max.Z());
+	fflush(0);
+
+    newBound.max = newBound.min + Point3d(res.X(), res.Y(), res.Z())*cellSize;
+	grid = grid3d(newBound, res, m.nodes.size());
+
+    //Tipificamos las celdas según si es interior, exterior, o borde de la maya
+    printf("Typing cells\n"); fflush(0);
+	int tipedCells = grid.typeCells(&m);
+
+    //Extendemos los pesos en las celdas del interior
+    //grid.expandWeights();
+	printf("Expanding weights\n"); fflush(0);
+	grid.expandWeightsOptimized(&m);
+
+    //grid.normalizeWeights();
+	printf("Normalizing weights\n"); fflush(0);
+	grid.normalizeWeightsOptimized();
+
+    //setHarmonicCoordsToModel(grid, mesh, PerVertHC);
+
+	printf("Saving\n"); fflush(0);
     if(!sSavingFile.empty())
         grid.SaveGridToFile(sSavingFile.c_str());
 
