@@ -6,28 +6,21 @@
 #include <DataStructures/modelo.h>
 #include <DataStructures/scene.h>
 #include <DataStructures/SurfaceData.h>
-
-#include <utils/util.h>
 #include <render/gridRender.h>
-
 #include <Computation/BiharmonicDistances.h>
 
-#include <cmath>
-using namespace std;
-
 #define MAX_LENGTH 99999999
-
 #define FIRST_ITERATION -1
-
 #define MIN_CONFIDENCE_LEVEL 1.0
-
 #define PROPAGATION_UNIT 10.0
-
 #define VERBOSE false
+#define BATCHPROCESSING false
 
 #define bCutRegions false
 #define bPropagate true
 #define bNormalizeByDomain true
+
+using namespace std;
 
 // Euclidean Point Distance
 float interiorDistance(Point3d& cellCtr,
@@ -330,7 +323,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 
 	double weightsSum = 0;
 	float weightsCount = 0;
-    if(VERBOSE) printf("Front size: %d\n", front.size());
+    if(VERBOSE)printf("Front size: %d\n", front.size());
 	while(iter < smoothingPasses)
     {
         for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
@@ -394,11 +387,11 @@ void SmoothFromSegment(Modelo& m, binding* bd, int frontId)
     vector< int > front;
 
     // Init grid for weights smoothing
-	if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n"); fflush(0);
+	if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n");fflush(0);
     initSurfaceWeightsSmoothing(m, bd, front, frontId);
 
     // Smoothing (sin corte jerárquico)
-	if(VERBOSE) printf("-- Smoothing -- \n"); fflush(0);
+	if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
 
 	//float realSmooth = grid.smoothPropagationRatio* grid.worldScale;
 	//int smoothingPasses = 2;
@@ -718,14 +711,14 @@ void doubleArrangeElements_withStatistics(vector<double>& weights, vector<int>& 
 	statistics[7] = sumNegValues;
 
 	printf("\n\n--------------------------------\n");
-	printf("Estadisticas del punto con %d pesos\n", weights.size()); fflush(0);
-	printf("Min Value: %f\n", minValue); fflush(0);
-	printf("Max Value: %f\n", maxValue); fflush(0);
-	printf("Sum: %f\n", sumValues); fflush(0);
-	printf("Values under %f: %d: ->%f por ciento.\n", threshold, countOutValues, (float)countOutValues/(float)weights.size()*100); fflush(0);
-	printf("Suman %f -> %f por ciento de la suma total.\n", sumOutValues, (float)sumOutValues/(float)sumValues*100); fflush(0);
-	printf("Negative Values: %d: ->%f por ciento.\n", countNegValues, (float)countNegValues/(float)weights.size()*100); fflush(0);
-	printf("Suman %f -> %f por ciento de la suma total.\n", sumNegValues, (float)sumNegValues/(float)sumValues*100); fflush(0);
+	printf("Estadisticas del punto con %d pesos\n", weights.size());fflush(0);
+	printf("Min Value: %f\n", minValue);fflush(0);
+	printf("Max Value: %f\n", maxValue);fflush(0);
+	printf("Sum: %f\n", sumValues);fflush(0);
+	printf("Values under %f: %d: ->%f por ciento.\n", threshold, countOutValues, (float)countOutValues/(float)weights.size()*100);fflush(0);
+	printf("Suman %f -> %f por ciento de la suma total.\n", sumOutValues, (float)sumOutValues/(float)sumValues*100);fflush(0);
+	printf("Negative Values: %d: ->%f por ciento.\n", countNegValues, (float)countNegValues/(float)weights.size()*100);fflush(0);
+	printf("Suman %f -> %f por ciento de la suma total.\n", sumNegValues, (float)sumNegValues/(float)sumValues*100);fflush(0);
 	printf("------------------------------------\n\n");
 
 }
@@ -799,14 +792,14 @@ void doubleArrangeElements(vector<double>& weights, vector<int>& orderedIndirect
 	if(printStatistics)
 	{
 		printf("\n\n--------------------------------\n");
-		printf("Estadisticas del punto con %d pesos\n", weights.size()); fflush(0);
-		printf("Min Value: %f\n", minValue); fflush(0);
-		printf("Max Value: %f\n", maxValue); fflush(0);
-		printf("Sum: %f\n", sumValues); fflush(0);
-		printf("Values under %f: %d: ->%f por ciento.\n", threshold, countOutValues, (float)countOutValues/(float)weights.size()*100); fflush(0);
-		printf("Suman %f -> %f por ciento de la suma total.\n", sumOutValues, (float)sumOutValues/(float)sumValues*100); fflush(0);
-		printf("Negative Values: %d: ->%f por ciento.\n", countNegValues, (float)countNegValues/(float)weights.size()*100); fflush(0);
-		printf("Suman %f -> %f por ciento de la suma total.\n", sumNegValues, (float)sumNegValues/(float)sumValues*100); fflush(0);
+		printf("Estadisticas del punto con %d pesos\n", weights.size());fflush(0);
+		printf("Min Value: %f\n", minValue);fflush(0);
+		printf("Max Value: %f\n", maxValue);fflush(0);
+		printf("Sum: %f\n", sumValues);fflush(0);
+		printf("Values under %f: %d: ->%f por ciento.\n", threshold, countOutValues, (float)countOutValues/(float)weights.size()*100);fflush(0);
+		printf("Suman %f -> %f por ciento de la suma total.\n", sumOutValues, (float)sumOutValues/(float)sumValues*100);fflush(0);
+		printf("Negative Values: %d: ->%f por ciento.\n", countNegValues, (float)countNegValues/(float)weights.size()*100);fflush(0);
+		printf("Suman %f -> %f por ciento de la suma total.\n", sumNegValues, (float)sumNegValues/(float)sumValues*100);fflush(0);
 		printf("------------------------------------\n\n");
 	}
 
@@ -840,11 +833,11 @@ void ComputeSkining(Modelo& m)
 	if(m.bindings.size() <= 0) return; 
 
 	binding* bb = m.bindings[0];
-	if(VERBOSE) printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size()); fflush(0);
+	if(VERBOSE)printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
 
 	// Crearemos los nodos a partir de los huesos.
     proposeNodes(bb->bindedSkeletons, bb->intPoints);
-    /*if(VERBOSE)*/ printf("Proposed nodes: %d\n", bb->intPoints.size()); fflush(0);
+    /*if(VERBOSE)*/printf("Proposed nodes: %d\n", bb->intPoints.size());fflush(0);
 
 	// Creamos la tabla de traducción general.
     bb->traductionTable.resize(bb->intPoints.size());
@@ -913,7 +906,7 @@ void ComputeSkining(Modelo& m)
 	}
 	fin = clock();
 
-	printf("Weights Threshold Computed\n"); fflush(0);
+	printf("Weights Threshold Computed\n");fflush(0);
 
 	FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
 	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
@@ -971,7 +964,7 @@ void ComputeSkining(Modelo& m)
 			
 			preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, currentThreshold[i]);
 
-			if(threshold != currentThreshold[i] )printf("This threshold has been changed: %f\n", currentThreshold[i]); fflush(0);
+			if(threshold != currentThreshold[i] )printf("This threshold has been changed: %f\n", currentThreshold[i]);fflush(0);
 
 			//preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, otherbb->weightsCutThreshold);
 		}
@@ -1038,26 +1031,26 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 	clock_t begin, end;
 	
 	//DEBUG - todelete chivatos
-	if(VERBOSE) printf("compute Hierarchical at second and sucesive levels\n"); fflush(0);
+	if(VERBOSE)printf("compute Hierarchical at second and sucesive levels\n");fflush(0);
 	if (jt->childs.size() == 0) return;
 
 	// 1. Domain initzialization for this process step
-	if(VERBOSE) printf("1. Domain initzialization: "); fflush(0);
+	if(VERBOSE)printf("1. Domain initzialization: ");fflush(0);
 	if(VERBOSE) begin = clock();
 
     initDomain(m, bb, jt->nodeId);
     //initGridForHierarchicalskinning(m, jt->nodeId);
 
     if(VERBOSE) end = clock();
-	if(VERBOSE) printf("%f segs.\n", timelapse(end,begin)); fflush(0);
+	if(VERBOSE)printf("%f segs.\n", timelapse(end,begin));fflush(0);
 
 	// 2. Establish every joint influence region
-	if(VERBOSE) printf("2. Volume segmentation");
+	if(VERBOSE)printf("2. Volume segmentation");
 	map<int, int> traductionTable;
 	vector<int> segmentationIds;
 
 	// 2.a. every child joint own some node ids
-	if(VERBOSE) printf("2.a Traduction Table\n"); fflush(0);
+	if(VERBOSE)printf("2.a Traduction Table\n");fflush(0);
 	if(VERBOSE) begin = clock();
     for(unsigned int id = 0; id < bb->intPoints.size(); id++)
         traductionTable[bb->intPoints[id].nodeId] = bb->intPoints[id].boneId;
@@ -1068,14 +1061,14 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 		segmentationIds.push_back(jt->childs[i]->nodeId);
 	}
 	if(VERBOSE) end = clock();
-	if(VERBOSE) printf("%f segs.\nn", timelapse(end,begin)); fflush(0);
+	if(VERBOSE)printf("%f segs.\nn", timelapse(end,begin));fflush(0);
 
 	// 2.b. Add also the father for fighting (TODEBUG IN TEST-TIME)
 	createTraductionTable(jt, traductionTable, jt->nodeId, true);
 	//segmentationIds.push_back(jt->nodeId);
 
 	// 2.c. We translate all the cells according to its node influencer.
-	if(VERBOSE) printf("2.c Translation\n"); fflush(0);
+	if(VERBOSE)printf("2.c Translation\n");fflush(0);
     traducePartialSegmentation(m, bb, traductionTable);
 	traductionTable.clear();
 
@@ -1086,7 +1079,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
         assert(false);
         // Hay que reimplementar esta parte porque ya no hay grid.
         /*
-		printf("2.d Cutting isolated regions\n"); fflush(0);
+		printf("2.d Cutting isolated regions\n");fflush(0);
 		begin = clock();
 
 		vector< vector<cell3d*> > orphanCells;
@@ -1096,12 +1089,12 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
         reSegmentVolume(m, segmentationIds, orphanCells);
 
 		end = clock();
-		printf("%f segs.\n", timelapse(end,begin)); fflush(0);
+		printf("%f segs.\n", timelapse(end,begin));fflush(0);
         */
 	}
 	else
 	{
-		if(VERBOSE) printf("2.d. (NO) Cutting isolated regions\n"); fflush(0);
+		if(VERBOSE)printf("2.d. (NO) Cutting isolated regions\n");fflush(0);
 	}
 
 	// 3. Then we do some smooth between coliding regions.
@@ -1109,15 +1102,15 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 	{
 		if(VERBOSE)
 		{
-			printf("3. Segments smoothing\n"); fflush(0);
+			printf("3. Segments smoothing\n");fflush(0);
 			begin = clock();
 			for(unsigned int i = 0; i< segmentationIds.size(); i++)
 			{
-				printf("%d ", i); fflush(0);
+				printf("%d ", i);fflush(0);
 				SmoothFromSegment(m, bb, segmentationIds[i]);
 			}
 			end = clock();
-			printf("%f segs.\n", timelapse(end,begin)); fflush(0);
+			printf("%f segs.\n", timelapse(end,begin));fflush(0);
 		}
 		else
 		{
@@ -1127,7 +1120,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 	}
 	else
 	{
-		if(VERBOSE) printf("3. (NO) Segments smoothing\n"); fflush(0);
+		if(VERBOSE)printf("3. (NO) Segments smoothing\n");fflush(0);
 	}
 
 	// 5. Finally there is a normalization of weights based on the father's domain
@@ -1138,11 +1131,11 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 		if(VERBOSE)begin = clock();
         normalizeWeightsByDomain(bb);
 		if(VERBOSE)end = clock();
-		if(VERBOSE)printf("%f segs.\n", timelapse(end,begin)); fflush(0);
+		if(VERBOSE)printf("%f segs.\n", timelapse(end,begin));fflush(0);
 	}
 	else
 	{
-		printf("5. (NO) Weights Normalization By Domain\n"); fflush(0);
+		printf("5. (NO) Weights Normalization By Domain\n");fflush(0);
 	}
 
 	//6. To continue the process we go further down in the skeleton hierarchy.	
@@ -1154,18 +1147,18 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb, joint* jt)
 
 void computeHierarchicalSkinning(Modelo &m, binding* bb)
 {
-	if(VERBOSE)printf("compute Hierarchical at first level\n"); fflush(0);
+	if(VERBOSE)printf("compute Hierarchical at first level\n");fflush(0);
 
 	clearOlderComputations(m);
 
 	// 1. Establecemos el dominio
-	if(VERBOSE)printf("1. Domain initzialization\n"); fflush(0);
+	if(VERBOSE)printf("1. Domain initzialization\n");fflush(0);
 	//initDomainForId(grRend, -1); // Al ser el primer elemento iniciamos todo a 1 pasando el id -1.
     //initGridForHierarchicalskinning(grid, FIRST_ITERATION);
     initDomain(m, bb, FIRST_ITERATION);
 
 	// 2. Segmentamos para todos los esqueletos en la escena
-	if(VERBOSE)printf("2. Volume segmentation\n"); fflush(0);
+	if(VERBOSE)printf("2. Volume segmentation\n");fflush(0);
 	map<int, int> traductionTable;
 	vector<int> segmentationIds;
 
@@ -1190,7 +1183,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
         // TODEBUG...
 
         /*
-		printf("2.d Cutting isolated regions\n"); fflush(0);
+		printf("2.d Cutting isolated regions\n");fflush(0);
 		vector< vector<cell3d*> > orphanCells;
 		getConnexComponents(grid, segmentationIds, orphanCells);	
 
@@ -1200,14 +1193,14 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 	}
 	else
 	{
-		if(VERBOSE)printf("2.d. (NO) Cutting isolated regions\n"); fflush(0);
+		if(VERBOSE)printf("2.d. (NO) Cutting isolated regions\n");fflush(0);
 	}
 
 
 	// 3. Smooth entre hijos cortando según el dominio
 	if(bPropagate)
 	{
-		if(VERBOSE){printf("3. Segments smoothing\n"); fflush(0);}
+		if(VERBOSE){printf("3. Segments smoothing\n");fflush(0);}
 		for(unsigned int i = 0; i< segmentationIds.size(); i++)
 		{
             SmoothFromSegment(m, bb, segmentationIds[i]);
@@ -1215,7 +1208,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 	}
 	else
 	{
-		if(VERBOSE)printf("3. (NO) Segments smoothing\n"); fflush(0);
+		if(VERBOSE)printf("3. (NO) Segments smoothing\n");fflush(0);
 	}
 
 
@@ -1223,12 +1216,12 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 	// Se basa en los vectores auxInfluences.
 	if(bNormalizeByDomain)
 	{
-		if(VERBOSE)printf("5. Weights Normalization By Domain\n"); fflush(0);
+		if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
         normalizeWeightsByDomain(bb);
 	}
 	else
 	{
-		if(VERBOSE)printf("5. (NO) Weights Normalization By Domain\n"); fflush(0);
+		if(VERBOSE)printf("5. (NO) Weights Normalization By Domain\n");fflush(0);
 	}
 
 	//CurrentProcessJoints.clear();
@@ -1362,7 +1355,7 @@ void reSegmentVolume(grid3d& grid,
 
 			if(nodeRefAssigned == -1)
 			{
-				printf("Tenemos un problema\n"); fflush(0);
+				printf("Tenemos un problema\n");fflush(0);
 				assert(false);
 			}
 			else
@@ -1508,16 +1501,21 @@ void updateSkinningWithHierarchy(Modelo&m)
 		fflush(0);
 	}
 
-	clock_t ini = clock();fflush(0);
+	clock_t ini = clock();
 
 	// SEGMENTATION (Realizamos una segmentacion y luego trataremos los ids)
 	for(unsigned int i = 0; i< m.bindings.size(); i++)
 		segmentVolumeWithEmbedding(m, m.bindings[i]);
+	
+	clock_t fin;
 
-	clock_t fin = clock();
-	FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
-	fprintf(foutLog, "%f\n", double(timelapse(fin,ini))); fflush(0);
-	fclose(foutLog);
+	if(BATCHPROCESSING)
+	{
+		fin = clock();
+		FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
+		fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));fflush(0);
+		fclose(foutLog);
+	}
 
 	if (VERBOSE)
 	{
@@ -1532,12 +1530,15 @@ void updateSkinningWithHierarchy(Modelo&m)
 	for(unsigned int i = 0; i< m.bindings.size(); i++)
 		computeHierarchicalSkinning(m, m.bindings[i]);
 
-	fin = clock();
-	foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
-	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));fflush(0);
-	fclose(foutLog);
+	if(BATCHPROCESSING)
+	{
+		fin = clock();
+		FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
+		fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));fflush(0);
+		fclose(foutLog);
+	}
 
-	if (VERBOSE)
+	if(VERBOSE)
 	{
 		end = clock();
 		cout << endl << " FIN - Computar Hierarchical skinning.\n";
@@ -1670,7 +1671,7 @@ void computeSecondaryWeights(Modelo* m)
 		vector< vector<double> >& weights = bd->embeddedPoints;
 		vector< vector<int> >& sortedWeights = bd->weightsSort;
 		
-		printf("Calculo de pesos secundarios del binding %d: \n", bind); fflush(0);
+		printf("Calculo de pesos secundarios del binding %d: \n", bind);fflush(0);
 		for(int pt = 0; pt < bd->pointData.size(); pt++)
 		{
 			if(pt%300 == 0)
@@ -1695,7 +1696,7 @@ void computeSecondaryWeights(Modelo* m)
 
 				if(!jt)
 				{
-					printf("Debería existir la influencia...!\n"); fflush(0);
+					printf("Debería existir la influencia...!\n");fflush(0);
 				}
 
 				dp.secondInfluences[infl].resize(jt->childs.size(), 0.0);
@@ -1791,7 +1792,7 @@ void computeSecondaryWeights(Modelo* m)
 					float distSegment = dir.Norm();
 					float dist = (dir*threshold).Norm();
 
-					vector< Point3d > auxPoints; auxPoints.resize(2);
+					std::vector< Point3d > auxPoints; auxPoints.resize(2);
 					auxPoints[0] = firstNodePtr->pos - dir*threshold;
 					auxPoints[1] = nextNodePtr->pos + dir*threshold;
 
@@ -1984,7 +1985,7 @@ void computeSecondaryWeights(Modelo* m)
      }
      else // No se ha cargado ningun embedding.
      {
-         printf("No hay cargado ningun embedding. Lo siento, no puedo hacer calculos\n"); fflush(0);
+        printf("No hay cargado ningun embedding. Lo siento, no puedo hacer calculos\n");fflush(0);
          return;
      }
 
@@ -2081,39 +2082,6 @@ void computeSecondaryWeights(Modelo* m)
      */
  //}
  
-
-void propagateIdFromNode(int id, vector<int>& frontIds,vector<int>& harvestIds,vector<bool>& visIds,vector<int>& connIds,vector<GraphNode*> nodes)
-{
-	while(frontIds.size() > 0)
-	{
-		int newId = frontIds.back();
-		frontIds.pop_back();
-
-		// Si ya ha sido visitado en este pase seguimos.
-		if(visIds[newId]) continue;
-
-		int connId = connIds[newId];
-
-		if(connId < 0)
-		{
-			connIds[newId] = id;
-			visIds[newId] = true;
-			for(unsigned int neigh = 0; neigh < nodes[newId]->connections.size(); neigh++)
-					frontIds.push_back(nodes[newId]->connections[neigh]->id);
-		}
-		else if(connId != id)
-		{
-			for(unsigned int i = 0; i< connIds.size(); i++)
-				if(connIds[i] == connId) 
-				{
-					connIds[i] = id;
-					visIds[newId] = true;
-				}
-
-			harvestIds.push_back(newId);
-		}
-	}
-}
 
 void renameLinks(vector<int>& links, int group, int newGroup)
 {
@@ -2414,263 +2382,6 @@ void AddVirtualTriangles(Modelo& m)
 	*/
 
 	//printf("Hemos creado %d triangulos\n", virtualTriangles.size());
-}
-
-void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings)
-{
-	//m->bindings.push_back(new binding(m->vn()));
-
-	vector<GraphNode*>& nodes = m.nodes;
-	vector<GraphNodePolygon*>& triangles = m.triangles;
-
-	/*
-	vector<GraphNode*> nodes;
-	nodes.resize(m.vn);
-	for(int i = 0; i< nodes.size(); i++)
-		nodes[i] = new GraphNode(i);
-
-	MyMesh::FaceIterator fi;
-    int idx = 0;
-    for(fi = m.face.begin(); fi!=m.face.end(); ++fi ) 
-	{
-		int pts[3];
-		for(int i = 0; i< 3; i++)
-			pts[i] = (*fi).V(i)->IMark();
-
-		for(int vert = 0; vert < 3; vert++)
-		{
-			bool found = false;
-
-			for(int con = 0; con < nodes[pts[vert]]->connections.size(); con++)
-			{
-				found |= nodes[pts[vert]]->connections[con]->id == pts[(vert+1)%3];
-			}
-			if(!found)
-			{
-				nodes[pts[vert]]->connections.push_back(nodes[pts[(vert+1)%3]]);
-				nodes[pts[(vert+1)%3]]->connections.push_back(nodes[pts[vert]]);
-			}
-		}
-    }
-	*/
-
-	// Buscamos componentes conexas a la vez que nos quedamos
-	// con los datos para luego crear los grafos.
-	int idDispatcher = -1;
-	vector<int> connIds;
-	vector<bool> visIds;
-	visIds.resize(m.nodes.size(),false);
-	connIds.resize(m.nodes.size(), -1);
-
-	for(unsigned int n = 0; n < nodes.size(); n++)
-	{
-		// todavia no se ha trabajado, debe ser nuevo
-		if(connIds[n] < 0)
-		{
-			// Asignamos ID nuevo
-			idDispatcher++;
-			connIds[n] = idDispatcher;
-
-			// Iniciamos variables de recorrido
-			for(unsigned int v = 0; v < visIds.size(); v++)
-				visIds[v] = false;
-
-			visIds[n] = true;
-
-			vector<int> frontIds; 
-			
-			for(int neigh = 0; neigh < nodes[n]->connections.size(); neigh++)
-				frontIds.push_back(nodes[n]->connections[neigh]->id);
-
-			vector<int> harvestIds; harvestIds.push_back(idDispatcher);
-			propagateIdFromNode(idDispatcher, frontIds, harvestIds, visIds, connIds, nodes);
-		}
-	}
-
-	printf("Count of graphs: %d\n", idDispatcher+1);
-
-	vector<bool> founded;
-	founded.resize(idDispatcher+1, false);
-	for(int conId = 0; conId < connIds.size(); conId++)
-	{
-		bool foundAll = true;
-		for(int i = 0; i<= idDispatcher; i++)
-		{
-			foundAll &= founded[i];
-			if(!founded[i]) 
-			{ 
-				founded[i] = connIds[conId] == i;
-			}
-		}
-		if(foundAll) 
-			break;
-	}
-
-	int relateId = 0;
-	map<int, int> relateGraphId;
-	for(int f = 0; f < founded.size(); f++)
-	{
-		if(founded[f])
-		{
-			relateGraphId[f] = relateId;
-			relateId++;
-		}
-	}
-
-	vector<int> graphNodesCounter;
-	graphNodesCounter.resize(relateId);
-
-	for(int i = 0; i< connIds.size(); i++)
-	{
-		connIds[i] = relateGraphId[connIds[i]];
-		graphNodesCounter[connIds[i]]++;
-	}
-
-	for(int i = 0; i < graphNodesCounter.size(); i++) 
-	{
-		printf("[Connected part %d]-> %d# nodes\n", i, graphNodesCounter[i]);
-	}
-
-	bindings.resize(graphNodesCounter.size());
-	m.modelVertexDataPoint.resize(nodes.size());
-	m.modelVertexBind.resize(nodes.size());
-
-	for(int bbIdx = 0; bbIdx < bindings.size(); bbIdx++)
-	{
-		bindings[bbIdx] = new binding(graphNodesCounter[bbIdx]);
-		bindings[bbIdx]->bindId = bbIdx;
-
-		bindings[bbIdx]->surface.nodes.resize(graphNodesCounter[bbIdx]);
-
-		//for(int i = 0; i< bindings[bbIdx]->surface.nodes.size(); i++)
-		//	bindings[bbIdx]->surface.nodes[i] = new GraphNode(i);
-
-		//vector<GraphNode*> subGraph;
-		//subGraph.resize(nodes.size(), NULL);
-		int count = 0;
-		for(int i = 0; i< nodes.size(); i++)
-		{
-			if(connIds[i] == bbIdx)
-			{
-				bindings[bbIdx]->surface.nodes[count] = nodes[i];
-				bindings[bbIdx]->pointData[count].node = nodes[i];
-
-				m.modelVertexBind[nodes[i]->id] = bbIdx;
-				m.modelVertexDataPoint[nodes[i]->id] = count;
-				count++;
-			}
-
-		}
-
-		assert(count == graphNodesCounter[bbIdx]);
-
-		bindings[bbIdx]->surface.triangles.resize(triangles.size());
-		count = 0;
-		for(int i = 0; i< triangles.size(); i++)
-		{
-			bool found = true;
-			for(int trTemp = 0; trTemp < triangles[i]->verts.size(); trTemp++)
-			{
-				int vertId = triangles[i]->verts[trTemp]->id;
-				found &= (m.modelVertexBind[vertId] == bbIdx);
-			}
-
-			if(found)
-			{
-				bindings[bbIdx]->surface.triangles[count] = triangles[i];
-				count++;
-			}
-		}
-
-		bindings[bbIdx]->surface.triangles.resize(count);
-		
-	}
-
-	/*
-	// Construimos estos dos vectores de referencias para ir más rápido en otras
-	// computaciones.
-	vector<int>& modelVertexDataPoint = m.modelVertexDataPoint;
-	vector<int>& modelVertexBind = m.modelVertexBind;
-
-	modelVertexDataPoint.resize(nodes.size());
-	modelVertexBind.resize(nodes.size());
-
-	int count = 0; 
-	for(int i = 0; i< bindings.size(); i++)
-	{
-		for(int j = 0; j< bindings[i]->pointData.size(); j++)
-		{
-			modelVertexBind[bindings[i]->pointData[j].modelVert] = i;
-			modelVertexDataPoint[bindings[i]->pointData[j].modelVert] = j;
-			count++;
-		}
-	}
-
-	assert(count == nodes.size());
-	*/
-
-	// Recorremos los vertices y acumulamos el area de sus triangulos ponderado por 1/3 que le corresponde.
-    //MyMesh::VertexIterator vi;  idx = 0;
-    //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi ) 
-	/*for(int vi = 0; vi < m.nodes.size(); vi++)
-	{
-		int idBind = m.modelVertexBind[m.nodes[vi]->id];
-		int idVertexInBind = m.modelVertexDataPoint[m.nodes[vi]->id];
-		m.bindings[idBind]->pointData[idVertexInBind].position = m.nodes[vi]->position;
-    }
-	*/
-
-	// Guardamos una indirección para tener ordenados los pesos... esto podría variar
-	// para optimizar los cálculos.
-	int counter = 0;
-	m.globalIndirection.resize(m.vn());
-	for(int i = 0; i< bindings.size(); i++)
-	{
-		for(int j = 0; j< bindings[i]->pointData.size(); j++)
-		{
-			bindings[i]->globalIndirection[j] = counter;
-			m.globalIndirection[bindings[i]->pointData[j].node->id] = counter;
-			counter++;
-		}
-	}
-
-	// Construimos una matriz de adyacencia que tambien
-	// recoge si una arista es borde(1) o no (2)
-	vector< vector<short> > edges; 
-	edges.resize(m.vn());
-	for(int i = 0; i< edges.size(); i++)
-		edges[i].resize(m.vn(), 0);
-	
-	//MyMesh::FaceIterator fj;
-    //for(fj = m.face.begin(); fj!=m.face.end(); ++fj )
-	for(int fj = 0; fj < m.triangles.size(); fj++ )
-	{
-        vcg::Point3d O, c, s;
-        vcg::Point3i idVerts;
-        for(int i = 0; i<3; i++) // Obtenemos los indices de los vertices de t
-			idVerts[i] = m.triangles[fj]->verts[i]->id;
-
-		for(int i = 0; i<3; i++)
-			edges[idVerts[i]][idVerts[(i+1)%3]]++;
-	}
-
-	for(int i = 0; i< bindings.size(); i++)
-	{
-		for(int pt = 0; pt < bindings[i]->pointData.size(); pt++)
-		{
-			int vert = bindings[i]->pointData[pt].node->id;
-			for(int con = 0; con< bindings[i]->surface.nodes[pt]->connections.size(); con++)
-			{
-				int conected = bindings[i]->surface.nodes[pt]->connections[con]->id;
-				int modelVertConected = bindings[i]->pointData[conected].node->id;
-				int count = edges[vert][modelVertConected]+edges[modelVertConected][vert];
-
-				// Comprobamos si es un borde -> si hay conexion deberia tener valor de mas de uno.
-				bindings[i]->pointData[pt].isBorder |= count < 2;
-				bindings[i]->pointData[conected].isBorder |= count < 2;
-			}
-		}
-	}
 }
 
 void normalizeDistances(Modelo& m)

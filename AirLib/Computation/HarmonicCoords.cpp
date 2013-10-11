@@ -149,8 +149,8 @@ void getHarmonicCoordinates(MyMesh& mesh, MyMesh& cage, grid3d& grid, std::vecto
 
 void updateBoundingBox(Modelo& m)
 {
-	double minx = -9999, miny = -9999, minz = -9999;
-	double maxx = 9999,  maxy = 9999,  maxz = 9999;
+	double minx = 9999, miny = 9999, minz = 9999;
+	double maxx = -9999,  maxy = -9999,  maxz = -9999;
 
 	for(int i = 0; i< m.nodes.size(); i++)
 	{
