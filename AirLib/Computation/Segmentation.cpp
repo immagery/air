@@ -20,6 +20,8 @@
 #define bPropagate true
 #define bNormalizeByDomain true
 
+#define useMVC false
+
 using namespace std;
 
 // Euclidean Point Distance
@@ -83,6 +85,7 @@ int segmentVolumeWithEmbedding(Modelo& m, binding* bd)
     vector< DefNode >& points = bd->intPoints;
     vector< vector<double> >& embeddedPoints = bd->embeddedPoints;
 	vector< vector<int> >& sortedWeights = bd->weightsSort;
+	vector<vector<weight> >& weights = bd->weightsFiltered;
 
 
 	clock_t begin, end;
@@ -99,7 +102,16 @@ int segmentVolumeWithEmbedding(Modelo& m, binding* bd)
 		int finIdx = bd->globalIndirection.back();
 
 		//float distance = BiharmonicDistanceP2P_block(embeddedPoints[0], pointId, bd, ((DefNode)points[0]).expansion, bd->intPoints[0].precomputedDistances, iniIdx, finIdx);
-		float distance = -BiharmonicDistanceP2P_sorted(embeddedPoints[0], sortedWeights[0], pointId, bd, ((DefNode)points[0]).expansion, bd->intPoints[0].precomputedDistances, bd->cutThreshold[0]);
+		float distance = 0;
+		if(useMVC)
+		{
+			distance = -BiharmonicDistanceP2P_sorted(embeddedPoints[0], sortedWeights[0], pointId, bd, ((DefNode)points[0]).expansion, bd->intPoints[0].precomputedDistances, bd->cutThreshold[0]);
+		}
+		else
+		{
+			distance = -BiharmonicDistanceP2P_HC(weights[0], pointId, bd, ((DefNode)points[0]).expansion, bd->intPoints[0].precomputedDistances);
+		}
+		
 		end = clock();
 		timeMean += end-begin;
 
@@ -121,7 +133,16 @@ int segmentVolumeWithEmbedding(Modelo& m, binding* bd)
 			int iniIdx = bd->globalIndirection.front();
 			int finIdx = bd->globalIndirection.back();
 			//float newDist = BiharmonicDistanceP2P_block(embeddedPoints[id], pointId, bd, ((DefNode)points[id]).expansion, bd->intPoints[id].precomputedDistances, iniIdx, finIdx);
-			float newDist = -BiharmonicDistanceP2P_sorted(embeddedPoints[id], sortedWeights[id], pointId, bd, ((DefNode)points[id]).expansion, bd->intPoints[id].precomputedDistances, bd->cutThreshold[id]);
+			float newDist = 0;
+			if(useMVC)
+			{
+				newDist =-BiharmonicDistanceP2P_sorted(embeddedPoints[id], sortedWeights[id], pointId, bd, ((DefNode)points[id]).expansion, bd->intPoints[id].precomputedDistances, bd->cutThreshold[id]);
+			
+			}
+			else
+			{
+				newDist =-BiharmonicDistanceP2P_HC(weights[id], pointId, bd, ((DefNode)points[id]).expansion, bd->intPoints[id].precomputedDistances);
+			}
 			end = clock();
 			timeMean += end-begin;
 
@@ -432,6 +453,25 @@ double PrecomputeDistancesSingular_block(vector<double>& weights, symMatrix& Bih
 		row++;
 	}
 
+	return res;
+}
+
+// Precomputar distancias, teniendo en cuenta solo los pesos necesarios.
+double PrecomputeDistancesSingular_sorted(symMatrix& BihDistances, vector<weight>& weights)
+{
+	int size = BihDistances.size;
+	double res = 0;
+	for(int j = 0; j< weights.size(); j++)
+	{
+		double sum = 0;
+		for(int k = 0; k< weights.size(); k++)
+		{
+			double value = weights[k].weightValue*BihDistances.get(weights[j].label,weights[k].label);
+			sum += value;
+		}
+
+		res += sum*weights[j].weightValue;
+	}
 	return res;
 }
 
@@ -854,7 +894,9 @@ void ComputeSkining(Modelo& m)
 	for(unsigned int ap = 0; ap < auxPoints.size(); ap++)
         auxPoints[ap] = bb->intPoints[ap].pos;
 
-	/*FILE* fout1 = fopen("intPOintsTemp.txt", "w");
+	/*
+	// LECTURA EXTERNA DE PUNTOS INTERIORES
+	FILE* fout1 = fopen("intPOintsTemp.txt", "w");
 	fprintf(fout1," Puntos:\n");
 	for(int iPt = 0; iPt < auxPoints.size(); iPt++)
 	{
@@ -882,6 +924,9 @@ void ComputeSkining(Modelo& m)
 	bb->weightsRepresentative.resize(auxPoints.size());
 	//double threshold = 1/pow(10.0, 5);
 
+	if(!useMVC)
+		bb->weightsFiltered.resize(auxPoints.size());
+
 	// Cargamos el threshold especificado. En el caso de ser 1
 	// será sustitido para cada punto por el threshold oportuno.
 	double threshold = bb->weightsCutThreshold;
@@ -894,15 +939,27 @@ void ComputeSkining(Modelo& m)
 	ini = clock();
 	for(unsigned int i = 0; i< auxPoints.size(); i++)
     {
-		mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m.bindings, m);
+		// MVC
+		if(useMVC)
+		{
+			mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m.bindings, m);
+			doubleArrangeElements_wS_fast(bb->embeddedPoints[i],bb->weightsSort[i], currentThreshold[i]);
+		}
+		else
+		{
+			m.HCgrid->getCoordsFromPoint(auxPoints[i], bb->weightsFiltered[i]);
+		}
+
+		/*
+		// CALCULOS VIEJOS.
 		//vector<double> stats;
 		//doubleArrangeElements_withStatistics(bb->embeddedPoints[i],bb->weightsSort[i], stats, currentThreshold[i]);
-		
-		doubleArrangeElements_wS_fast(bb->embeddedPoints[i],bb->weightsSort[i], currentThreshold[i]);
 		//doubleArrangeElements(bb->embeddedPoints[i],bb->weightsSort[i], false, bb->weightsCutThreshold);
 		// cambiamos el signo para el calculo posterior
 		//for(int ebpV = 0; ebpV < bb->embeddedPoints[i].size(); ebpV++)
 		//	bb->embeddedPoints[i][ebpV] = -bb->embeddedPoints[i][ebpV];
+		*/
+
 	}
 	fin = clock();
 
@@ -959,12 +1016,26 @@ void ComputeSkining(Modelo& m)
 		{
 			int iniIdx = otherbb->globalIndirection.front();
 			int finIdx = otherbb->globalIndirection.back();
+			
+			// CALCULOS ANTERIORES
 			//preComputedDistancesSum[i] -= PrecomputeDistancesSingular_block(otherbb->embeddedPoints[i], otherbb->BihDistances, iniIdx, finIdx);
 			//preComputedDistancesSum[i] += PrecomputeDistancesSingular(otherbb->embeddedPoints[i], otherbb->BihDistances);
 			
-			preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, currentThreshold[i]);
+			//MVC
+			if(useMVC)
+			{
+				preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, currentThreshold[i]);
+			}
+			else
+			{
+				preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->BihDistances, bb->weightsFiltered[i]);
+			}
 
-			if(threshold != currentThreshold[i] )printf("This threshold has been changed: %f\n", currentThreshold[i]);fflush(0);
+			if(threshold != currentThreshold[i] )
+			{
+				printf("This threshold has been changed: %f\n", currentThreshold[i]);
+				fflush(0);
+			}
 
 			//preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, otherbb->weightsCutThreshold);
 		}

@@ -111,6 +111,7 @@ void computeSecondaryWeights(Modelo* m);
 void PrecomputeDistances(vector< vector<double> >& embeddedPoints, vector< vector<int> >& weightsIndirection, symMatrix& BihDistances, vector< DefNode >& intPoints);
 double PrecomputeDistancesSingular(vector<double>& weights, symMatrix& BihDistances);
 double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& indirection, symMatrix& BihDistances, double threshold);
+double PrecomputeDistancesSingular_sorted(symMatrix& BihDistances, vector<weight>& weights);
 
 double PrecomputeDistancesSingular_block(vector<double>& weights, symMatrix& BihDistances, int iniIdx, int finIdx);
 void doubleArrangeElements(vector<double>& weights, vector<int>& orderedIndirection, bool printStatistics, double& threshold);
