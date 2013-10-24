@@ -8,6 +8,8 @@
 #define DOUBLESIZE 8
 #define MBSIZEINBYTES 1048576
 
+#define useMVC true
+
 #include <utils/util.h>
 
 using namespace std;

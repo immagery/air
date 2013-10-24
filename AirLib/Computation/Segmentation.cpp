@@ -20,8 +20,6 @@
 #define bPropagate true
 #define bNormalizeByDomain true
 
-#define useMVC false
-
 using namespace std;
 
 // Euclidean Point Distance
@@ -466,7 +464,10 @@ double PrecomputeDistancesSingular_sorted(symMatrix& BihDistances, vector<weight
 		double sum = 0;
 		for(int k = 0; k< weights.size(); k++)
 		{
-			double value = weights[k].weightValue*BihDistances.get(weights[j].label,weights[k].label);
+			int labelJ =  weights[j].label;
+			int labelK =  weights[k].label;
+			double auxWeight = weights[k].weightValue;
+			double value = auxWeight*BihDistances.get(labelJ,labelK);
 			sum += value;
 		}
 
@@ -853,6 +854,7 @@ void clearOlderComputations(Modelo& m)
 		for(int ptIdx = 0; ptIdx< m.bindings[bind]->pointData.size(); ptIdx++)
 		{
 			m.bindings[bind]->pointData[ptIdx].influences.clear();
+			m.bindings[bind]->pointData[ptIdx].secondInfluences.clear();
 		}
 	}
 
@@ -866,18 +868,21 @@ void clearOlderComputations(Modelo& m)
 void ComputeSkining(Modelo& m)
 {
 	clock_t ini = clock();
-
 	clock_t begin, end;
-
 
 	if(m.bindings.size() <= 0) return; 
 
+	//TODO: We are taking only one binding
 	binding* bb = m.bindings[0];
-	if(VERBOSE)printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
+	
+	if(VERBOSE)
+		printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
 
 	// Crearemos los nodos a partir de los huesos.
     proposeNodes(bb->bindedSkeletons, bb->intPoints);
-    /*if(VERBOSE)*/printf("Proposed nodes: %d\n", bb->intPoints.size());fflush(0);
+    
+	if(VERBOSE)
+		printf("Proposed nodes: %d\n", bb->intPoints.size());fflush(0);
 
 	// Creamos la tabla de traducción general.
     bb->traductionTable.resize(bb->intPoints.size());
@@ -924,8 +929,7 @@ void ComputeSkining(Modelo& m)
 	bb->weightsRepresentative.resize(auxPoints.size());
 	//double threshold = 1/pow(10.0, 5);
 
-	if(!useMVC)
-		bb->weightsFiltered.resize(auxPoints.size());
+	if(!useMVC) bb->weightsFiltered.resize(auxPoints.size());
 
 	// Cargamos el threshold especificado. En el caso de ser 1
 	// será sustitido para cada punto por el threshold oportuno.
@@ -947,7 +951,17 @@ void ComputeSkining(Modelo& m)
 		}
 		else
 		{
-			m.HCgrid->getCoordsFromPoint(auxPoints[i], bb->weightsFiltered[i]);
+			//m.HCgrid->getCoordsFromPoint(auxPoints[i], bb->weightsFiltered[i]);
+
+			//loat sum001 = 0;
+			//for(int sumIdx = 0; sumIdx < bb->weightsFiltered[i].size(); sumIdx++)
+			//{
+			//	sum001 += bb->weightsFiltered[i][sumIdx].weightValue;
+			//}
+
+			//vector<weight> weightsTemp;
+			m.HCgrid->getCoordsFromPointSimple(auxPoints[i], bb->weightsFiltered[i]);
+			//int temp = 0;*/
 		}
 
 		/*
@@ -1564,13 +1578,13 @@ void updateSkinningWithHierarchy(Modelo&m)
 {
 	clock_t begin, end;
 
-	if (VERBOSE)
-	{
+	//if (VERBOSE)
+	//{
 		cout << "--- HIERARCHICAL SKINNING ---" << endl;
 		cout << "1. Segmentacion del volumen: ";
 		begin = clock();
 		fflush(0);
-	}
+	//}
 
 	clock_t ini = clock();
 
@@ -1588,13 +1602,13 @@ void updateSkinningWithHierarchy(Modelo&m)
 		fclose(foutLog);
 	}
 
-	if (VERBOSE)
-	{
+	//if (VERBOSE)
+	//{
 		end = clock();
 		cout << double(timelapse(end,begin)) << " s" << endl << "2. Computar Hierarchical skinning: ";
 		begin = clock();
 		fflush(0);
-	}
+	//}
 
 	ini = clock();
 	// Hierarchical weight computation
@@ -1609,12 +1623,12 @@ void updateSkinningWithHierarchy(Modelo&m)
 		fclose(foutLog);
 	}
 
-	if(VERBOSE)
-	{
+	//if(VERBOSE)
+	//{
 		end = clock();
 		cout << endl << " FIN - Computar Hierarchical skinning.\n";
 		fflush(0);
-	}
+	//}
 }
 
 void updateSkinning(Modelo& m)
@@ -1741,6 +1755,7 @@ void computeSecondaryWeights(Modelo* m)
 		vector< DefNode >& points = bd->intPoints;
 		vector< vector<double> >& weights = bd->embeddedPoints;
 		vector< vector<int> >& sortedWeights = bd->weightsSort;
+		vector< vector<weight> >& weightsClean = bd->weightsFiltered; 
 		
 		printf("Calculo de pesos secundarios del binding %d: \n", bind);fflush(0);
 		for(int pt = 0; pt < bd->pointData.size(); pt++)
@@ -1809,7 +1824,16 @@ void computeSecondaryWeights(Modelo* m)
 
 						assert(idxNode >= 0);
 
-						float distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+						float distance = 0;
+						if(useMVC)
+						{
+							distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+						}
+						else
+						{
+							//distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+							distance = -BiharmonicDistanceP2P_HC(weightsClean[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances);
+						}
 						if(bestNode == -1 || bestDistance > distance)
 						{
 							secondNode = bestNode;

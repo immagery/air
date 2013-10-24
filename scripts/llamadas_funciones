@@ -25,3 +25,4 @@ connectAttr -f multiplyDivide1.outputX joint1_WNode009.rotateX;
 ioAir.subdivideSkeleton(desiredSeparation=4)
 
 ioAir.exportSkeletonNodes(filename="D:\\phd_dev\\Data\\models\\cilinder2_interior_points.txt")
+ioAir.exportSkeletonHierarchy( filename = "C:\\Users\\chus\\Documents\\dev\\Data\\models\\010_snake_files\\snake_skeleton.txt")
