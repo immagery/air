@@ -52,11 +52,6 @@ bool ownerDistIsLower(vector<double> ptOwner,
 void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable)
 {
     // Recorrer cada vertice de la maya con un iterador y clasificar los vertices.
-    //MyMesh::VertexIterator vi;
-    //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi )
-    //{
-    //    Point3d pt = vi->P();
-    //    int VertIdx = vi->IMark();
 	for(int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
 	{
         // Assegurar que los indices guardados en los vertices de la maya estan bien.
@@ -69,7 +64,8 @@ void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductio
         }
         else
         {
-            printf("Hay algunas celdas visitadas que no tienen bien asignado el segmentId.[ver traduceParcialSegmentation(...)]");
+            printf("Hay algunas celdas visitadas que no tienen bien asignado el segmentId.[ver traduceParcialSegmentation(...)]\n");
+			fflush(0);
         }
     }
 }
@@ -867,22 +863,18 @@ void clearOlderComputations(Modelo& m)
 // Solo procesamos el binding que entra como parametro
 void ComputeSkining(Modelo& m)
 {
-	clock_t ini = clock();
-	clock_t begin, end;
-
-	if(m.bindings.size() <= 0) return; 
+	clock_t begin;
 
 	//TODO: We are taking only one binding
+	if(m.bindings.size() <= 0) return; 
 	binding* bb = m.bindings[0];
 	
-	if(VERBOSE)
-		printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
+	printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
 
 	// Crearemos los nodos a partir de los huesos.
+	// TODO: esto solo debe hacerse una vez y recalcular solo según el dirtybit.
+	clock_t ini = clock();
     proposeNodes(bb->bindedSkeletons, bb->intPoints);
-    
-	if(VERBOSE)
-		printf("Proposed nodes: %d\n", bb->intPoints.size());fflush(0);
 
 	// Creamos la tabla de traducción general.
     bb->traductionTable.resize(bb->intPoints.size());
@@ -890,46 +882,27 @@ void ComputeSkining(Modelo& m)
     for(unsigned int j = 0; j< bb->traductionTable.size(); j++)
         bb->nodeIds[bb->intPoints[j].nodeId] = &(bb->intPoints[j]);
 
-	// NODES EMBEDING COMPUTATION (Paralelizable)
-	if(VERBOSE) begin=clock();
-
     bb->embeddedPoints.resize(bb->intPoints.size());
 
     vector< Point3d> auxPoints(bb->intPoints.size());
 	for(unsigned int ap = 0; ap < auxPoints.size(); ap++)
         auxPoints[ap] = bb->intPoints[ap].pos;
 
-	/*
-	// LECTURA EXTERNA DE PUNTOS INTERIORES
-	FILE* fout1 = fopen("intPOintsTemp.txt", "w");
-	fprintf(fout1," Puntos:\n");
-	for(int iPt = 0; iPt < auxPoints.size(); iPt++)
-	{
-		fprintf(fout1,"%d:(%f, %f, %f)\n",iPt,auxPoints[iPt][0], auxPoints[iPt][1],auxPoints[iPt][2]);
-	}
-	fclose(fout1);
+	clock_t end = clock();
+	printf("Proposed nodes: %d taking %f s\n", bb->intPoints.size(), double(timelapse(ini,end)));fflush(0);
 
-	FILE* fout2 = fopen("embedding_despues.txt", "w");
-	fprintf(fout2," Este es el embedding, deberia corresponder a lo que hay:\n");
-	for(int iPt = 0; iPt < m->embedding.size(); iPt++)
-	{
-		fprintf(fout2, "%d:(\n", iPt);
-		for(int emb = 0; emb < m->embedding[iPt].size(); emb++)
-		{
-			fprintf(fout2, " %f,",m->embedding[iPt][emb]);
-		}
-		fprintf(fout2, ")\n");
-	}
-	fclose(fout2);
-	*/
-
+	
+	// NODES EMBEDING COMPUTATION (Paralelizable)
 	// Calculamos el embedding de los puntos internos.
-    
+	// TODO: solo deberia recalcularse lo que esta dirty.
+
+	ini = clock();
 	bb->weightsSort.resize(auxPoints.size());
 	bb->weightsRepresentative.resize(auxPoints.size());
 	//double threshold = 1/pow(10.0, 5);
 
-	if(!useMVC) bb->weightsFiltered.resize(auxPoints.size());
+	if(!useMVC) 
+		bb->weightsFiltered.resize(auxPoints.size());
 
 	// Cargamos el threshold especificado. En el caso de ser 1
 	// será sustitido para cada punto por el threshold oportuno.
@@ -937,10 +910,6 @@ void ComputeSkining(Modelo& m)
 	vector<double>& currentThreshold = bb->cutThreshold;
 	currentThreshold.resize(auxPoints.size(), threshold); 
 
-	clock_t fin = clock();
-	printf("Preparacion de esqueletos... para computar pesos: %f s.\n", double(timelapse(fin,ini)));
-
-	ini = clock();
 	for(unsigned int i = 0; i< auxPoints.size(); i++)
     {
 		// MVC
@@ -952,16 +921,7 @@ void ComputeSkining(Modelo& m)
 		else
 		{
 			//m.HCgrid->getCoordsFromPoint(auxPoints[i], bb->weightsFiltered[i]);
-
-			//loat sum001 = 0;
-			//for(int sumIdx = 0; sumIdx < bb->weightsFiltered[i].size(); sumIdx++)
-			//{
-			//	sum001 += bb->weightsFiltered[i][sumIdx].weightValue;
-			//}
-
-			//vector<weight> weightsTemp;
 			m.HCgrid->getCoordsFromPointSimple(auxPoints[i], bb->weightsFiltered[i]);
-			//int temp = 0;*/
 		}
 
 		/*
@@ -975,18 +935,22 @@ void ComputeSkining(Modelo& m)
 		*/
 
 	}
-	fin = clock();
+	
+	end = clock();
+	printf("Weights computed+sorted+thresholds:  %f s, %d el, mean:%f\n", double(timelapse(ini,end)), auxPoints.size(), double(timelapse(ini,end))/auxPoints.size());
 
-	printf("Weights Threshold Computed\n");fflush(0);
-
-	FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
-	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
-	fclose(foutLog);
+	//FILE* foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
+	//fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
+	//close(foutLog);
 
 	//mvc_weights(auxPoints, bb->embeddedPoints, bb, m);
     //mvc_embedding(auxPoints, bb->embeddedPoints, m.embedding, m);
 
+
 	// hasta aquí todo es comun, o lo consideramos asi. Ahora copiamos lo calculado.
+	// TODO: si hay varios bindings y los consideramos piezas complementarias podría 
+	// De momento lo dejo comentado
+	/*
 	for(unsigned int i = 1; i< m.bindings.size(); i++)
 	{
 		// la primera parte la copio tal cual para simplificar... me imagino que no sera
@@ -1010,6 +974,7 @@ void ComputeSkining(Modelo& m)
 			}
 		}
 	}
+	
 
 	if(VERBOSE)
 	{
@@ -1017,8 +982,9 @@ void ComputeSkining(Modelo& m)
 		cout << "Nodes embedding: " << double(timelapse(end,begin)) << " s"<< endl;
 		begin = clock();
 	}
+	*/
 
-
+	printf("Precomputing distances\n"); fflush(0);
 	ini = clock();
 	// Calculamos al precomputacion como una suma, suponiendo que todos los puntos van con todos... uhmmm
 	vector<float> preComputedDistancesSum;
@@ -1047,8 +1013,8 @@ void ComputeSkining(Modelo& m)
 
 			if(threshold != currentThreshold[i] )
 			{
-				printf("This threshold has been changed: %f\n", currentThreshold[i]);
-				fflush(0);
+				//printf("This threshold has been changed: %f\n", currentThreshold[i]);
+				//fflush(0);
 			}
 
 			//preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, otherbb->weightsCutThreshold);
@@ -1060,29 +1026,33 @@ void ComputeSkining(Modelo& m)
 		binding* otherbb = m.bindings[bbIdx];
 		for(unsigned int i = 0; i< otherbb->embeddedPoints.size(); i++)
 		{
-			int iniIdx = otherbb->globalIndirection.front();
-			int finIdx = otherbb->globalIndirection.back();
+			//int iniIdx = otherbb->globalIndirection.front();
+			//int finIdx = otherbb->globalIndirection.back();
 			otherbb->intPoints[i].precomputedDistances = preComputedDistancesSum[i];
 			//otherbb->intPoints[i].precomputedDistances = PrecomputeDistancesSingular_block(otherbb->embeddedPoints[i], otherbb->BihDistances, iniIdx, finIdx);
 			//bb->intPoints[i].precomputedDistances = PrecomputeDistancesSingular(bb->embeddedPoints[i], bb->BihDistances) *-1;
 		}
 	}
 
+	end = clock();
+	printf("Precoputed Distances: %f s, %d el, mean:%f\n", double(timelapse(ini,end)), preComputedDistancesSum.size(), double(timelapse(ini,end))/preComputedDistancesSum.size());
+	fflush(0);
+
 	//PrecomputeDistances(bb->embeddedPoints, bb->BihDistances, bb->intPoints);
 	
-	if(VERBOSE)
-	{
-		end=clock();
-		cout << "Precomputed Distances: " << double(timelapse(end,begin)) << " s for "<< bb->intPoints.size()<< " points" << endl;
-		fflush(0);
-	}
+	//if(VERBOSE)
+	//{
+	//	end=clock();
+	//	cout << "Precomputed Distances: " << double(timelapse(end,begin)) << " s for "<< bb->intPoints.size()<< " points" << endl;
+	//	fflush(0);
+	//}
 
-	fin = clock();
-	foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
-	fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
-	fclose(foutLog);
+	//fin = clock();
+	//foutLog = fopen((string(DIR_MODELS_FOR_TEST) + "outLog.txt").c_str(), "a");
+	//fprintf(foutLog, "%f\n", double(timelapse(fin,ini)));
+	//fclose(foutLog);
 
-	printf("Mean: %f s.\n", double(timelapse(fin,ini))/auxPoints.size());
+	//printf("Mean: %f s.\n", double(timelapse(fin,ini))/auxPoints.size());
 
 	/*
 	FILE* fout = fopen("embeddedPoints.txt", "w");
@@ -1100,14 +1070,20 @@ void ComputeSkining(Modelo& m)
 	*/
 
 	// Actualizacion del skinning con los parametros actuales.
-	//for(int i = 0; i< m.bindings.size(); i++)
+	ini = clock();
 	updateSkinningWithHierarchy(m);
+	end = clock();
+	printf("updateSkinningHierarchy: %f ms\n", double(timelapse(ini,end)));
+	fflush(0);
+	
 
 	// Calculamos pesos secundarios sobre lo calculado anteriormente.
+	ini = clock();
     computeSecondaryWeights(&m);
+	end = clock();
+	printf("ComputeSecondaryWeights: %f ms \n", double(timelapse(ini,end)));
+	fflush(0);
 
-	// Actualizamos el grid para renderiazar.
-	//grRend->propagateDirtyness();
 }
 
 // The process goes down from every root joint and triggers a family fight for the influence.  
@@ -1580,10 +1556,10 @@ void updateSkinningWithHierarchy(Modelo&m)
 
 	//if (VERBOSE)
 	//{
-		cout << "--- HIERARCHICAL SKINNING ---" << endl;
-		cout << "1. Segmentacion del volumen: ";
-		begin = clock();
-		fflush(0);
+	printf( "\n--- HIERARCHICAL SKINNING ---\n" );
+	printf( "1. Segmentacion del volumen... \n" );
+	begin = clock();
+	fflush(0);
 	//}
 
 	clock_t ini = clock();
@@ -1605,7 +1581,8 @@ void updateSkinningWithHierarchy(Modelo&m)
 	//if (VERBOSE)
 	//{
 		end = clock();
-		cout << double(timelapse(end,begin)) << " s" << endl << "2. Computar Hierarchical skinning: ";
+		printf("Total de segmentacion: %f s.\n", double(timelapse(begin, end)));
+		printf("2. Computar Hierarchical skinning: ");
 		begin = clock();
 		fflush(0);
 	//}
@@ -1626,7 +1603,8 @@ void updateSkinningWithHierarchy(Modelo&m)
 	//if(VERBOSE)
 	//{
 		end = clock();
-		cout << endl << " FIN - Computar Hierarchical skinning.\n";
+		printf("%f s.\n", double(timelapse(begin, end)));
+		printf( " FIN - Computar Hierarchical skinning.\n");
 		fflush(0);
 	//}
 }
