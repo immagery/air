@@ -22,16 +22,16 @@
 using namespace std;
 
 // Euclidean Point Distance
-float interiorDistance(Point3d& cellCtr,
-                       Point3d& nodePt)
+float interiorDistance(Vector3d& cellCtr,
+                       Vector3d& nodePt)
 {
-    return (cellCtr-nodePt).Norm();
+    return (cellCtr-nodePt).norm();
 }
 
 // Interior Distances test with euclidean points
-bool ownerDistIsLower(Point3d ptOwner,
-                      Point3d intruder,
-                      Point3d cell)
+bool ownerDistIsLower(Vector3d ptOwner,
+                      Vector3d intruder,
+                      Vector3d cell)
 {
     return ( interiorDistance(ptOwner,cell) <= interiorDistance(cell,intruder) );
 }
@@ -263,8 +263,8 @@ float computeWeightProportional(float partDistance,
     return weight;
 }
 
-float computeWeight(Point3d cellCtr,
-                    Point3d nodePt,
+float computeWeight(Vector3d cellCtr,
+                    Vector3d nodePt,
                     float baseDistance,
                     bool invert = true,
                     double K = 100,
@@ -359,8 +359,8 @@ void weightsSmoothing(Modelo& m, binding* bd,
 				}
 
 				// Distancia entre puntos... cuando tenga biharmonic distances ya estará calculado.
-				Point3d vec = pd.node->position - bd->pointData[snNeighbour->id].node->position;
-				float edgeDistance = vec.Norm();
+				Vector3d vec = pd.node->position - bd->pointData[snNeighbour->id].node->position;
+				float edgeDistance = vec.norm();
 				float distanceWeight = computeWeightProportional(edgeDistance, smoothPropagationRatio, true);
 
 				// La media es ponderada
@@ -879,7 +879,7 @@ void ComputeSkining(Modelo& m)
 
     bb->embeddedPoints.resize(bb->intPoints.size());
 
-    vector< Point3d> auxPoints(bb->intPoints.size());
+    vector< Vector3d> auxPoints(bb->intPoints.size());
 	for(unsigned int ap = 0; ap < auxPoints.size(); ap++)
         auxPoints[ap] = bb->intPoints[ap].pos;
 
@@ -1446,7 +1446,7 @@ void getConnexComponents(grid3d& grid,
 					{
 						cell->data->component = -1;
 						cell->data->assigned = false;
-						cell->data->pos = Point3i(i,j,k);
+						cell->data->pos = Vector3i(i,j,k);
 						IdCells.push_back(cell);
 					}
 				}
@@ -1849,12 +1849,12 @@ void computeSecondaryWeights(Modelo* m)
 					// 3. Obtenemos la derivada en los dos puntos
 					float threshold = 0.001;
 				
-					Point3d dir = nextNodePtr->pos - firstNodePtr->pos;
+					Vector3d dir = nextNodePtr->pos - firstNodePtr->pos;
 
-					float distSegment = dir.Norm();
-					float dist = (dir*threshold).Norm();
+					float distSegment = dir.norm();
+					float dist = (dir*threshold).norm();
 
-					std::vector< Point3d > auxPoints; auxPoints.resize(2);
+					std::vector< Vector3d > auxPoints; auxPoints.resize(2);
 					auxPoints[0] = firstNodePtr->pos - dir*threshold;
 					auxPoints[1] = nextNodePtr->pos + dir*threshold;
 
@@ -1886,11 +1886,11 @@ void computeSecondaryWeights(Modelo* m)
 					float x = (-d1*(distSegment+dist))/(d2-d1);
 					//float x = (-d1*(distSegment))/(d2-d1);
 
-					float iniSegment = (firstNodePtr->pos- jt->nodes[0]->pos).Norm();
+					float iniSegment = (firstNodePtr->pos- jt->nodes[0]->pos).norm();
 
 					// Cae dentro del segmento y hemos averiguado la posición exacta, o bastante aproximada.
 					float posRel = x - dist/2.0 + iniSegment;
-					float totalLength = (jt->nodes.back()->pos- jt->nodes[0]->pos).Norm();
+					float totalLength = (jt->nodes.back()->pos- jt->nodes[0]->pos).norm();
 
 					int pointIdx = dp.node->id;
 
@@ -1926,7 +1926,7 @@ void computeSecondaryWeights(Modelo* m)
 
 						// Hacer comprobacion para ver que es la menor distancia posible.
 						/*vector<double> weightsTemp2;
-						Point3d newPoint = bestNodePtr->pos + dir*(x/distSegment); 
+						Vector3d newPoint = bestNodePtr->pos + dir*(x/distSegment); 
 						vector<int> weightsSort2; 
 
 						mvcAllBindings(newPoint, weightsTemp2, m->bindings, *m);
@@ -2478,7 +2478,7 @@ void normalizeDistances(Modelo& m)
 						maxY = idY;
 					}
 
-					double distance1 = (bindings[i]->pointData[idX].node->position - bindings[i]->pointData[idY].node->position).Norm();
+					double distance1 = (bindings[i]->pointData[idX].node->position - bindings[i]->pointData[idY].node->position).norm();
 					double ratio1 = distance1/bindings[i]->BihDistances.get(idX,idY);
 					int stop = 0;
 				}
@@ -2505,7 +2505,7 @@ void normalizeDistances(Modelo& m)
 			}
 			*/
 
-			double distance = (bindings[i]->pointData[maxX].node->position - bindings[i]->pointData[maxY].node->position).Norm();
+			double distance = (bindings[i]->pointData[maxX].node->position - bindings[i]->pointData[maxY].node->position).norm();
 			
 			if(maxX == maxY) // la diagonal es 0 -> no deberia dar.
 				continue;

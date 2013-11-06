@@ -208,21 +208,21 @@ bool propagateExpansion(DefGroup& gr, float parentValue, int childId, float chil
 	return true;
 }
 
-int subdivideStick(Point3d origen, Point3d fin, int defGorupIdx, int childDefGorupIdx,
+int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio)
 {
 	//float subdivisionRatio = subdivisionRatio_DEF;
-	//Point3d origen =  parent->getWorldPosition();
-	//Point3d fin = child->getWorldPosition();
+	//Vector3d origen =  parent->getWorldPosition();
+	//Vector3d fin = child->getWorldPosition();
 	int boneId = defGorupIdx;
 
-	double longitud= (float)((fin-origen).Norm());
+	double longitud= (float)((fin-origen).norm());
 	double endChop = longitud*endChop_DEF;
 
 	if(longitud == 0)
 		return 0;
 
-	Point3d dir = (fin-origen)/longitud;
+	Vector3d dir = (fin-origen)/longitud;
 	longitud = longitud - endChop;
 	int numDivisions = (int)floor(longitud/subdivisionRatio);
 
@@ -230,8 +230,8 @@ int subdivideStick(Point3d origen, Point3d fin, int defGorupIdx, int childDefGor
 	if(numDivisions > 0)
 		newSubdivLength = longitud/ double(numDivisions);
 
-	Point3d newOrigen = origen;
-	Point3d newFin = fin-dir*endChop;
+	Vector3d newOrigen = origen;
+	Vector3d newFin = fin-dir*endChop;
 
 	// Añadimos los nodos
 	// Saltamos el primer nodo que corresponde a la raíz del joint
@@ -247,7 +247,7 @@ int subdivideStick(Point3d origen, Point3d fin, int defGorupIdx, int childDefGor
 
 	if(VERBOSE)
 	{
-		float error = (float)(newFin - nodePoints.back().pos).Norm();
+		float error = (float)(newFin - nodePoints.back().pos).norm();
 		if(longitud>subdivisionRatio && fabs(error) > pow(10.0, -5))
 		{
 			// TODEBUG

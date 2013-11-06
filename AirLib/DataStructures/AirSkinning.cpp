@@ -85,18 +85,18 @@ void AirSkinning::computeDeformations()
 				GraphNode* node = data.node;
 				int vertexID = node->id;
 
-				Point3d finalPosition (0,0,0);
+				Vector3d finalPosition (0,0,0);
 				float totalWeight = 0;
 
-				Point3d rotDir; 
+				Vector3d rotDir; 
 				for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
 				{   
 					int skID = data.influences[kk].label;
 					//joint& jt = deformersRestPosition[skID];
 					joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
-					Point3d& restPosition = originalModels[i]->nodes[vertexID]->position;
-					Vector3d restPos2(restPosition.X(), restPosition.Y(), restPosition.Z());
+					Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
+					Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 
 					Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
 					
@@ -105,9 +105,9 @@ void AirSkinning::computeDeformations()
 
 					float weight = data.influences[kk].weightValue;
 
-					//finalPosition = finalPosition + Point3d(finalPos(0), finalPos(1), finalPos(2)) * weight;
+					//finalPosition = finalPosition + Vector3d(finalPos(0), finalPos(1), finalPos(2)) * weight;
 
-					finalPosition = finalPosition + Point3d(finalPos2(0), finalPos2(1), finalPos2(2)) * weight;
+					finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * weight;
 
 					totalWeight += data.influences[kk].weightValue;
 					

@@ -45,7 +45,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 
 	for(int findex = 0; findex < notrg; findex++ ) 
 	{
-		Point3d pt1, pt2, pt3;
+		Vector3d pt1, pt2, pt3;
 		//Aseguramos que son todo tri·ngulos.
 		assert(bd->surface.triangles[findex]->verts.size() == 3);
 
@@ -55,9 +55,9 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 
         // Calculamos el area
         Vector3d trgx, trgy, trgz;
-        trgx << pt1.X(), pt2.X(), pt3.X(); // Los valores de X
-        trgy << pt1.Y(), pt2.Y(), pt3.Y(); // Los valores de Y
-        trgz << pt1.Z(), pt2.Z(), pt3.Z(); // Los valores de Z
+        trgx << pt1.x(), pt2.x(), pt3.x(); // Los valores de X
+        trgy << pt1.y(), pt2.y(), pt3.y(); // Los valores de Y
+        trgz << pt1.z(), pt2.z(), pt3.z(); // Los valores de Z
 
         Matrix3d aa, bb, cc;
         aa << trgx, trgy, bir;
@@ -81,9 +81,9 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 		for(int findex = 0; findex < bd->virtualTriangles.size(); findex++ ) 
 		{
 			Vector3d trgx, trgy, trgz;
-			Point3d& pt1 = bd->virtualTriangles[findex].pts[0]->position;
-			Point3d& pt2 = bd->virtualTriangles[findex].pts[1]->position;
-			Point3d& pt3 = bd->virtualTriangles[findex].pts[2]->position;
+			Vector3d& pt1 = bd->virtualTriangles[findex].pts[0]->position;
+			Vector3d& pt2 = bd->virtualTriangles[findex].pts[1]->position;
+			Vector3d& pt3 = bd->virtualTriangles[findex].pts[2]->position;
 
 			trgx << pt1.X(), pt2.X(), pt3.X(); // Los valores de X
 			trgy << pt1.Y(), pt2.Y(), pt3.Y(); // Los valores de Y
@@ -128,13 +128,13 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
                 int j = jj-1;
                 int k = kk-1;
 				
-				Point3d pti, ptj, ptk;
+				Vector3d pti, ptj, ptk;
 				pti = bd->surface.triangles[nFace]->verts[i]->position;
 				ptj = bd->surface.triangles[nFace]->verts[j]->position;
 				ptk = bd->surface.triangles[nFace]->verts[k]->position;
 
-                Vector3d e2; e2 << ptj.X()-ptk.X(), ptj.Y()-ptk.Y(), ptj.Z()-ptk.Z();
-                Vector3d e3; e3 << pti.X()-ptk.X(), pti.Y()-ptk.Y(), pti.Z()-ptk.Z();
+                Vector3d e2; e2 << ptj.x()-ptk.x(), ptj.y()-ptk.y(), ptj.z()-ptk.z();
+                Vector3d e3; e3 << pti.x()-ptk.x(), pti.y()-ptk.y(), pti.z()-ptk.z();
 
                 double cosa = e2.dot(e3) / sqrt(e2.squaredNorm()*e3.squaredNorm());
                 double sina = sqrt(1-pow(cosa,2));
@@ -161,7 +161,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 		for(int findex = 0; findex < bd->virtualTriangles.size(); findex++ ) 
 		{
 			Vector3d trgx, trgy, trgz;
-			Point3d pts[3];
+			Vector3d pts[3];
 			pts[0] = bd->virtualTriangles[findex].pts[0]->position;
 			pts[1] = bd->virtualTriangles[findex].pts[1]->position;
 			pts[2] = bd->virtualTriangles[findex].pts[2]->position;
@@ -327,6 +327,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 	return 0;
 }
 
+/*
 int biharmonicDistances(MyMesh& modelo, std::vector<int>& indices, Eigen::MatrixXd& dists)
 {
 	printf("computing Biharmonic distances.\n");
@@ -396,7 +397,7 @@ int biharmonicDistances(MyMesh& modelo, std::vector<int>& indices, Eigen::Matrix
     // Recorremos los vértices y acumulamos el area de sus triángulos ponderado por 1/3 que le corresponde.
     MyMesh::VertexIterator vi;  idx = 0;
     for(vi = modelo.vert.begin(); vi!=modelo.vert.end(); ++vi ) {
-         vcg::face::VFIterator<MyFace> vfi(&(*vi)); //initialize the iterator to the first face
+          face::VFIterator<MyFace> vfi(&(*vi)); //initialize the iterator to the first face
          for(;!vfi.End();++vfi) {
            MyFace* f = vfi.F();
            AM(idx) += trgarea(f->IMark())/3;
@@ -640,4 +641,4 @@ int biharmonicDistances(MyMesh& modelo, std::vector<int>& indices, Eigen::Matrix
     return idxSize;
 }
 
-
+*/

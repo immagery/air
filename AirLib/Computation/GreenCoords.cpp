@@ -7,6 +7,7 @@
 #include <cmath>
 
 using namespace std;
+using namespace Eigen;
 
 // devuelve el signo del valor de entrada.
 /*double valueSign(double v)
@@ -17,18 +18,19 @@ using namespace std;
 		return -1;
 }*/
 
-double GCTriInt(vcg::Point3d p, vcg::Point3d v1, vcg::Point3d v2, vcg::Point3d pt)
+/*
+double GCTriInt( Vector3d p,  Vector3d v1,  Vector3d v2,  Vector3d pt)
 {
     double alfa, beta, lambda, c;
     double angles[2], I[2];
 
-    double V1_p_norm = (p-v1).Norm();
+    double V1_p_norm = (p-v1).norm();
 
-    alfa = acos(((v2-v1)*(p-v1))/((v2-v1).Norm()*V1_p_norm));
-    beta = acos(((v1-p)*(v2-p))/(V1_p_norm*((v2-p).Norm())));
+    alfa = acos((double)(((v2-v1)*(p-v1))/((v2-v1).norm()*V1_p_norm)));
+    beta = acos(((v1-p)*(v2-p))/(V1_p_norm*((v2-p).norm())));
 
     lambda = V1_p_norm * V1_p_norm * sin(alfa) * sin(alfa);
-    c = pow((p-pt).Norm(),2);
+    c = pow((p-pt).norm(),2);
 
     angles[0] = M_PI - alfa;
     angles[1] = M_PI - alfa - beta;
@@ -52,7 +54,7 @@ double GCTriInt(vcg::Point3d p, vcg::Point3d v1, vcg::Point3d v2, vcg::Point3d p
 
     return (-1/(4*M_PI))*fabs(I[0]-I[1]-cRoot*beta);
 }
-
+*/
 
 // Guardamos en binario el grid entero, para no tener que recalcular cada vez
 void LoadGCCoordsFromFile(std::vector< std::vector<float> > &PerVertGC, std::vector< std::vector<float> > &PerFaceGC, string sFileName)
@@ -132,10 +134,11 @@ void SaveGCCoordsToFile(std::vector< std::vector<float> > &PerVertGC, std::vecto
 }
 
 
+/*
 void gpCalculateGreenCoordinates(MyMesh& mesh, MyMesh& cage, std::vector< std::vector<float> > &PerVertGC, std::vector< std::vector<float> > &PerFaceGC, string sSavingFile)
 {
 	//TODEBUG: quitar referencias a QT
-	/*
+	
     FILE* fout;
     fout = fopen(QString(QDir::currentPath()+"/log.txt").toStdString().c_str(), "w");
 
@@ -156,7 +159,7 @@ void gpCalculateGreenCoordinates(MyMesh& mesh, MyMesh& cage, std::vector< std::v
     }
 
     // Obtenemos los handlers para modificar las coordenadas
-    vcg::Point3d zero; zero.SetZero(); // Valor cero por defecto para pasar por parámetro.
+     Vector3d zero; zero.SetZero(); // Valor cero por defecto para pasar por parámetro.
 
     MyMesh::VertexIterator pt;
 
@@ -170,16 +173,16 @@ void gpCalculateGreenCoordinates(MyMesh& mesh, MyMesh& cage, std::vector< std::v
          MyMesh::FaceIterator fj;
          for(fj = cage.face.begin(); fj!=cage.face.end(); ++fj ){
 
-             vcg::Point3d vj[3], q, N[3], w; w.SetZero();
+              Vector3d vj[3], q, N[3], w; w.SetZero();
              double I[3], II[3], s[3];
 
-             vcg::Point3d nj(fj->N()); // normal de la cara
+              Vector3d nj(fj->N()); // normal de la cara
              nj = nj / nj.Norm();
 
              // Proyección del punto de la maya en el triángulo
-             for(int l = 0; l<3; l++)  vj[l] = vcg::Point3d(fj->V(l)->P() - pt->P());
+             for(int l = 0; l<3; l++)  vj[l] =  Vector3d(fj->V(l)->P() - pt->P());
 
-             vcg::Point3d p(nj*(vj[0]*nj));
+              Vector3d p(nj*(vj[0]*nj));
 
              for(int i = 0; i<3; i++)
              {
@@ -231,9 +234,11 @@ void gpCalculateGreenCoordinates(MyMesh& mesh, MyMesh& cage, std::vector< std::v
     if(!sSavingFile.empty())
         SaveGCCoordsToFile(PerVertGC, PerFaceGC, sSavingFile.c_str());
 
-	*/
+	
 }
+*/
 
+/*
 void deformMeshWithGC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCage, std::vector< std::vector<float> >& PerVertGC, std::vector< std::vector<float> >& PerFaceGC)
 {
     MyMesh::VertexIterator pt;
@@ -247,13 +252,13 @@ void deformMeshWithGC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCa
     cageFace = cage.face.begin();
     for(MyMesh::FaceIterator newCageFace = newCage.face.begin(); newCageFace!=newCage.face.end(); ++newCageFace )
     {
-        vcg::Point3d u1 = cageFace->V(1)->P() - cageFace->V(0)->P();
-        vcg::Point3d v1 = cageFace->V(2)->P() - cageFace->V(0)->P();
+         Vector3d u1 = cageFace->V(1)->P() - cageFace->V(0)->P();
+         Vector3d v1 = cageFace->V(2)->P() - cageFace->V(0)->P();
 
-        vcg::Point3d u2 = newCageFace->V(1)->P() - newCageFace->V(0)->P();
-        vcg::Point3d v2 = newCageFace->V(2)->P() - newCageFace->V(0)->P();
+         Vector3d u2 = newCageFace->V(1)->P() - newCageFace->V(0)->P();
+         Vector3d v2 = newCageFace->V(2)->P() - newCageFace->V(0)->P();
 
-        vcg::Point3d Vu = (cageFace->V(2)->P() - cageFace->V(0)->P());
+         Vector3d Vu = (cageFace->V(2)->P() - cageFace->V(0)->P());
         Vu = Vu / Vu.Norm();
         Vu = Vu*(Vu*u1);
 
@@ -270,7 +275,7 @@ void deformMeshWithGC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCa
 
     for(pt = newMesh.vert.begin(); pt!=newMesh.vert.end(); ++pt )
     {
-        vcg::Point3d ptAux(0,0,0);
+         Vector3d ptAux(0,0,0);
 
         //double coordVertSum = 0;
         MyMesh::VertexIterator cagePt;
@@ -295,5 +300,5 @@ void deformMeshWithGC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCa
 
     //printf("Suma para de coord esta entre el %f y el %f\n", minV, maxV); fflush(0);
 }
-
+*/
 

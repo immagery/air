@@ -67,7 +67,7 @@ void SaveMVCoordsToFile(std::vector< std::vector<float> > &PerVertMVC, string sF
     myfile.close();
 }
 
-
+/*
 void CalculateMeanValueCoords(MyMesh& mesh, MyMesh& cage, std::vector< std::vector<float> > &PerVertMVC, string sFileName)
 {
     //FILE* fout;
@@ -84,14 +84,14 @@ void CalculateMeanValueCoords(MyMesh& mesh, MyMesh& cage, std::vector< std::vect
         PerVertMVC[i].resize(cageVertNumber, 0);
 
     // Obtenemos los handlers para modificar las coordenadas
-    vcg::Point3d zero; zero.SetZero(); // Valor cero por defecto para pasar por parámetro.
+     Vector3d zero; zero.SetZero(); // Valor cero por defecto para pasar por parámetro.
 
     MyMesh::VertexIterator pt;
 
     //fprintf(fout,"Inicio del calculo de las coordenadas\n\nVertices malla: %d\n verts caja: %d, triangulos caja: %d\n\n", meshVertNumber, cageVertNumber, cageFaceNumber); fflush(fout);
     for(pt = mesh.vert.begin(); pt!=mesh.vert.end(); ++pt ){
 
-        vector<vcg::Point3d> unitVectors;
+        vector< Vector3d> unitVectors;
         vector<double> normas;
         unitVectors.resize(cage.vn);
         normas.resize(cage.vn);
@@ -122,7 +122,7 @@ void CalculateMeanValueCoords(MyMesh& mesh, MyMesh& cage, std::vector< std::vect
          MyMesh::FaceIterator fj;
          for(fj = cage.face.begin(); fj!=cage.face.end(); ++fj ){
 
-             vcg::Point3d O, c, s;
+              Vector3d O, c, s;
 
              for(int i = 0; i<3; i++)
              {
@@ -136,7 +136,7 @@ void CalculateMeanValueCoords(MyMesh& mesh, MyMesh& cage, std::vector< std::vect
 
              if(M_PI - h < error)
              {
-                 vcg::Point3d w;
+                  Vector3d w;
                  // x esta sobre t, usar coords bar 2D.
                  for(int i = 0; i<3; i++)
                  {
@@ -195,7 +195,8 @@ void CalculateMeanValueCoords(MyMesh& mesh, MyMesh& cage, std::vector< std::vect
     if(!sFileName.empty())
         SaveMVCoordsToFile(PerVertMVC, sFileName.c_str());
 }
-
+*/
+/*
 void deformMeshWithMVC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newCage, std::vector< std::vector<float> >& PerVertMVC)
 {
     bool coordDebug = false;
@@ -210,7 +211,7 @@ void deformMeshWithMVC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newC
     for(pt = newMesh.vert.begin(); pt!=newMesh.vert.end(); ++pt )
     {
 
-        vcg::Point3d ptAux(0,0,0);
+         Vector3d ptAux(0,0,0);
 
         double coordVertSum = 0;
         MyMesh::VertexIterator newcagePt;
@@ -238,5 +239,5 @@ void deformMeshWithMVC(MyMesh& mesh, MyMesh& cage, MyMesh& newMesh, MyMesh& newC
         if(coordDebug) printf("Coord esta entre el %f y el %f\n", minC, maxC);
         fflush(0);
 }
-
+*/
 

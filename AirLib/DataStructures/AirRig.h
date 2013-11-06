@@ -8,6 +8,8 @@
 #include <DataStructures/Modelo.h>
 #include <DataStructures\AirSkinning.h>
 
+#include <Eigen/Dense>
+
 #define endChop_DEF 0.001
 #define ratioExpansion_DEF 0.7
 
@@ -18,6 +20,7 @@
 #define default_EXPANSION 1
 
 using namespace std;
+using namespace Eigen;
 
 // This clases define the dependency relationship between deformers,
 
@@ -73,13 +76,13 @@ public:
 class PointConstraint : public Constraint
 {
 public:
-	Point3d offset;
-	Point3d value;
+	Vector3d offset;
+	Vector3d value;
 
 	PointConstraint() : Constraint()
 	{
-		offset = Point3d(0,0,0);
-		value = Point3d(0,0,0);
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
 	}
 
 };
@@ -87,26 +90,26 @@ public:
 class OrientConstraint : public Constraint
 {
 public:
-	Point3d offset;
-	Point3d value;
+	Vector3d offset;
+	Vector3d value;
 
 	OrientConstraint() : Constraint()
 	{
-		offset = Point3d(0,0,0);
-		value = Point3d(0,0,0);
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
 	}
 };
 
 class ScaleConstraint : public Constraint
 {
 public:
-	Point3d offset;
-	Point3d value;
+	Vector3d offset;
+	Vector3d value;
 
 	ScaleConstraint() : Constraint()
 	{
-		offset = Point3d(0,0,0);
-		value = Point3d(0,0,0);
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
 	}
 };
 
@@ -212,7 +215,7 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig);
 bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups );
 
 // Propose a division in deformers from a given stick
-int subdivideStick(Point3d origen, Point3d fin, int defGorupIdx, int childDefGorupIdx,
+int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio);
 
 

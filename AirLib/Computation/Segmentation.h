@@ -32,12 +32,14 @@ public:
 	vector<double> embeding;
 };
 
+/*
 void computeSkinning(MyMesh& mesh,
                      grid3d& grid,
                      voronoiGraphData& v,
                      vector< vector<double> >& embeddedPoints,
                      vector< vector<double> >& embedding,
                      bool onlyBorders = false);
+*/
 
 void buildVoronoiGraph(grid3d& grid,
                        vector< vector<bool> >& voronoiGraph,
@@ -77,6 +79,7 @@ void traduceSegmentation(grid3d& grid, vector<int>& traductionTable);
 
 void traducePartialSegmentation(Modelo &grid, map<int, int> &traductionTable);
 
+/*
 void gridInit(MyMesh& mesh,
                grid3d& grid);
 
@@ -84,13 +87,14 @@ int gridCellsEmbeddingInterpolation(MyMesh& mesh,
                                     grid3d& grid,
                                     vector< vector<double> >& embedding,
                                     bool onlyBorders);
+*/
 
 void initGridFlagsForFrontPropagation(grid3d& grid, int idFront);
-void initfrontWithBoundaries(grid3d& grid, vector< Point3i >& front, int nodeId);
+void initfrontWithBoundaries(grid3d& grid, vector< Vector3i >& front, int nodeId);
 
 void borderFrontSmoothing(grid3d& grid,
-						  vector< Point3i >& front,
-						  vector<Point3i>& postProcess,
+						  vector< Vector3i >& front,
+						  vector<Vector3i>& postProcess,
 						  float smoothPropagationRatio,
 						  int idFront);
 
