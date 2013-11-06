@@ -11,7 +11,7 @@
 
 using namespace std;
 
-void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, vector<binding*> bd, Modelo& modelo)
+void mvcAllBindings(vcg::Point3d& point, vector<double>& weights, Modelo& modelo)
 {
 	
     const double tresh1 = 0.0001;

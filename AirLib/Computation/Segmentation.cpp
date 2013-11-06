@@ -10,7 +10,6 @@
 #include <Computation/BiharmonicDistances.h>
 
 #define MAX_LENGTH 99999999
-#define FIRST_ITERATION -1
 #define MIN_CONFIDENCE_LEVEL 1.0
 #define PROPAGATION_UNIT 10.0
 #define VERBOSE false
@@ -407,10 +406,6 @@ void SmoothFromSegment(Modelo& m, binding* bd, int frontId)
 
     // Smoothing (sin corte jerárquico)
 	if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
-
-	//float realSmooth = grid.smoothPropagationRatio* grid.worldScale;
-	//int smoothingPasses = 2;
-	//float realSmooth = 0.15;
 
 	int smoothingPasses = bd->smoothingPasses;
 	float realSmooth = bd->smoothPropagationRatio;
@@ -915,7 +910,7 @@ void ComputeSkining(Modelo& m)
 		// MVC
 		if(useMVC)
 		{
-			mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m.bindings, m);
+			mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m);
 			doubleArrangeElements_wS_fast(bb->embeddedPoints[i],bb->weightsSort[i], currentThreshold[i]);
 		}
 		else
@@ -1298,13 +1293,7 @@ void computeHierarchicalSkinning(Modelo &m, binding* bb)
 
 void initDomain(Modelo& m, binding* bd, int domainId_init)
 {
-    //MyMesh::VertexIterator vi;
-    //for(vi = m.vert.begin(); vi!=m.vert.end(); ++vi )
-    //{
-    //    Point3d pt = vi->P();
-    //    int VertIdx = vi->IMark();
-
-        // Assegurar que los indices guardados en los vertices de la maya estan bien.
+    // Assegurar que los indices guardados en los vertices de la maya estan bien.
     //    assert(VertIdx >= 0 && VertIdx < m.vn);
 	for(unsigned int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
 	{
@@ -1879,7 +1868,7 @@ void computeSecondaryWeights(Modelo* m)
 					float values[2];
 					for(unsigned int i = 0; i< auxPoints.size(); i++)
 					{
-						mvcAllBindings(auxPoints[i], weightsTemp[i], m->bindings, *m);
+						mvcAllBindings(auxPoints[i], weightsTemp[i], *m);
 						//thresh = 1;
 						doubleArrangeElements_wS_fast(weightsTemp[i],weightsSort[i], thresh);
 				

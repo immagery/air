@@ -7,6 +7,7 @@
 
 #define DOUBLESIZE 8
 #define MBSIZEINBYTES 1048576
+#define FIRST_ITERATION -1
 
 #define useMVC true
 
@@ -131,4 +132,18 @@ void normalizeDistances(Modelo& m);
 bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches = false);
 bool LoadEmbeddings(Modelo& m, char* bindingFileName);
 void SaveEmbeddings(Modelo& model, char* fileName, bool ascii = false);
+
+
+// For hierarchical skinning
+void clearOlderComputations(Modelo& m);
+void initDomain(Modelo& m, binding* bd, int domainId_init);
+void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable);
+void SmoothFromSegment(Modelo& m, binding* bd, int frontId);
+void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, int nodeId);
+void weightsSmoothing(Modelo& m, binding* bd,
+                      vector< int >& front,
+                      float smoothPropagationRatio,
+                      int idFront,
+					  int smoothingPasses);
+
 #endif // VORONOICOMP_H
