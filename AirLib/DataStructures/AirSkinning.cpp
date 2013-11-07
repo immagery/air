@@ -98,7 +98,39 @@ void AirSkinning::computeDeformations()
 					Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
 					Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 
-					Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
+					Quaterniond apliedRotation;
+					apliedRotation = jt->rotation;
+					//apliedRotation = apliedRotation * 
+
+					if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1)
+					{
+						double twist = 0;
+						
+						Vector3d axis = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->translation - rig->defRig.defGroupsRef[skID]->transformation->translation;
+						axis.normalize();
+
+						Quaterniond localRotationChild =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qOrient * 
+														  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qrot;
+
+						Quaterniond localRotationChildRest =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->restRot;
+
+						Vector3d referenceRest = localRotationChildRest._transformVector(axis);
+						Vector3d referenceCurr = localRotationChild._transformVector(axis);
+
+						Quaterniond nonRollrotation;
+						nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+						
+						Quaterniond twistExtraction = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
+						
+						Quaterniond twistRotation(twistExtraction.w(), axis.x(), axis.y(), axis.z());
+						twistRotation.normalize();
+
+						float secondWeight = data.secondInfluences[kk][0];
+
+						apliedRotation = apliedRotation * twistExtraction;
+					}
+
+					Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
 					
 					//Vector4f restPos(restPosition.X(), restPosition.Y(), restPosition.Z(), 1);
 					//Vector4f finalPos =  jt->W * jt->iT * restPos;	
@@ -122,8 +154,7 @@ void AirSkinning::computeDeformations()
 
 		}
 		if (updated)
-		{
-			
+		{		
 			m->computeNormals();
 		}
 	}

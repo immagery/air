@@ -21,4 +21,7 @@ void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int 
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph);
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group);
 
+// Compute secondary weights - now is not updating data, it computes what ever it needs.
+void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
+
 #endif // AIR_SEGMENTATION_H

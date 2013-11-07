@@ -108,6 +108,9 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 
 	// Update Smooth propagation
 	propagateHierarchicalSkinning(model, model.bindings[0], graph);
+
+	// Compute Secondary weights ... by now compute all the sec. weights
+	computeSecondaryWeights(model, model.bindings[0], graph);
 	
 }
 
@@ -325,5 +328,175 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 		}
 
 		def->dirtyFlag = false;
+	}
+}
+
+int indexOfNode(int nodeId, vector<DefNode>& nodes)
+{
+	for(int i = 0; i< nodes.size(); i++)
+	{
+		if(nodes[i].nodeId == nodeId) return i;
+	}
+
+	return -1;
+}
+
+void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
+{
+    // No hay ningun binding
+    if(!bd ) return;
+
+	vector< DefNode >& points = bd->intPoints;
+	vector< vector<double> >& weights = bd->embeddedPoints;
+	vector< vector<int> >& sortedWeights = bd->weightsSort;
+	vector< vector<weight> >& weightsClean = bd->weightsFiltered; 
+		
+	for(int pt = 0; pt < bd->pointData.size(); pt++)
+	{
+		if(pt%300 == 0)
+		{
+			printf("%fp.\n", (float)pt/(float)bd->pointData.size());
+			fflush(0);
+		}
+
+		PointData& dp = bd->pointData[pt];
+		dp.secondInfluences.resize(dp.influences.size());
+		for(int infl = 0; infl< dp.influences.size(); infl++)
+		{
+			int idInfl = dp.influences[infl].label;
+			DefGroup* group = graph.defGroupsRef[idInfl];
+
+			dp.secondInfluences[infl].resize(group->relatedGroups.size(), 0.0);
+
+			// El Hijo que ya esta asignado
+			DefNode* asignedNode = &group->deformers[indexOfNode(dp.segmentId,group->deformers)];
+			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
+			{
+				if(group->relatedGroups[childIdx]->nodeId == asignedNode->childBoneId)
+				{
+					dp.secondInfluences[infl][childIdx] = 1-asignedNode->ratio;
+				}
+			}
+
+			// Discretizamos el resto segun el hijo
+			vector<DefNode*> defs;
+			for(int idxNode = 0; idxNode < group->deformers.size(); idxNode++)
+			{
+				DefNode& node = group->deformers[idxNode];
+
+				if(node.boneId != group->nodeId)
+				{
+					// En principio ninguno entrara por aqui
+					continue;
+				}
+
+				if(node.childBoneId != asignedNode->childBoneId)
+				{
+					defs.push_back(&node);
+				}
+			}
+
+			//Evaluaremos para cada hijo, cual es el mejor defNode y asigmanos su ratio
+			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
+			{
+				float dist = 9999999;
+				int nodeIdChildSegment = -1;
+				
+				for(int idxNode = 0; idxNode < defs.size(); idxNode++)
+				{
+					// Solo comparamos entre si los nodos que van al mismo hijo.
+					if(defs[idxNode]->childBoneId != group->relatedGroups[childIdx]->nodeId )
+						continue;
+
+					DefNode* def = defs[idxNode];
+					float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
+										def->weightsSort, 
+										pt, bd, 
+										def->expansion, 
+										def->precomputedDistances, 
+										def->cuttingThreshold);
+
+					if(nodeIdChildSegment < 0)
+					{
+						nodeIdChildSegment = idxNode;
+						dist = newDistance;
+					}
+					else if(newDistance < dist)
+					{
+						nodeIdChildSegment = idxNode;
+						dist = newDistance;
+					}
+				}
+
+				dp.secondInfluences[infl][childIdx] = 1-defs[nodeIdChildSegment]->ratio;
+
+			}
+			/*
+				if(group)
+					// Recogemos los nodos relevantes.
+					vector<DefNode*> relevantNodes;
+					for(int candidateNodes = 0; candidateNodes < jt->nodes.size(); candidateNodes++)
+					{
+						if(jt->nodes[candidateNodes]->childBoneId < 0)
+						{
+							relevantNodes.push_back(jt->nodes[candidateNodes]);
+							continue;
+						}
+						else if(jt->nodes[candidateNodes]->childBoneId == jt->childs[childIdx]->nodeId)
+						{
+							relevantNodes.push_back(jt->nodes[candidateNodes]);
+						}
+					}
+					// Debería haber al menos 1 nodo.
+					// Lo empilamos para evaluar todo el segmento.
+					//relevantNodes.push_back(jt->childs[childIdx]->nodes[0]);
+
+					double thresh = -10;// bd->weightsCutThreshold;
+				
+					float bestDistance = 9999999;
+					int bestNode = -1;
+
+					float secondDistance = 99999099;
+					int secondNode = -1;
+
+					// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
+
+					for(int node = 0; node < relevantNodes.size(); node++)
+					{
+						int idxNode = indexOfNode(relevantNodes[node]->nodeId, bd->intPoints);
+
+						assert(idxNode >= 0);
+
+						float distance = 0;
+						if(useMVC)
+						{
+							distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+						}
+						else
+						{
+							//distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
+							distance = -BiharmonicDistanceP2P_HC(weightsClean[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances);
+						}
+						if(bestNode == -1 || bestDistance > distance)
+						{
+							secondNode = bestNode;
+							secondDistance = bestDistance;
+
+							bestNode = node;
+							bestDistance = distance;
+						}
+						else if(secondNode == -1 || secondDistance > distance)
+						{
+							secondNode = node;
+							secondDistance = distance;
+						}
+					}
+
+					dp.secondInfluences[infl][childIdx] = 1-((float)bestNode/((float)relevantNodes.size()-1));
+					continue;
+
+				}
+			}
+			*/
 	}
 }
