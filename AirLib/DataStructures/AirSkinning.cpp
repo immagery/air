@@ -46,6 +46,28 @@ void AirSkinning::computeDeformationsWithSW()
 {
 }
 
+float isOverItsDefGroup(DefGroup* group, int nodeId)
+{
+	for(int defIdx = 0; defIdx < group->deformers.size(); defIdx++)
+	{
+		if(group->deformers[defIdx].nodeId = nodeId)
+			return 1.0;
+	}
+
+	return 0.0;
+}
+
+bool thereIsInfluenceOf(vector<weight>& influences, int idInfl)
+{
+	for(int i = 0; i< influences.size(); i++)
+	{
+		if(influences[i].label == idInfl)
+			return true;
+	}
+
+	return false;
+}
+
 void AirSkinning::computeDeformations()
 {
 	//if (deformersRestPosition.size() == 0) return;
@@ -98,48 +120,70 @@ void AirSkinning::computeDeformations()
 					Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
 					Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 
-					Quaterniond apliedRotation;
-					apliedRotation = jt->rotation;
-					//apliedRotation = apliedRotation * 
+					Quaterniond apliedRotation = jt->rotation;
+					Quaterniond currentJointTwistAppliying = Quaterniond::Identity();
+
+					float currentWeight = data.influences[kk].weightValue;
 
 					if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1)
 					{
+						/*
 						double twist = 0;
 						
 						Vector3d axis = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->translation - rig->defRig.defGroupsRef[skID]->transformation->translation;
 						axis.normalize();
+
+						//necesito guardar la transformacion hasta el padre
+
+						Vector3d tempRestRot = rig->defRig.defGroupsRef[skID]->transformation->rRotation._transformVector(axis);
 
 						Quaterniond localRotationChild =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qOrient * 
 														  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qrot;
 
 						Quaterniond localRotationChildRest =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->restRot;
 
-						Vector3d referenceRest = localRotationChildRest._transformVector(axis);
-						Vector3d referenceCurr = localRotationChild._transformVector(axis);
+						Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
+						Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
+
+						if(!referenceRest.isApprox(referenceCurr))
+							int parar = 0;
 
 						Quaterniond nonRollrotation;
 						nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
 						
 						Quaterniond twistExtraction = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
-						
-						Quaterniond twistRotation(twistExtraction.w(), axis.x(), axis.y(), axis.z());
-						twistRotation.normalize();
+						*/
+
+						if(data.secondInfluences[kk].size() == 0)
+							continue;
 
 						float secondWeight = data.secondInfluences[kk][0];
 
-						apliedRotation = apliedRotation * twistExtraction;
+						Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
+						Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
+
+						float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
+						double cuttedWeight = currentWeight * (1.0-cutTwist);
+
+						float secondCutTwist = 0.0;
+
+						//if(!thereIsInfluenceOf(data.influences,skID))
+						//	cuttedWeight = 0;
+
+						Quaterniond twistRotation = Quaterniond::Identity().slerp(secondWeight, childTwist);
+
+						//Quaterniond unTwist = Quaterniond::Identity().slerp(cuttedWeight, twist);
+						Quaterniond unTwist = Quaterniond::Identity();
+
+						if(jt->father)
+							apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+						else
+							apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+
 					}
 
 					Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
-					
-					//Vector4f restPos(restPosition.X(), restPosition.Y(), restPosition.Z(), 1);
-					//Vector4f finalPos =  jt->W * jt->iT * restPos;	
-
-					float weight = data.influences[kk].weightValue;
-
-					//finalPosition = finalPosition + Vector3d(finalPos(0), finalPos(1), finalPos(2)) * weight;
-
-					finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * weight;
+					finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
 
 					totalWeight += data.influences[kk].weightValue;
 					

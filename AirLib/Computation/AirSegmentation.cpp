@@ -35,11 +35,18 @@ bool AirRig::updateDefGroups()
 
 void BuildGroupTree(DefGraph& graph)
 {
+	graph.defNodesRef.clear();
+
 	map<unsigned int, DefGroup*>& groups = graph.defGroupsRef;
 	for(int grIdx = 0; grIdx < graph.defGroups.size(); grIdx++)
 	{
 		groups[graph.defGroups[grIdx]->nodeId] = graph.defGroups[grIdx];
 		graph.defGroups[grIdx]->relatedGroups.clear();
+
+		for(int nodeIdx = 0; nodeIdx < graph.defGroups[grIdx]->deformers.size(); nodeIdx++)
+		{
+			graph.defNodesRef[graph.defGroups[grIdx]->deformers[nodeIdx].nodeId] = &graph.defGroups[grIdx]->deformers[nodeIdx];
+		}
 	}
 
 	map<int, bool> parented;
@@ -367,14 +374,37 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			DefGroup* group = graph.defGroupsRef[idInfl];
 
 			dp.secondInfluences[infl].resize(group->relatedGroups.size(), 0.0);
+			vector<bool> assigned;
+			assigned.resize(group->relatedGroups.size(), false);
 
+			// Si tiene hijos o realmente encuentra el deformador.... hay que ver segmentId, que tal.
+			int idxNodeAsignedAux = indexOfNode(dp.segmentId,group->deformers);
+
+			if(idxNodeAsignedAux<0)
+			{
+				bool found = false;
+				for(int childIdx = 0; childIdx < group->relatedGroups.size() && !found; childIdx++)
+				{
+					found |= (indexOfNode(dp.segmentId,group->relatedGroups[childIdx]->deformers)>= 0);
+					if(found)
+					{
+						dp.secondInfluences[infl][childIdx] = 1.0;
+						break;
+					}
+				}
+				continue;
+			}
+			
 			// El Hijo que ya esta asignado
-			DefNode* asignedNode = &group->deformers[indexOfNode(dp.segmentId,group->deformers)];
+			DefNode* asignedNode = &group->deformers[idxNodeAsignedAux];
 			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
 			{
+				if(assigned[childIdx]) continue;
+
 				if(group->relatedGroups[childIdx]->nodeId == asignedNode->childBoneId)
 				{
-					dp.secondInfluences[infl][childIdx] = 1-asignedNode->ratio;
+					dp.secondInfluences[infl][childIdx] = asignedNode->ratio;
+					assigned[childIdx] = true;
 				}
 			}
 
@@ -397,39 +427,44 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			}
 
 			//Evaluaremos para cada hijo, cual es el mejor defNode y asigmanos su ratio
-			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
+			if(group->relatedGroups.size()>1)
 			{
-				float dist = 9999999;
-				int nodeIdChildSegment = -1;
-				
-				for(int idxNode = 0; idxNode < defs.size(); idxNode++)
+				for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
 				{
-					// Solo comparamos entre si los nodos que van al mismo hijo.
-					if(defs[idxNode]->childBoneId != group->relatedGroups[childIdx]->nodeId )
-						continue;
+					if(assigned[childIdx])continue;
 
-					DefNode* def = defs[idxNode];
-					float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
-										def->weightsSort, 
-										pt, bd, 
-										def->expansion, 
-										def->precomputedDistances, 
-										def->cuttingThreshold);
+					float dist = 9999999;
+					int nodeIdChildSegment = -1;
+				
+					for(int idxNode = 0; idxNode < defs.size(); idxNode++)
+					{
+						// Solo comparamos entre si los nodos que van al mismo hijo.
+						if(defs[idxNode]->childBoneId != group->relatedGroups[childIdx]->nodeId )
+							continue;
 
-					if(nodeIdChildSegment < 0)
-					{
-						nodeIdChildSegment = idxNode;
-						dist = newDistance;
+						DefNode* def = defs[idxNode];
+						float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
+											def->weightsSort, 
+											pt, bd, 
+											def->expansion, 
+											def->precomputedDistances, 
+											def->cuttingThreshold);
+
+						if(nodeIdChildSegment < 0)
+						{
+							nodeIdChildSegment = idxNode;
+							dist = newDistance;
+						}
+						else if(newDistance < dist)
+						{
+							nodeIdChildSegment = idxNode;
+							dist = newDistance;
+						}
 					}
-					else if(newDistance < dist)
-					{
-						nodeIdChildSegment = idxNode;
-						dist = newDistance;
-					}
+
+					dp.secondInfluences[infl][childIdx] = defs[nodeIdChildSegment]->ratio;
+
 				}
-
-				dp.secondInfluences[infl][childIdx] = 1-defs[nodeIdChildSegment]->ratio;
-
 			}
 			/*
 				if(group)
@@ -499,4 +534,5 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			}
 			*/
 	}
+}
 }

@@ -4,9 +4,84 @@
 #include <Computation\mvc_interiorDistances.h>
 #include <DataStructures\InteriorDistancesData.h>
 
+
+// Serialization
+bool Constraint::saveToFile(FILE* fout)
+{ 
+	fprintf(fout, "%d %d %f\n", parent->nodeId, child->nodeId, weight);
+	fflush(fout);
+	return true;
+}
+
+// How can a I load the references.
+bool Constraint::loadFromFile(FILE* fout)
+{
+	// We save the id for restore later the references.
+	float in_weight = 0;
+	int in_parentId, in_childId;
+    fscanf(fout,"%d %d %f", &in_weight, &in_parentId, &in_childId);
+
+	weight = in_weight;
+	idParent = in_parentId;
+	idChild = in_childId;
+
+	// need to update
+	dirtyFlag = true;
+
+	return true;
+}
+
 //////////////////
 //   AIRRIG     //
 //////////////////
+bool AirRig::saveToFile(FILE* fout)
+{
+	if(!fout)
+	{
+		printf("There is no file to print!\n [AIR_RIG]");
+		return false;
+	}
+
+	defRig.saveToFile(fout);
+	controlRig.saveToFile(fout);
+
+	// Skinning 
+	// I don't know if there are something to do here.
+
+	// All the relation with the model and the skeletons
+	// should be done in the previous steps and bind it.
+
+	return true;
+}
+
+// Loads data from this file, it is important to bind
+// this data with the model and skeleton after this function.
+bool AirRig::loadFromFile(FILE* fout)
+{
+		return false;
+}
+
+bool AirRig::bindModel(Modelo& m)
+{
+	// Asign model to this rig
+	model = &m;
+
+	// TODEBUG: Load data form the model???
+	// for consistency.
+
+	return true;
+}
+
+bool AirRig::bindSkeletons(vector<skeleton*>& skts)
+{
+	// bind skeletons
+	// a) assign every pointer to the corresponding joint.
+	// TOFIX: this is temporal, because the process will be
+	// skeletons independet but control units dependant.
+
+	return false;
+}
+
 bool getBDEmbedding(Modelo* model)
 {	
 	bool success = false;
@@ -41,7 +116,8 @@ bool getBDEmbedding(Modelo* model)
                 fflush(0);
                 return false;
             }
-            else SaveEmbeddings(*model, bindingFileName, ascii);
+            else 
+				SaveEmbeddings(*model, bindingFileName, ascii);
         }
     }
 
@@ -87,6 +163,48 @@ AirRig::~AirRig()
 }
 
 //////////////////
+//   DEFGRAPH   //
+//////////////////
+
+bool DefGraph::saveToFile(FILE* fout)
+{
+	if(!fout)
+	{
+		printf("There is no file to print!\n [AIR_RIG]");
+		return false;
+	}
+
+	fprintf(fout, "%d %d\n", defGroups.size(), relations.size()); fflush(fout);
+	for(int groupIdx = 0; groupIdx < defGroups.size(); groupIdx++)
+	{
+		defGroups[groupIdx]->saveToFile(fout);
+	}
+
+	for(int relationIdx = 0; relationIdx < relations.size(); relationIdx++)
+	{
+		relations[relationIdx]->saveToFile(fout);
+	}
+
+	/* 
+		Important to ensure the data consistency
+		vector<DefGroup*> roots; -> building the tree
+		vector<joint*> joints; -> binding the skeletons
+		vector<DefNode*> deformers; -> looking to the groups
+		map<unsigned int, DefGroup*> defGroupsRef;
+		map<unsigned int, DefNode*> defNodesRef;
+	*/
+
+	return true;
+}
+
+// Loads data from this file, it is important to bind
+// this data with the model and skeleton after this function.
+bool DefGraph::loadFromFile(FILE* fout)
+{
+	return false;
+}
+
+//////////////////
 //   DEFGROUP   //
 //////////////////
 DefGroup::DefGroup(int nodeId) : node(nodeId)
@@ -107,6 +225,36 @@ DefGroup::DefGroup(int nodeId, joint* jt) : node(nodeId)
 	subdivisionRatio = default_SUBDIVISION_RATIO;
 	expansion = default_EXPANSION;
 }
+
+bool DefGroup::saveToFile(FILE* fout)
+{
+	if(!fout)
+	{
+		printf("There is no file to print!\n [AIR_RIG]");
+		return false;
+	}
+
+	fprintf(fout, "%d\n", deformers.size()); fflush(fout);
+	fprintf(fout, "%s\n", transformation->sName); fflush(fout);
+	fprintf(fout, "%f %f %d %f\n", subdivisionRatio, expansion, smoothingPasses,smoothPropagationRatio); fflush(fout);
+	fprintf(fout, "%d\n", type); fflush(fout);
+
+	for(int i = 0; i< deformers.size(); i++)
+		deformers[i].saveToFile(fout);
+
+	// For computational pourposes.
+	//vector<DefGroup*> relatedGroups;
+
+	return true;
+}
+
+// Loads data from this file, it is important to bind
+// this data with the model and skeleton after this function.
+bool DefGroup::loadFromFile(FILE* fout)
+{
+	return false;
+}
+
 
 
 /// FUNCTIONS FOR PROCESSING DATA

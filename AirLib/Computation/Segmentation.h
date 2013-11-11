@@ -113,7 +113,7 @@ void updateSkinning(Modelo &m);
 void ComputeSkining(Modelo &m);
 
 void Voxelize(scene* snc, Modelo* m, float resolution, float worldScale, bool onlyBorders = true);
-void computeSecondaryWeights(Modelo* m);
+//void computeSecondaryWeights(Modelo* m);
 
 void PrecomputeDistances(vector< vector<double> >& embeddedPoints, vector< vector<int> >& weightsIndirection, symMatrix& BihDistances, vector< DefNode >& intPoints);
 double PrecomputeDistancesSingular(vector<double>& weights, symMatrix& BihDistances);

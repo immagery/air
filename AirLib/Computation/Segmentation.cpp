@@ -1074,7 +1074,7 @@ void ComputeSkining(Modelo& m)
 
 	// Calculamos pesos secundarios sobre lo calculado anteriormente.
 	ini = clock();
-    computeSecondaryWeights(&m);
+    //computeSecondaryWeights(&m);
 	end = clock();
 	printf("ComputeSecondaryWeights: %f ms \n", double(timelapse(ini,end)));
 	fflush(0);
@@ -1700,7 +1700,7 @@ double dotProduct(vector<double >& v1,vector<double >& v2)
 	return res;
 }
 
-int indexOfNode(int nodeId, vector<DefNode>& nodes)
+/*int indexOfNode(int nodeId, vector<DefNode>& nodes)
 {
 	for(int i = 0; i< nodes.size(); i++)
 	{
@@ -1709,6 +1709,8 @@ int indexOfNode(int nodeId, vector<DefNode>& nodes)
 
 	return -1;
 }
+*/
+/*
 
 void computeSecondaryWeights(Modelo* m)
 {
@@ -1936,12 +1938,13 @@ void computeSecondaryWeights(Modelo* m)
 						float val = -BiharmonicDistanceP2P_sorted(weightsTemp2, weightsSort2, dp.node->id , bd, 1.0, precompDist, thresh);			
 				
 						assert(val - bestDistance < threshold && val - secondDistance < threshold);*/
-					}
+					//}
 
-				}
-			}
-		}
-	}
+				//}
+			//}
+		//}
+	//}
+	
 
     /*
 	for(int i = 0; i < m->grid->bindedSkeletons.size(); i++)
@@ -2013,7 +2016,7 @@ void computeSecondaryWeights(Modelo* m)
 		}
 	}
     */
-}
+//}
 
 
  //void Voxelize(scene* snc, Modelo* m, float resolution, float worldScale, bool onlyBorders)

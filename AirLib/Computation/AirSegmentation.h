@@ -22,6 +22,8 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph);
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group);
 
 // Compute secondary weights - now is not updating data, it computes what ever it needs.
-void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
+void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph);
+
+int indexOfNode(int nodeId, vector<DefNode>& nodes);
 
 #endif // AIR_SEGMENTATION_H

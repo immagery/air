@@ -1,6 +1,9 @@
 #ifndef AIR_RIG_H
 #define AIR_RIG_H
 
+#include <iostream>
+#include <fstream>
+
 #include <vector>
 
 #include <DataStructures/skeleton.h>
@@ -51,12 +54,20 @@ public:
 
 	// For computational pourposes.
 	vector<DefGroup*> relatedGroups;
+
+	bool saveToFile(FILE* fout);
+	bool loadFromFile(FILE* fout);
 };
 
 class ControlGraph : public node
 {
 public:
 	ControlGraph(){}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
+
 };
 
 class Constraint : public node
@@ -65,11 +76,22 @@ public:
 	Constraint()
 	{
 		weight = 1.0;
+		idParent = -1;
+		idChild = -1;
 	}
 
 	DefGroup* parent;
 	DefGroup* child;
 	int weight;
+
+	int idParent;
+	int idChild;
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout);
+
+	// How can a I load the references.
+	virtual bool loadFromFile(FILE* fout);
 
 };
 
@@ -85,6 +107,10 @@ public:
 		value = Vector3d(0,0,0);
 	}
 
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
+
 };
 
 class OrientConstraint : public Constraint
@@ -98,6 +124,10 @@ public:
 		offset = Vector3d(0,0,0);
 		value = Vector3d(0,0,0);
 	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
 };
 
 class ScaleConstraint : public Constraint
@@ -111,6 +141,10 @@ public:
 		offset = Vector3d(0,0,0);
 		value = Vector3d(0,0,0);
 	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
 };
 
 class ParentConstraint : public Constraint
@@ -122,6 +156,10 @@ public:
 	ParentConstraint() : Constraint()
 	{
 	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
 };
 
 class HierarchyConstraint : public ParentConstraint
@@ -132,6 +170,10 @@ public:
 	HierarchyConstraint() : ParentConstraint()
 	{
 	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout){ return true;}
+	virtual bool loadFromFile(FILE* fout){ return true;}
 };
 
 
@@ -163,9 +205,13 @@ public:
 	vector<Constraint* > relations;
 
 	map<unsigned int, DefGroup*> defGroupsRef;
+	map<unsigned int, DefNode*> defNodesRef;
 
 	int smoothingPasses;
 	float smoothPropagationRatio;
+
+	bool saveToFile(FILE* fout);
+	bool loadFromFile(FILE* fout);
 };
 
 // This class containst all the info and processes for
@@ -200,7 +246,14 @@ public:
 	// The data needs to be consistent, every DefGroup with a joint depending on the type.
 	bool updateDefGroups();
 
+	bool saveToFile(FILE* fout);
+	bool loadFromFile(FILE* fout);
+
+	bool bindModel(Modelo& m);
+	bool bindSkeletons(vector<skeleton*>& skts);
 };
+
+
 
 
 //FUNCTIONS FOR PROCESSING DATA STRUCTURES
