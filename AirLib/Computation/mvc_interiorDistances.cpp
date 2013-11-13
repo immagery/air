@@ -49,7 +49,7 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
         if(norm < tresh1)
         {
             // El punto est‡ muy cerca de este vŽrtice, devolvemos los valores en V tal cual.
-			weights[modelo.globalIndirection[idVert]] = 1.0;
+			weights[idVert] = 1.0;
             return; // Ya no tenemos que calcular nada m‡s para este punto.
         }
             
@@ -92,7 +92,7 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 
 			for(int i = 0; i<3; i++)
 			{  // Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
-				weights[modelo.globalIndirection[idVerts[i]]] = w[i]/w_sum;
+				weights[idVerts[i]] = w[i]/w_sum;
 			}
 
             return; // Acabamos
@@ -119,14 +119,7 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 		for(int i = 0; i<3; i++)
 		{  
 			// Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
-			
-			// En el caso de que sea un vertice borde eliminamos la influencia... pero preservamos todo el resto.
-			int bindId = modelo.modelVertexBind[idVerts[i]];
-			int bindVertexId = modelo.modelVertexDataPoint[idVerts[i]];
-			
-			//if(bd[bindId]->pointData[bindVertexId].isBorder) w[i] = 0;
-			
-			weights[modelo.globalIndirection[idVerts[i]]] += w[i];		
+			weights[idVerts[i]] += w[i];		
 			totalW +=w[i];
 		}
     }
@@ -137,37 +130,11 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 		sum2 += weights[i];
 	}
 
-	// Aseguramos un corte por el sumatorio para evitar singularidades.
-	/*if(sum2 < 1/pow(10.0,6))
+	for(int i = 0; i< weights.size(); i++)
 	{
-		for(int i = 0; i< weights.size(); i++)
-		{
-			weights[i] = 0;
-		}
+		double auxWeight = weights[i];
+		weights[i] = weights[i]/sum2;
 	}
-	else
-	{
-	*/
-		for(int i = 0; i< weights.size(); i++)
-		{
-			double auxWeight = weights[i];
-			weights[i] = weights[i]/sum2;
-
-			//if(weights[i] < -1 || weights[i] > 1)
-			//	int pararseme = 0;
-
-			//if(weights[i] > 1)
-			//	weights[i] =1.0;
-			//if(weights[i] < -1)
-			//	weights[i] = -1;
-		}
-	//}
-	
-
-	//if(sum2 != totalW)
-	//	printf("No se esta sumando bien\n\n\n"); fflush(0);
-
-    // Normalizacion de los valores
 
 }
 

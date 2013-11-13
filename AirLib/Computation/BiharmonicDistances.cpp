@@ -21,8 +21,8 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 
 	clock_t begin, end; begin = clock();
 
-	int nopts = bd->surface.nodes.size(); // Numero de vertices del modelo
-	int notrg = bd->ntriangles = bd->surface.triangles.size(); // Numero de tri‡ngulos del modelo
+	int nopts = bd->mainSurface->nodes.size(); // Numero de vertices del modelo
+	int notrg = bd->ntriangles = bd->mainSurface->triangles.size(); // Numero de tri‡ngulos del modelo
 
 	if(withPatches) 
 		notrg += bd->virtualTriangles.size();
@@ -47,11 +47,11 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 	{
 		Vector3d pt1, pt2, pt3;
 		//Aseguramos que son todo triángulos.
-		assert(bd->surface.triangles[findex]->verts.size() == 3);
+		assert(bd->mainSurface->triangles[findex]->verts.size() == 3);
 
-		pt1 = bd->surface.triangles[findex]->verts[0]->position;
-		pt2 = bd->surface.triangles[findex]->verts[1]->position;
-		pt3 = bd->surface.triangles[findex]->verts[2]->position;
+		pt1 = bd->mainSurface->triangles[findex]->verts[0]->position;
+		pt2 = bd->mainSurface->triangles[findex]->verts[1]->position;
+		pt3 = bd->mainSurface->triangles[findex]->verts[2]->position;
 
         // Calculamos el area
         Vector3d trgx, trgy, trgz;
@@ -68,7 +68,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
 		for(int trVert = 0; trVert < 3; trVert++)
 		{
 			// Ojo!... este id podria no ser correcto... si el binding no coincide con todos los puntos.
-			int vertIdx = bd->surface.triangles[findex]->verts[trVert]->id;
+			int vertIdx = bd->mainSurface->triangles[findex]->verts[trVert]->id;
 			AM(vertIdx) += area/3;
 		}
 
@@ -129,9 +129,9 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
                 int k = kk-1;
 				
 				Vector3d pti, ptj, ptk;
-				pti = bd->surface.triangles[nFace]->verts[i]->position;
-				ptj = bd->surface.triangles[nFace]->verts[j]->position;
-				ptk = bd->surface.triangles[nFace]->verts[k]->position;
+				pti = bd->mainSurface->triangles[nFace]->verts[i]->position;
+				ptj = bd->mainSurface->triangles[nFace]->verts[j]->position;
+				ptk = bd->mainSurface->triangles[nFace]->verts[k]->position;
 
                 Vector3d e2; e2 << ptj.x()-ptk.x(), ptj.y()-ptk.y(), ptj.z()-ptk.z();
                 Vector3d e3; e3 << pti.x()-ptk.x(), pti.y()-ptk.y(), pti.z()-ptk.z();
@@ -141,8 +141,8 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix&
                 double cota = cosa/sina;
                 double w = 0.5*cota;
 
-                int v1 = bd->surface.triangles[nFace]->verts[i]->id;
-                int v2 = bd->surface.triangles[nFace]->verts[j]->id;
+                int v1 = bd->mainSurface->triangles[nFace]->verts[i]->id;
+                int v2 = bd->mainSurface->triangles[nFace]->verts[j]->id;
 
                 A.coeffRef(v1,v1) -= w;
                 A.coeffRef(v1,v2) += w;

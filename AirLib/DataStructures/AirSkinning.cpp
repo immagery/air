@@ -18,7 +18,7 @@ void AirSkinning::cacheSkinning()
 	// We are considering just one model
 	// with just one binding.
 
-	binding* bd = bindings[0][0];
+	binding* bd = bindings[0];
 	weights.clear();
 	weights.resize(bd->pointData.size());
 
@@ -70,21 +70,10 @@ void AirSkinning::loadBindingForModel(Modelo *m, string path, const vector< skel
 
 	int modelIndex = deformedModels.size();
 
-	bind = new binding();
-
-	// De momento trabajamos con el primero
-	// DEBUG: we check the last added binding. What happens if a model has more than two bindings? 
-	// TOFIX a model can have more than 1 binding
-	bindings.resize(1);
-	bindings[0].push_back(bind);
-
-	binding* bd = bind;
+	binding* bd = bind = new binding();
 
 	deformedModels.push_back((Geometry*) m);
 	originalModels.push_back(m->originalModel);
-
-
-	//set<int> vertices;
 
 	int counter = 0;
 	while (!in.eof()) {
@@ -187,47 +176,45 @@ void AirSkinning::computeDeformations()
 		if (!deformedModels[i]->shading->visible) return;
 
 		Geometry *m = deformedModels[i];
-		for (int j = 0; j < bindings[i].size(); ++j) 
-		{			
-			// loop through all bindings
-			binding * b = bindings[i][j];
 
-			for (int k = 0; k < b->pointData.size(); ++k) 
-			{ 
-				// and for each binding, loop over all its points
-				PointData& data = b->pointData[k];
-				GraphNode* node = data.node;
-				int vertexID = node->id;
+		// loop through all bindings
+		binding * b = bindings[i];
 
-				Vector3d finalPosition (0,0,0);
-				float totalWeight = 0;
+		for (int k = 0; k < b->pointData.size(); ++k) 
+		{ 
+			// and for each binding, loop over all its points
+			PointData& data = b->pointData[k];
+			GraphNode* node = data.node;
+			int vertexID = node->id;
 
-				Vector3d rotDir; 
-				for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
-				{   
-					int skID = data.influences[kk].label;
-					joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
+			Vector3d finalPosition (0,0,0);
+			float totalWeight = 0;
 
-					Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
-					Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
+			Vector3d rotDir; 
+			for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
+			{   
+				int skID = data.influences[kk].label;
+				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
+
+				Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
+				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 					
-					float currentWeight = data.influences[kk].weightValue;
+				float currentWeight = data.influences[kk].weightValue;
 
-					Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
-					finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
+				Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
+				finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
 
-					totalWeight += data.influences[kk].weightValue;
+				totalWeight += data.influences[kk].weightValue;
 					
-				}
-
-				finalPosition = finalPosition / totalWeight;
-				if (m->nodes[vertexID]->position != finalPosition) 
-					updated = true;
-
-				m->nodes[vertexID]->position = finalPosition;
 			}
 
+			finalPosition = finalPosition / totalWeight;
+			if (m->nodes[vertexID]->position != finalPosition) 
+				updated = true;
+
+			m->nodes[vertexID]->position = finalPosition;
 		}
+
 		if (updated)
 		{		
 			m->computeNormals();
@@ -299,109 +286,106 @@ void AirSkinning::computeDeformationsWithSW()
 		if (!deformedModels[i]->shading->visible) return;
 
 		Geometry *m = deformedModels[i];
-		for (int j = 0; j < bindings[i].size(); ++j) 
-		{			
-			// loop through all bindings
-			binding * b = bindings[i][j];
 
-			for (int k = 0; k < b->pointData.size(); ++k) 
-			{ 
-				// and for each binding, loop over all its points
-				PointData& data = b->pointData[k];
-				GraphNode* node = data.node;
-				int vertexID = node->id;
+		// loop through all bindings
+		binding * b = bindings[i];
 
-				Vector3d finalPosition (0,0,0);
-				float totalWeight = 0;
+		for (int k = 0; k < b->pointData.size(); ++k) 
+		{ 
+			// and for each binding, loop over all its points
+			PointData& data = b->pointData[k];
+			GraphNode* node = data.node;
+			int vertexID = node->id;
 
-				Vector3d rotDir; 
-				for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
-				{   
-					int skID = data.influences[kk].label;
-					//joint& jt = deformersRestPosition[skID];
-					joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
+			Vector3d finalPosition (0,0,0);
+			float totalWeight = 0;
 
-					Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
-					Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
+			Vector3d rotDir; 
+			for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
+			{   
+				int skID = data.influences[kk].label;
+				//joint& jt = deformersRestPosition[skID];
+				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
-					Quaterniond apliedRotation = jt->rotation;
+				Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
+				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
+
+				Quaterniond apliedRotation = jt->rotation;
 					
-					float currentWeight = data.influences[kk].weightValue;
+				float currentWeight = data.influences[kk].weightValue;
 
-					if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1)
-					{
-						/*
-						double twist = 0;
+				if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1)
+				{
+					/*
+					double twist = 0;
 						
-						Vector3d axis = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->translation - rig->defRig.defGroupsRef[skID]->transformation->translation;
-						axis.normalize();
+					Vector3d axis = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->translation - rig->defRig.defGroupsRef[skID]->transformation->translation;
+					axis.normalize();
 
-						//necesito guardar la transformacion hasta el padre
+					//necesito guardar la transformacion hasta el padre
 
-						Vector3d tempRestRot = rig->defRig.defGroupsRef[skID]->transformation->rRotation._transformVector(axis);
+					Vector3d tempRestRot = rig->defRig.defGroupsRef[skID]->transformation->rRotation._transformVector(axis);
 
-						Quaterniond localRotationChild =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qOrient * 
-														  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qrot;
+					Quaterniond localRotationChild =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qOrient * 
+														rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qrot;
 
-						Quaterniond localRotationChildRest =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->restRot;
+					Quaterniond localRotationChildRest =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->restRot;
 
-						Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
-						Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
+					Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
+					Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
 
-						if(!referenceRest.isApprox(referenceCurr))
-							int parar = 0;
+					if(!referenceRest.isApprox(referenceCurr))
+						int parar = 0;
 
-						Quaterniond nonRollrotation;
-						nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+					Quaterniond nonRollrotation;
+					nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
 						
-						Quaterniond twistExtraction = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
-						*/
+					Quaterniond twistExtraction = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
+					*/
 
-						if(data.secondInfluences[kk].size() == 0)
-							continue;
+					if(data.secondInfluences[kk].size() == 0)
+						continue;
 
-						float secondWeight = data.secondInfluences[kk][0];
+					float secondWeight = data.secondInfluences[kk][0];
 
-						// Twist Rescaling
-						secondWeight = reScaleTwist(secondWeight, rig->iniTwist, rig->finTwist);
+					// Twist Rescaling
+					secondWeight = reScaleTwist(secondWeight, rig->iniTwist, rig->finTwist);
 
-						Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
-						Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
+					Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
+					Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
 
-						float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
-						double cuttedWeight = currentWeight * (1.0-cutTwist);
+					float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
+					double cuttedWeight = currentWeight * (1.0-cutTwist);
 
-						float secondCutTwist = 0.0;
+					float secondCutTwist = 0.0;
 
-						//if(!thereIsInfluenceOf(data.influences,skID))
-						//	cuttedWeight = 0;
+					//if(!thereIsInfluenceOf(data.influences,skID))
+					//	cuttedWeight = 0;
 
-						Quaterniond twistRotation = Quaterniond::Identity().slerp(secondWeight, childTwist);
+					Quaterniond twistRotation = Quaterniond::Identity().slerp(secondWeight, childTwist);
 
-						//Quaterniond unTwist = Quaterniond::Identity().slerp(cuttedWeight, twist);
-						Quaterniond unTwist = Quaterniond::Identity();
+					//Quaterniond unTwist = Quaterniond::Identity().slerp(cuttedWeight, twist);
+					Quaterniond unTwist = Quaterniond::Identity();
 
-						if(jt->father)
-							apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
-						else
-							apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					if(jt->father)
+						apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					else
+						apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
 
-					}
-
-					Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
-					finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
-
-					totalWeight += data.influences[kk].weightValue;
-					
 				}
 
-				finalPosition = finalPosition / totalWeight;
-				if (m->nodes[vertexID]->position != finalPosition) 
-					updated = true;
+				Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
+				finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
 
-				m->nodes[vertexID]->position = finalPosition;
+				totalWeight += data.influences[kk].weightValue;
+					
 			}
 
+			finalPosition = finalPosition / totalWeight;
+			if (m->nodes[vertexID]->position != finalPosition) 
+				updated = true;
+
+			m->nodes[vertexID]->position = finalPosition;
 		}
 		if (updated)
 		{		

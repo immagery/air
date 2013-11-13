@@ -840,14 +840,13 @@ void doubleArrangeElements(vector<double>& weights, vector<int>& orderedIndirect
 void clearOlderComputations(Modelo& m)
 {
 	// Clear all older computed influences
-	for(int bind = 0; bind< m.bindings.size(); bind++)
+
+	for(int ptIdx = 0; ptIdx< m.bind->pointData.size(); ptIdx++)
 	{
-		for(int ptIdx = 0; ptIdx< m.bindings[bind]->pointData.size(); ptIdx++)
-		{
-			m.bindings[bind]->pointData[ptIdx].influences.clear();
-			m.bindings[bind]->pointData[ptIdx].secondInfluences.clear();
-		}
+		m.bind->pointData[ptIdx].influences.clear();
+		m.bind->pointData[ptIdx].secondInfluences.clear();
 	}
+	
 
 	//TODEBUG:
 	// Other actions for cleaning and setting up the data.
@@ -860,9 +859,8 @@ void ComputeSkining(Modelo& m)
 {
 	clock_t begin;
 
-	//TODO: We are taking only one binding
-	if(m.bindings.size() <= 0) return; 
-	binding* bb = m.bindings[0];
+	if(!m.bind) return; 
+	binding* bb = m.bind;
 	
 	printf("Binded Skeletons: %d\n", bb->bindedSkeletons.size());fflush(0);
 
@@ -907,28 +905,8 @@ void ComputeSkining(Modelo& m)
 
 	for(unsigned int i = 0; i< auxPoints.size(); i++)
     {
-		// MVC
-		if(useMVC)
-		{
-			mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m);
-			doubleArrangeElements_wS_fast(bb->embeddedPoints[i],bb->weightsSort[i], currentThreshold[i]);
-		}
-		else
-		{
-			//m.HCgrid->getCoordsFromPoint(auxPoints[i], bb->weightsFiltered[i]);
-			m.HCgrid->getCoordsFromPointSimple(auxPoints[i], bb->weightsFiltered[i]);
-		}
-
-		/*
-		// CALCULOS VIEJOS.
-		//vector<double> stats;
-		//doubleArrangeElements_withStatistics(bb->embeddedPoints[i],bb->weightsSort[i], stats, currentThreshold[i]);
-		//doubleArrangeElements(bb->embeddedPoints[i],bb->weightsSort[i], false, bb->weightsCutThreshold);
-		// cambiamos el signo para el calculo posterior
-		//for(int ebpV = 0; ebpV < bb->embeddedPoints[i].size(); ebpV++)
-		//	bb->embeddedPoints[i][ebpV] = -bb->embeddedPoints[i][ebpV];
-		*/
-
+		mvcAllBindings(auxPoints[i], bb->embeddedPoints[i], m);
+		doubleArrangeElements_wS_fast(bb->embeddedPoints[i],bb->weightsSort[i], currentThreshold[i]);
 	}
 	
 	end = clock();
@@ -982,59 +960,16 @@ void ComputeSkining(Modelo& m)
 	printf("Precomputing distances\n"); fflush(0);
 	ini = clock();
 	// Calculamos al precomputacion como una suma, suponiendo que todos los puntos van con todos... uhmmm
-	vector<float> preComputedDistancesSum;
-	preComputedDistancesSum.resize(m.bindings[0]->intPoints.size(), 0);
-	for(int bbIdx = 0; bbIdx < m.bindings.size(); bbIdx++)
+	double preComputedDistancesSum = 0;
+	binding* otherbb = m.bind;
+	for(int i = 0; i< otherbb->embeddedPoints.size(); i++)
 	{
-		binding* otherbb = m.bindings[bbIdx];
-		for(int i = 0; i< otherbb->embeddedPoints.size(); i++)
-		{
-			int iniIdx = otherbb->globalIndirection.front();
-			int finIdx = otherbb->globalIndirection.back();
+		int iniIdx = otherbb->globalIndirection.front();
+		int finIdx = otherbb->globalIndirection.back();
 			
-			// CALCULOS ANTERIORES
-			//preComputedDistancesSum[i] -= PrecomputeDistancesSingular_block(otherbb->embeddedPoints[i], otherbb->BihDistances, iniIdx, finIdx);
-			//preComputedDistancesSum[i] += PrecomputeDistancesSingular(otherbb->embeddedPoints[i], otherbb->BihDistances);
-			
-			//MVC
-			if(useMVC)
-			{
-				preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, currentThreshold[i]);
-			}
-			else
-			{
-				preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->BihDistances, bb->weightsFiltered[i]);
-			}
-
-			if(threshold != currentThreshold[i] )
-			{
-				//printf("This threshold has been changed: %f\n", currentThreshold[i]);
-				//fflush(0);
-			}
-
-			//preComputedDistancesSum[i] += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, otherbb->weightsCutThreshold);
-		}
+		otherbb->intPoints[i].precomputedDistances += PrecomputeDistancesSingular_sorted(otherbb->embeddedPoints[i], otherbb->weightsSort[i], otherbb->BihDistances, currentThreshold[i]);
 	}
 
-	for(unsigned int bbIdx = 0; bbIdx < m.bindings.size(); bbIdx++)
-	{
-		binding* otherbb = m.bindings[bbIdx];
-		for(unsigned int i = 0; i< otherbb->embeddedPoints.size(); i++)
-		{
-			//int iniIdx = otherbb->globalIndirection.front();
-			//int finIdx = otherbb->globalIndirection.back();
-			otherbb->intPoints[i].precomputedDistances = preComputedDistancesSum[i];
-			//otherbb->intPoints[i].precomputedDistances = PrecomputeDistancesSingular_block(otherbb->embeddedPoints[i], otherbb->BihDistances, iniIdx, finIdx);
-			//bb->intPoints[i].precomputedDistances = PrecomputeDistancesSingular(bb->embeddedPoints[i], bb->BihDistances) *-1;
-		}
-	}
-
-	end = clock();
-	printf("Precoputed Distances: %f s, %d el, mean:%f\n", double(timelapse(ini,end)), preComputedDistancesSum.size(), double(timelapse(ini,end))/preComputedDistancesSum.size());
-	fflush(0);
-
-	//PrecomputeDistances(bb->embeddedPoints, bb->BihDistances, bb->intPoints);
-	
 	//if(VERBOSE)
 	//{
 	//	end=clock();
@@ -1554,8 +1489,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 	clock_t ini = clock();
 
 	// SEGMENTATION (Realizamos una segmentacion y luego trataremos los ids)
-	for(unsigned int i = 0; i< m.bindings.size(); i++)
-		segmentVolumeWithEmbedding(m, m.bindings[i]);
+	segmentVolumeWithEmbedding(m, m.bind);
 	
 	clock_t fin;
 
@@ -1578,8 +1512,7 @@ void updateSkinningWithHierarchy(Modelo&m)
 
 	ini = clock();
 	// Hierarchical weight computation
-	for(unsigned int i = 0; i< m.bindings.size(); i++)
-		computeHierarchicalSkinning(m, m.bindings[i]);
+	computeHierarchicalSkinning(m, m.bind);
 
 	if(BATCHPROCESSING)
 	{
@@ -2451,10 +2384,12 @@ void AddVirtualTriangles(Modelo& m)
 
 void normalizeDistances(Modelo& m)
 {
+	/*
 	vector<binding*>& bindings = m.bindings;
 
 	// Normalizacion de las matrices A para calcular con todas a la vez
 	// Normalizamos segun las distancias del mundo real.
+
 	if(bindings.size() > 1)
 	{
 		for(int i = 0; i< bindings.size(); i++)
@@ -2487,27 +2422,6 @@ void normalizeDistances(Modelo& m)
 				}
 			}
 
-			/*
-			for(int x = 0; x < bindings[i]->BihDistances.size; x++)
-			{
-				for(int y = x+1; y < bindings[i]->BihDistances.size; y++)
-				{
-					double dist = bindings[i]->BihDistances.get(x,y);
-					if(dist > maxDistance)
-					{
-						maxDistance = dist;
-						maxX = x;
-						maxY = y;
-
-						double distance1 = (bindings[i]->pointData[maxX].position - bindings[i]->pointData[maxY].position).Norm();
-						double ratio1 = distance1/bindings[i]->BihDistances.get(maxX,maxY);
-						int stop = 0;
-					}
-
-				}
-			}
-			*/
-
 			double distance = (bindings[i]->pointData[maxX].node->position - bindings[i]->pointData[maxY].node->position).norm();
 			
 			if(maxX == maxY) // la diagonal es 0 -> no deberia dar.
@@ -2529,6 +2443,7 @@ void normalizeDistances(Modelo& m)
 			}
 		}
 	}
+	*/
 }
 
 bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)

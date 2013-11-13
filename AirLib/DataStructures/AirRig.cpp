@@ -1,6 +1,6 @@
 #include "AirRig.h"
 #include <DataStructures/scene.h>
-#include <Computation\Segmentation.h>
+#include <Computation\AirSegmentation.h>
 #include <Computation\mvc_interiorDistances.h>
 #include <DataStructures\InteriorDistancesData.h>
 
@@ -101,7 +101,6 @@ bool AirRig::loadFromFile(FILE* fin)
 	return true;
 }
 
-
 bool getBDEmbedding(Modelo* model)
 {	
 	bool success = false;
@@ -167,9 +166,7 @@ AirRig::AirRig(Modelo* in_model, int id) : rig(in_model, id)
 	//model = in_model;
 	
 	skinning = new AirSkinning();
-
-	skinning->bindings.resize(1);
-	skinning->bindings[0].push_back(model->bindings[0]);
+	skinning->bindings.push_back(model->bind);
 
 	// Preprocesses like distances over the surface
 	// could be done, maybe as a backgroud process.
@@ -188,8 +185,7 @@ AirRig::AirRig(Modelo* in_model, vector<skeleton*>& skts, int id) : rig(in_model
 	model = in_model;
 
 	skinning = new AirSkinning();
-	skinning->bindings.resize(1);
-	skinning->bindings[0].push_back(model->bindings[0]);
+	skinning->bindings.push_back(model->bind);
 
 	// Preprocesses like distances over the surface
 	// could be done, maybe as a backgroud process.

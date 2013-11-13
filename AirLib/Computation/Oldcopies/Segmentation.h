@@ -131,7 +131,7 @@ void renameLinks(vector<int>& links, int group, int newGroup);
 int contains(vector<int>& values, int value);
 void FusionBindings(Modelo& m, vector<vector<int> >& groupBindings);
 void AddVirtualTriangles(Modelo& m);
-void BuildSurfaceGraphs(Modelo& m, vector<binding*>& bindings);
+void BuildSurfaceGraphs(Modelo* m);
 void normalizeDistances(Modelo& m);
 bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches = false);
 bool LoadEmbeddings(Modelo& m, char* bindingFileName);
