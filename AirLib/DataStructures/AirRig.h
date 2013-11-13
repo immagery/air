@@ -9,7 +9,8 @@
 #include <DataStructures/skeleton.h>
 #include <DataStructures/DefNode.h>
 #include <DataStructures/Modelo.h>
-#include <DataStructures\AirSkinning.h>
+#include <DataStructures/rig.h>
+#include <DataStructures/AirSkinning.h>
 
 #include <Eigen/Dense>
 
@@ -25,15 +26,23 @@
 using namespace std;
 using namespace Eigen;
 
-// This clases define the dependency relationship between deformers,
 
+
+// This clases define the dependency relationship between deformers,
 class ControlGroup : public node
 {
 public:
-	ControlGroup(){}
+	ControlGroup() {}
 };
 
 enum DefGroupType { DEF_NONE = 0, DEF_POINT, DEF_STICK, DEF_SURFACE, DEF_VOLUME};
+
+class defGroupSerialization
+{
+public:
+	defGroupSerialization(){}
+	string sJointName;
+};
 
 class DefGroup : public node
 {
@@ -55,19 +64,17 @@ public:
 	// For computational pourposes.
 	vector<DefGroup*> relatedGroups;
 
+	defGroupSerialization* serializedData;
+
 	bool saveToFile(FILE* fout);
 	bool loadFromFile(FILE* fout);
 };
 
-class ControlGraph : public node
+class constraintSerialization
 {
 public:
-	ControlGraph(){}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
-
+	int parentId;
+	int childId;
 };
 
 class Constraint : public node
@@ -76,16 +83,13 @@ public:
 	Constraint()
 	{
 		weight = 1.0;
-		idParent = -1;
-		idChild = -1;
 	}
 
 	DefGroup* parent;
 	DefGroup* child;
 	int weight;
 
-	int idParent;
-	int idChild;
+	constraintSerialization* sConstraint;
 
 	// Serialization
 	virtual bool saveToFile(FILE* fout);
@@ -95,85 +99,23 @@ public:
 
 };
 
-class PointConstraint : public Constraint
+class ControlGraph : public node
 {
 public:
-	Vector3d offset;
-	Vector3d value;
-
-	PointConstraint() : Constraint()
-	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
-	}
+	ControlGraph(){}
 
 	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
-
-};
-
-class OrientConstraint : public Constraint
-{
-public:
-	Vector3d offset;
-	Vector3d value;
-
-	OrientConstraint() : Constraint()
+	virtual bool saveToFile(FILE* fout)
+	{ 
+		fout = fout; // for delete warning 
+		return true;
+	}
+	virtual bool loadFromFile(FILE* fout)
 	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
+		fout = fout; // for delete warning
+		return true;
 	}
 
-	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
-};
-
-class ScaleConstraint : public Constraint
-{
-public:
-	Vector3d offset;
-	Vector3d value;
-
-	ScaleConstraint() : Constraint()
-	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
-};
-
-class ParentConstraint : public Constraint
-{
-public:
-	OrientConstraint or;
-	PointConstraint pos;
-
-	ParentConstraint() : Constraint()
-	{
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
-};
-
-class HierarchyConstraint : public ParentConstraint
-{
-public:
-	ScaleConstraint slc;
-
-	HierarchyConstraint() : ParentConstraint()
-	{
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout){ return true;}
-	virtual bool loadFromFile(FILE* fout){ return true;}
 };
 
 
@@ -214,9 +156,17 @@ public:
 	bool loadFromFile(FILE* fout);
 };
 
+
+class airRigSerialization
+{
+public:
+	string sModelName;
+	vector<string> sSkeletonName;
+};
+
 // This class containst all the info and processes for
 // build a perfect rig.
-class AirRig : public node
+class AirRig : public rig
 {
 public:
 
@@ -233,11 +183,22 @@ public:
 	vector<skeleton*> skeletons;
 
 	//The deformer
-	AirSkinning skinning;
+	AirSkinning* skinning;
+
+	// Parameters for computation
+	double iniTwist; // To replace in the group parameters
+	double finTwist; // To replace in the group parameters
+	bool enableTwist; // To replace in the group parameters
+
+	airRigSerialization* serializedData;
 
 	// Constructors
-	AirRig(Modelo& model);
-	AirRig(Modelo& model, vector<skeleton*>& skts);
+	AirRig(int id); // default, without model bind
+	AirRig(Modelo* model, int id);
+	AirRig(Modelo* model, vector<skeleton*>& skts, int id);
+
+	// Parameter inizialization
+	void initParameters();
 
 	// Destructor
 	~AirRig();
@@ -249,12 +210,135 @@ public:
 	bool saveToFile(FILE* fout);
 	bool loadFromFile(FILE* fout);
 
-	bool bindModel(Modelo& m);
-	bool bindSkeletons(vector<skeleton*>& skts);
+	// Load the rig defined in the file
+	virtual bool loadRigging(string sFile);
+
+	virtual bool bindRigToScene(Modelo& model, vector<skeleton*>& skeletons);
+
 };
 
 
+class PointConstraint : public Constraint
+{
+public:
+	Vector3d offset;
+	Vector3d value;
 
+	PointConstraint() : Constraint()
+	{
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
+	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout)
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+	virtual bool loadFromFile(FILE* fout)
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+
+};
+
+class OrientConstraint : public Constraint
+{
+public:
+	Vector3d offset;
+	Vector3d value;
+
+	OrientConstraint() : Constraint()
+	{
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
+	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+
+	virtual bool loadFromFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+};
+
+class ScaleConstraint : public Constraint
+{
+public:
+	Vector3d offset;
+	Vector3d value;
+
+	ScaleConstraint() : Constraint()
+	{
+		offset = Vector3d(0,0,0);
+		value = Vector3d(0,0,0);
+	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+	virtual bool loadFromFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+};
+
+class ParentConstraint : public Constraint
+{
+public:
+	OrientConstraint or;
+	PointConstraint pos;
+
+	ParentConstraint() : Constraint()
+	{
+	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+	virtual bool loadFromFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+};
+
+class HierarchyConstraint : public ParentConstraint
+{
+public:
+	ScaleConstraint slc;
+
+	HierarchyConstraint() : ParentConstraint()
+	{
+	}
+
+	// Serialization
+	virtual bool saveToFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+	virtual bool loadFromFile(FILE* fout)	
+	{ 
+		fout = fout; // for delete warning
+		return true;
+	}
+};
 
 //FUNCTIONS FOR PROCESSING DATA STRUCTURES
 
@@ -270,6 +354,10 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 // Propose a division in deformers from a given stick
 int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio);
+
+// Takes all the groups and constraints and
+// build a relation tree for weights computation
+void BuildGroupTree(DefGraph& graph);
 
 
 #endif // AIR_RIG_H

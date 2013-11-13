@@ -8,22 +8,26 @@
 // Serialization
 bool Constraint::saveToFile(FILE* fout)
 { 
+	node::saveToFile(fout);
+
 	fprintf(fout, "%d %d %f\n", parent->nodeId, child->nodeId, weight);
 	fflush(fout);
 	return true;
 }
 
+
 // How can a I load the references.
 bool Constraint::loadFromFile(FILE* fout)
 {
+	node::loadFromFile(fout);
+
 	// We save the id for restore later the references.
 	float in_weight = 0;
-	int in_parentId, in_childId;
-    fscanf(fout,"%d %d %f", &in_weight, &in_parentId, &in_childId);
+
+	sConstraint = new constraintSerialization();
+	fscanf(fout,"%d %d %f", &sConstraint->parentId, &sConstraint->childId, &in_weight);
 
 	weight = in_weight;
-	idParent = in_parentId;
-	idChild = in_childId;
 
 	// need to update
 	dirtyFlag = true;
@@ -42,11 +46,23 @@ bool AirRig::saveToFile(FILE* fout)
 		return false;
 	}
 
+	fprintf(fout, "%s\n", model->sName); fflush(fout);
+	fprintf(fout, "%d\n", skeletons.size()); fflush(fout);
+	for(int i = 0; i< skeletons.size(); i++)
+		fprintf(fout, "%s\n", skeletons[i]->sName); fflush(fout);
+
+	// Parameters for computation
+	//double iniTwist;
+	//double finTwist; 
+	//bool enableTwist;
+	fprintf(fout, "%f %f %d\n", iniTwist, finTwist, enableTwist); fflush(fout);
+
 	defRig.saveToFile(fout);
 	controlRig.saveToFile(fout);
 
 	// Skinning 
 	// I don't know if there are something to do here.
+	fprintf(fout, "%d", skinning->useSecondaryWeights); fflush(fout);
 
 	// All the relation with the model and the skeletons
 	// should be done in the previous steps and bind it.
@@ -56,31 +72,35 @@ bool AirRig::saveToFile(FILE* fout)
 
 // Loads data from this file, it is important to bind
 // this data with the model and skeleton after this function.
-bool AirRig::loadFromFile(FILE* fout)
+bool AirRig::loadFromFile(FILE* fin)
 {
-		return false;
-}
+	serializedData = new airRigSerialization();
+	fscanf(fin, "%s", &serializedData->sModelName); 
+	int skeletonsSize = 0;
+	fscanf(fin, "%d", &skeletonsSize); 
+	serializedData->sSkeletonName.resize(skeletonsSize);
 
-bool AirRig::bindModel(Modelo& m)
-{
-	// Asign model to this rig
-	model = &m;
+	for(int i = 0; i< skeletonsSize; i++)
+		fscanf(fin, "%s", serializedData->sSkeletonName);
 
-	// TODEBUG: Load data form the model???
-	// for consistency.
+	//double iniTwist;
+	//double finTwist; 
+	//bool enableTwist;
+	fscanf(fin, "%f %f %d\n", &iniTwist, &finTwist, &enableTwist);
+
+	// Rig System
+	if(!defRig.loadFromFile(fin)) return false;
+
+	// Control System
+	if(!controlRig.loadFromFile(fin)) return false;
+
+	// Skinning 
+	// useSecondayWeights
+	fscanf(fin, "%d", &skinning->useSecondaryWeights);
 
 	return true;
 }
 
-bool AirRig::bindSkeletons(vector<skeleton*>& skts)
-{
-	// bind skeletons
-	// a) assign every pointer to the corresponding joint.
-	// TOFIX: this is temporal, because the process will be
-	// skeletons independet but control units dependant.
-
-	return false;
-}
 
 bool getBDEmbedding(Modelo* model)
 {	
@@ -124,25 +144,52 @@ bool getBDEmbedding(Modelo* model)
 	return success;
 }
 
+void AirRig::initParameters()
+{
+	iniTwist = 0.0; // To replace in the group parameters
+	finTwist = 1.0; // To replace in the group parameters
+	enableTwist = true; // To replace in the group parameters
+}
+
 // CONSTRUCTORES
+// Default empty rig
+AirRig::AirRig(int id) : rig(id)
+{
+	initParameters();
+
+	skinning = new AirSkinning();
+}
+
 // An empty rig is created from a model
-AirRig::AirRig(Modelo& in_model)
+AirRig::AirRig(Modelo* in_model, int id) : rig(in_model, id)
 {
 	// We get the model
-	model = &in_model;
+	//model = in_model;
 	
+	skinning = new AirSkinning();
+
+	skinning->bindings.resize(1);
+	skinning->bindings[0].push_back(model->bindings[0]);
+
 	// Preprocesses like distances over the surface
 	// could be done, maybe as a backgroud process.
 	// The data path and files from the model need to be coherent
 	getBDEmbedding(model);
 
+	// Init all the parameters in the same place.
+	initParameters();
+
 }
 
 // An default configured rig is created from a model and a set of skeletons
-AirRig::AirRig(Modelo& in_model, vector<skeleton*>& skts)
+AirRig::AirRig(Modelo* in_model, vector<skeleton*>& skts, int id) : rig(in_model, skts, id)
 {
 	// We get the model
-	model = &in_model;
+	model = in_model;
+
+	skinning = new AirSkinning();
+	skinning->bindings.resize(1);
+	skinning->bindings[0].push_back(model->bindings[0]);
 
 	// Preprocesses like distances over the surface
 	// could be done, maybe as a backgroud process.
@@ -156,6 +203,9 @@ AirRig::AirRig(Modelo& in_model, vector<skeleton*>& skts)
 		skeletons[sktIdx] = skts[sktIdx];
 		processSkeleton(skeletons[sktIdx], defRig);
 	}
+
+	// Init all the parameters in the same place.
+	initParameters();
 }
 
 AirRig::~AirRig()
@@ -173,6 +223,8 @@ bool DefGraph::saveToFile(FILE* fout)
 		printf("There is no file to print!\n [AIR_RIG]");
 		return false;
 	}
+
+	node::saveToFile(fout);
 
 	fprintf(fout, "%d %d\n", defGroups.size(), relations.size()); fflush(fout);
 	for(int groupIdx = 0; groupIdx < defGroups.size(); groupIdx++)
@@ -201,7 +253,43 @@ bool DefGraph::saveToFile(FILE* fout)
 // this data with the model and skeleton after this function.
 bool DefGraph::loadFromFile(FILE* fout)
 {
-	return false;
+	if(!fout)
+	{
+		printf("There is no file to print!\n [AIR_RIG]");
+		return false;
+	}
+
+	node::loadFromFile(fout);
+
+	int relationsSize;
+	int defGroupsSize;
+
+	fscanf(fout, "%d %d\n", defGroupsSize, relationsSize); 
+
+	defGroups.resize(defGroupsSize);
+	for(int groupIdx = 0; groupIdx < defGroups.size(); groupIdx++)
+	{
+		defGroups[groupIdx] = new DefGroup(scene::getNewId());
+		if(!defGroups[groupIdx]->loadFromFile(fout)) return false;
+	}
+
+	relations.resize(relationsSize);
+	for(int relationIdx = 0; relationIdx < relations.size(); relationIdx++)
+	{
+		relations[relationIdx] = new Constraint();
+		if(!relations[relationIdx]->loadFromFile(fout)) return false;
+	}
+
+	/* 
+		Important to ensure the data consistency
+		vector<DefGroup*> roots; -> building the tree
+		vector<joint*> joints; -> binding the skeletons
+		vector<DefNode*> deformers; -> looking to the groups
+		map<unsigned int, DefGroup*> defGroupsRef;
+		map<unsigned int, DefNode*> defNodesRef;
+	*/
+
+	return true;
 }
 
 //////////////////
@@ -234,6 +322,8 @@ bool DefGroup::saveToFile(FILE* fout)
 		return false;
 	}
 
+	node::saveToFile(fout);
+
 	fprintf(fout, "%d\n", deformers.size()); fflush(fout);
 	fprintf(fout, "%s\n", transformation->sName); fflush(fout);
 	fprintf(fout, "%f %f %d %f\n", subdivisionRatio, expansion, smoothingPasses,smoothPropagationRatio); fflush(fout);
@@ -252,7 +342,19 @@ bool DefGroup::saveToFile(FILE* fout)
 // this data with the model and skeleton after this function.
 bool DefGroup::loadFromFile(FILE* fout)
 {
-	return false;
+	int deformersSize;
+	fscanf(fout, "%d", &deformersSize);
+
+	serializedData = new defGroupSerialization();
+
+	fscanf(fout, "%s", &serializedData->sJointName);
+	fscanf(fout, "%f %f %d %f", &subdivisionRatio, &expansion, &smoothingPasses,&smoothPropagationRatio);
+	fscanf(fout, "%d", &type); 
+
+	for(int i = 0; i< deformers.size(); i++)
+		if(!deformers[i].loadFromFile(fout)) return false;
+
+	return true;
 }
 
 
@@ -407,4 +509,118 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 	}
 
 	return numDivisions+1;
+}
+
+bool AirRig::loadRigging(string sFile)
+{
+	FILE* fin = NULL;
+	fin = fopen(sFile.c_str(),"r");
+	if(fin) loadFromFile(fin);
+
+	fclose(fin);
+	return true;
+}
+
+void BuildGroupTree(DefGraph& graph)
+{
+	graph.defNodesRef.clear();
+
+	map<unsigned int, DefGroup*>& groups = graph.defGroupsRef;
+	for(int grIdx = 0; grIdx < graph.defGroups.size(); grIdx++)
+	{
+		groups[graph.defGroups[grIdx]->nodeId] = graph.defGroups[grIdx];
+		graph.defGroups[grIdx]->relatedGroups.clear();
+
+		for(int nodeIdx = 0; nodeIdx < graph.defGroups[grIdx]->deformers.size(); nodeIdx++)
+		{
+			graph.defNodesRef[graph.defGroups[grIdx]->deformers[nodeIdx].nodeId] = &graph.defGroups[grIdx]->deformers[nodeIdx];
+		}
+	}
+
+	map<int, bool> parented;
+	for(int ctrIdx = 0; ctrIdx < graph.relations.size(); ctrIdx++)
+	{
+		// there are serveral types of constraint. Depending on what constraint is defined,
+		// the computation tree is updated.
+		graph.relations[ctrIdx]->parent->relatedGroups.push_back(graph.relations[ctrIdx]->child);
+		parented[graph.defGroupsRef[graph.relations[ctrIdx]->child->nodeId]->nodeId] = true;
+	}
+
+	for(int grIdx = 0; grIdx < graph.defGroups.size(); grIdx++)
+	{
+		// If there is no parent from this joint it will be classified as root
+		if(parented.count(graph.defGroups[grIdx]->nodeId) == 0)
+		{
+			graph.roots.push_back(graph.defGroups[grIdx]);
+		}
+	}
+}
+
+bool AirRig::bindRigToScene(Modelo& model, vector<skeleton*>& skeletons)
+{
+	AirRig* rig;
+
+	// bind model
+	rig->bindModel(model);
+	
+	//bind skeletons
+	for(int i = 0; i< skeletons.size(); i++)
+		rig->skeletons.push_back(skeletons[i]);
+
+	// get joint info
+	map<string, joint*> allJoints;
+	for(int i = 0; i< skeletons.size(); i++)
+	{
+		for(int idJoint = 0; idJoint < skeletons[i]->joints.size(); idJoint++)
+		{
+			allJoints[skeletons[i]->joints[idJoint]->sName] = skeletons[i]->joints[idJoint];
+		}
+	}
+	
+	// bind Groups to joints -> to remove???
+	map<int, int > nodeCorrespondence;
+	for(int defgroupIdx = 0; defgroupIdx< rig->defRig.defGroups.size(); defgroupIdx++)
+	{
+		// get correspondence
+		nodeCorrespondence[rig->defRig.defGroups[defgroupIdx]->sNode->nodeId] = rig->defRig.defGroups[defgroupIdx]->nodeId;
+		rig->defRig.defGroupsRef[rig->defRig.defGroups[defgroupIdx]->nodeId] = rig->defRig.defGroups[defgroupIdx];
+
+		// bind to the transformation
+		joint* jt = NULL;
+		rig->defRig.defGroups[defgroupIdx]->transformation = allJoints[rig->defRig.defGroups[defgroupIdx]->serializedData->sJointName];
+		if(!rig->defRig.defGroups[defgroupIdx]->transformation) return false;
+		delete rig->defRig.defGroups[defgroupIdx]->serializedData;
+		rig->defRig.defGroups[defgroupIdx]->serializedData = NULL;
+
+		// get correspondence
+		for(int defIdx = 0; defIdx< rig->defRig.defGroups[defIdx]->deformers.size(); defIdx++)
+		{
+			nodeCorrespondence[rig->defRig.defGroups[defgroupIdx]->deformers[defIdx].sNode->nodeId] = rig->defRig.defGroups[defgroupIdx]->deformers[defIdx].nodeId;
+		}
+	}
+
+	// Bind Constraint Relation
+	for(int relationIdx = 0; relationIdx< rig->defRig.relations.size(); relationIdx++)
+	{
+		int childIdx = nodeCorrespondence[rig->defRig.relations[relationIdx]->sConstraint->childId];
+		int parentIdx = nodeCorrespondence[rig->defRig.relations[relationIdx]->sConstraint->parentId];
+
+		rig->defRig.relations[relationIdx]->child = rig->defRig.defGroupsRef[childIdx];
+		rig->defRig.relations[relationIdx]->parent = rig->defRig.defGroupsRef[parentIdx] ;
+	}
+
+	BuildGroupTree(rig->defRig);
+
+	//rig->skinning.bindings[0] = vector<binding*> ();
+	//for(int i = 0; i< rig->model->bindings.size(); i++)
+	//	rig->skinning.bindings[0].push_back(rig->model->bindings[i]);
+
+	rig->skinning->deformedModels.push_back(rig->model);
+	rig->skinning->originalModels.push_back(rig->model->originalModel);
+	rig->skinning->rig = rig;
+
+	// Default initialization
+	rig->skinning->bind = new binding();
+
+	return false;
 }

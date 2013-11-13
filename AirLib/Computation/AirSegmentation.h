@@ -3,10 +3,6 @@
 
 #include <DataStructures\AirRig.h>
 
-// This function takes all the groups and constraints
-// and build a relation tree for weights computation
-void BuildGroupTree(DefGraph& graph);
-
 // Updates all the info for compute the skinning and computes it.
 void updateAirSkinning(DefGraph& graph, Modelo& model);
 

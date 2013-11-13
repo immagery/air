@@ -33,41 +33,6 @@ bool AirRig::updateDefGroups()
 	return true;
 }
 
-void BuildGroupTree(DefGraph& graph)
-{
-	graph.defNodesRef.clear();
-
-	map<unsigned int, DefGroup*>& groups = graph.defGroupsRef;
-	for(int grIdx = 0; grIdx < graph.defGroups.size(); grIdx++)
-	{
-		groups[graph.defGroups[grIdx]->nodeId] = graph.defGroups[grIdx];
-		graph.defGroups[grIdx]->relatedGroups.clear();
-
-		for(int nodeIdx = 0; nodeIdx < graph.defGroups[grIdx]->deformers.size(); nodeIdx++)
-		{
-			graph.defNodesRef[graph.defGroups[grIdx]->deformers[nodeIdx].nodeId] = &graph.defGroups[grIdx]->deformers[nodeIdx];
-		}
-	}
-
-	map<int, bool> parented;
-	for(int ctrIdx = 0; ctrIdx < graph.relations.size(); ctrIdx++)
-	{
-		// there are serveral types of constraint. Depending on what constraint is defined,
-		// the computation tree is updated.
-		graph.relations[ctrIdx]->parent->relatedGroups.push_back(graph.relations[ctrIdx]->child);
-		parented[graph.defGroupsRef[graph.relations[ctrIdx]->child->nodeId]->nodeId] = true;
-	}
-
-	for(int grIdx = 0; grIdx < graph.defGroups.size(); grIdx++)
-	{
-		// If there is no parent from this joint it will be classified as root
-		if(parented.count(graph.defGroups[grIdx]->nodeId) == 0)
-		{
-			graph.roots.push_back(graph.defGroups[grIdx]);
-		}
-	}
-}
-
 void updateAirSkinning(DefGraph& graph, Modelo& model)
 {
 	vector<int> traductionTable;

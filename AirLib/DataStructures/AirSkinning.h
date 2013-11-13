@@ -11,6 +11,10 @@ class AirSkinning : public Skinning
 public:
 	AirSkinning() : Skinning() { useSecondaryWeights = false;  rig = NULL; }
 	AirSkinning(AirRig* _rig) : Skinning() { useSecondaryWeights = false; rig = _rig; }
+	~AirSkinning();
+
+	virtual void loadBindingForModel(Modelo *m, string path, const vector< skeleton* >& skeletons);
+	virtual void saveBindingToFile (string path);
 
 	// For update linking: initialization
 	void cacheSkinning();
@@ -18,13 +22,14 @@ public:
 
 	// Compute deformations over the deformed model taking the original model,
 	// and the skinning cached
-	void computeDeformations();
-	void computeDeformationsWithSW();
+	virtual void computeDeformations();
+	virtual void computeDeformationsWithSW();
 
-	bool useSecondaryWeights;
-	vector< vector<weight> > weights;
-	map< int, joint > deformersRestPosition;
+	// Reference to rigg deformers
+	map< int, joint* > deformersRestPosition;
+	map< int, joint* > deformersPosition;
 
+	// Parent rig
 	AirRig* rig;
 };
 
