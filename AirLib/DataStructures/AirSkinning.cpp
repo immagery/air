@@ -35,7 +35,6 @@ void AirSkinning::cacheSkinning()
 
 void AirSkinning::getDeformerRestPositions(AirRig* rig)
 {
-
 	// By now, we take the joint positions as a rest poses, but
 	// next will be taken some control prositions solved for every deformer or group.
 	deformersRestPosition.clear();
@@ -49,11 +48,6 @@ void AirSkinning::getDeformerRestPositions(AirRig* rig)
 		deformersRestPosition[id]->qrot = rig->defRig.defGroups[grIdx]->transformation->qrot;
 		deformersRestPosition[id]->qOrient = rig->defRig.defGroups[grIdx]->transformation->qOrient;
 	}
-}
-
-void AirSkinning::saveBindingToFile (string path)
-{
-
 }
 
 void AirSkinning::loadBindingForModel(Modelo *m, AirRig* rig) 
@@ -382,4 +376,39 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		}
 	}
 
+}
+
+void saveAirBinding(binding* bd, string fileName)
+{
+	printf("\nGuardando %s\n",fileName.c_str());
+	FILE* fout = fopen(fileName.c_str(), "w");
+
+	fprintf(fout, "%d\n", bd->pointData.size());
+	for(int pt = 0; pt< bd->pointData.size(); pt++)
+	{
+		bd->pointData[pt].saveToFile(fout);
+	}
+
+	fclose(fout);
+}
+
+void loadAirBinding(binding* bd, string fileName)
+{
+	ifstream inFile;
+	inFile.open(fileName.c_str());
+
+	if(inFile.is_open())
+	{
+		int pointSize = 0;
+		string str;
+		getline(inFile, str);
+		pointSize = atoi(str.c_str());
+		assert(pointSize <= bd->pointData.size());
+		for(int pt = 0; pt< bd->pointData.size(); pt++)
+		{
+			bd->pointData[pt].loadFromFile(inFile);
+		}
+
+		inFile.close();
+	}
 }

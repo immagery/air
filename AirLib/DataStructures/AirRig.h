@@ -252,9 +252,6 @@ public:
 
 };
 
-void saveAirBinding(binding* bd, string fileName);
-void loadAirBinding(binding* bd, string fileName);
-
 class PointConstraint : public Constraint
 {
 public:
@@ -391,5 +388,6 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 // build a relation tree for weights computation
 void BuildGroupTree(DefGraph& graph);
 
+bool bindRigToScene(Modelo* model, vector<skeleton*>skeletons, AirRig* rig);
 
 #endif // AIR_RIG_H

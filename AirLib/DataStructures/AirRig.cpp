@@ -80,6 +80,7 @@ bool AirRig::saveToFile(FILE* fout)
 	return true;
 }
 
+
 // Loads data from this file, it is important to bind
 // this data with the model and skeleton after this function.
 bool AirRig::loadFromFile(ifstream& in)
@@ -898,77 +899,65 @@ bool AirRig::bindLoadedRigToScene(Modelo* in_model, vector<skeleton*>& in_skelet
 }
 
 using namespace std;
-void saveAirBinding(binding* bd, string fileName)
+
+bool bindRigToScene(Modelo* model, vector<skeleton*>skeletons, AirRig* rig)
 {
-	printf("\nGuardando %s\n",fileName.c_str());
-	FILE* fout = fopen(fileName.c_str(), "w");
+	// bind model
+	rig->bindModel(model);
+	
+	//bind skeletons
+	for(int i = 0; i< skeletons.size(); i++)
+		rig->skeletons.push_back(skeletons[i]);
 
-	fprintf(fout, "%d\n", bd->pointData.size());
-	for(int pt = 0; pt< bd->pointData.size(); pt++)
+	// get joint info
+	map<string, joint*> allJoints;
+	for(int i = 0; i< skeletons.size(); i++)
 	{
-		bd->pointData[pt].saveToFile(fout);
-
-		/*
-		fprintf(fout, "%d", pt);
-
-		for(int infl = 0; infl< bd->pointData[pt].influences.size(); infl++)
+		for(int idJoint = 0; idJoint < skeletons[i]->joints.size(); idJoint++)
 		{
-			int idInfl = bd->pointData[pt].influences[infl].label;
-			float inflValue = bd->pointData[pt].influences[infl].weightValue;
-			string inflName = "dummy";
-
-			joint* jt;
-			for(int skt = 0; skt< bd->bindedSkeletons.size(); skt++)
-			{
-				jt = bd->bindedSkeletons[skt]->jointRef[idInfl];
-				if(jt) break;
-			}
-
-			if(jt) inflName = jt->sName;
-			else
-			{
-				printf("Algo pasa con este indice: %d\n",idInfl);
-				fflush(0);
-			}
-
-			fprintf(fout, " %s %f", inflName.c_str(), inflValue);
+			allJoints[skeletons[i]->joints[idJoint]->sName] = skeletons[i]->joints[idJoint];
 		}
+	}
+	
+	// bind Groups to joints -> to remove???
+	map<int, int > nodeCorrespondence;
+	for(int defgroupIdx = 0; defgroupIdx< rig->defRig.defGroups.size(); defgroupIdx++)
+	{
+		// get correspondence
+		nodeCorrespondence[rig->defRig.defGroups[defgroupIdx]->sNode->nodeId] = rig->defRig.defGroups[defgroupIdx]->nodeId;
+		rig->defRig.defGroupsRef[rig->defRig.defGroups[defgroupIdx]->nodeId] = rig->defRig.defGroups[defgroupIdx];
 
-		fprintf(fout, "\n"); fflush(fout);
+		// bind to the transformation
+		joint* jt = NULL;
+		rig->defRig.defGroups[defgroupIdx]->transformation = allJoints[rig->defRig.defGroups[defgroupIdx]->serializedData->sJointName];
+		if(!rig->defRig.defGroups[defgroupIdx]->transformation) return false;
+		delete rig->defRig.defGroups[defgroupIdx]->serializedData;
+		rig->defRig.defGroups[defgroupIdx]->serializedData = NULL;
 
-		for(int infl = 0; infl< bd->pointData[pt].secondInfluences.size(); infl++)
+		// get correspondence
+		for(int defIdx = 0; defIdx< rig->defRig.defGroups[defIdx]->deformers.size(); defIdx++)
 		{
-			fprintf(fout, "%d ", bd->pointData[pt].secondInfluences[infl].size());
-			for(int child = 0; child < bd->pointData[pt].secondInfluences[infl].size(); child++)
-			{
-				fprintf(fout, "%f ", bd->pointData[pt].secondInfluences[infl][child]);
-			}
+			nodeCorrespondence[rig->defRig.defGroups[defgroupIdx]->deformers[defIdx].sNode->nodeId] = rig->defRig.defGroups[defgroupIdx]->deformers[defIdx].nodeId;
 		}
-
-		fprintf(fout, "\n"); fflush(fout);
-		*/
 	}
 
-	fclose(fout);
-}
-
-void loadAirBinding(binding* bd, string fileName)
-{
-	ifstream inFile;
-	inFile.open(fileName.c_str());
-
-	if(inFile.is_open())
+	// Bind Constraint Relation
+	for(int relationIdx = 0; relationIdx< rig->defRig.relations.size(); relationIdx++)
 	{
-		int pointSize = 0;
-		string str;
-		getline(inFile, str);
-		pointSize = atoi(str.c_str());
-		assert(pointSize <= bd->pointData.size());
-		for(int pt = 0; pt< bd->pointData.size(); pt++)
-		{
-			bd->pointData[pt].loadFromFile(inFile);
-		}
+		int childIdx = nodeCorrespondence[rig->defRig.relations[relationIdx]->sConstraint->childId];
+		int parentIdx = nodeCorrespondence[rig->defRig.relations[relationIdx]->sConstraint->parentId];
 
-		inFile.close();
+		rig->defRig.relations[relationIdx]->child = rig->defRig.defGroupsRef[childIdx];
+		rig->defRig.relations[relationIdx]->parent = rig->defRig.defGroupsRef[parentIdx] ;
 	}
+
+	BuildGroupTree(rig->defRig);
+
+	rig->skin->deformedModel = rig->model;
+	rig->skin->originalModel = rig->model->originalModel;
+
+	// Default initialization
+	rig->skin->bind = rig->model->bind;
+
+	return false;
 }

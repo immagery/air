@@ -13,7 +13,7 @@ public:
 	~AirSkinning();
 
 	virtual void loadBindingForModel(Modelo *m, AirRig* rig);
-	virtual void saveBindingToFile (string path);
+	//virtual void saveBindingToFile (string path);
 
 	// For update linking: initialization
 	void cacheSkinning();
@@ -28,5 +28,8 @@ public:
 	map< int, joint* > deformersRestPosition;
 	map< int, joint* > deformersPosition;
 };
+
+void saveAirBinding(binding* bd, string fileName);
+void loadAirBinding(binding* bd, string fileName);
 
 #endif // AIR_SKINNING_H
