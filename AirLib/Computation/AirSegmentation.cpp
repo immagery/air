@@ -184,7 +184,7 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 	for(unsigned int defId = 0; defId< graph.deformers.size(); defId++)
     {
 		// Only the dirty deformers
-		if(graph.deformers[defId] -> dirtyFlag)
+		if(graph.deformers[defId]->dirtyFlag)
 		{
 			// Mean value coordinates computation.
 			mvcAllBindings(graph.deformers[defId]->pos, 
@@ -204,6 +204,8 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 																							  graph.deformers[defId]->weightsSort, 
 																							  bd->BihDistances, 
 																							  graph.deformers[defId]->cuttingThreshold);
+			graph.deformers[defId]->dirtyFlag = false;
+			graph.deformers[defId]->segmentationDirtyFlag = true;
 		}
 	}
 
@@ -277,7 +279,10 @@ void SmoothFromSegment(Modelo& m, binding* bd, DefGroup* group, int frontId)
 	//int smoothingPasses = bd->smoothingPasses;
 	//float realSmooth = bd->smoothPropagationRatio;
 
+	// TODO: get the global smoothin value
 	int smoothingPasses = group->smoothingPasses;
+	if(group->localSmooth)
+		smoothingPasses = group->smoothingPasses;
 	float realSmooth = group->smoothPropagationRatio;
 
     weightsSmoothing(m, bd, front, realSmooth, frontId, smoothingPasses);
@@ -641,7 +646,7 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 	// Get wich deformers needs to be updated
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
-		dirtyDeformers[deformers[deformerId]->nodeId] = deformers[deformerId]->dirtyFlag;
+		dirtyDeformers[deformers[deformerId]->nodeId] = deformers[deformerId]->segmentationDirtyFlag;
 	}
 
 	// Updates all the points that were linked to a dirty deformer
@@ -699,7 +704,7 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 			}
 		}
 
-		def->dirtyFlag = false;
+		def->segmentationDirtyFlag = false;
 	}
 }
 
@@ -827,7 +832,15 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 						}
 					}
 
-					dp.secondInfluences[infl][childIdx] = defs[nodeIdChildSegment]->ratio;
+					// Tenemos un elementos fuera, o no parece que no se acerca a nadie
+					if(nodeIdChildSegment >= 0)
+					{
+						dp.secondInfluences[infl][childIdx] = defs[nodeIdChildSegment]->ratio;
+					}
+					else
+					{
+						printf("Tenemos un nodo que analizar\n"); fflush(0);
+					}
 
 				}
 			}

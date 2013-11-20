@@ -23,10 +23,11 @@
 #define default_SUBDIVISION_RATIO 0.25
 #define default_EXPANSION 1
 
+#define default_INI_TWIST 0.0
+#define default_END_TWIST 1.0
+
 using namespace std;
 using namespace Eigen;
-
-
 
 // This clases define the dependency relationship between deformers,
 class ControlGroup : public node
@@ -37,14 +38,25 @@ public:
 
 enum DefGroupType { DEF_NONE = 0, DEF_POINT, DEF_STICK, DEF_SURFACE, DEF_VOLUME};
 
+class airRigSerialization
+{
+public:
+	string sModelName;
+	vector<string> sSkeletonName;
+
+	map<int, int> defNodesRelation;
+	map<int, int> defGroupsRelation;
+};
+
 class defGroupSerialization
 {
 public:
 	defGroupSerialization(){}
+
 	string sJointName;
 };
 
-class DefGroup : public node
+class DefGroup : public object
 {
 public:
 	DefGroup(int nodeId);
@@ -53,21 +65,36 @@ public:
 	vector<DefNode> deformers;
 	joint* transformation;
 
+	joint* rigTransform;
+
 	float subdivisionRatio;
 
 	float expansion;
 	int smoothingPasses;
 	float smoothPropagationRatio;
+	bool localSmooth; 
+
+	float iniTwist;
+	float finTwist;
+	bool enableTwist;
 
 	DefGroupType type; 
 
 	// For computational pourposes.
+	vector<DefGroup*> dependentGroups;
 	vector<DefGroup*> relatedGroups;
 
 	defGroupSerialization* serializedData;
 
 	bool saveToFile(FILE* fout);
-	bool loadFromFile(FILE* fout);
+	bool loadFromFile(ifstream& in, airRigSerialization* sData);
+
+	virtual void setRotation(double rx, double ry, double rz, bool radians);
+
+	bool dirtyByTransformation(bool alsoFather, bool hierarchically = true);
+	bool dirtyBySegmentation();
+	bool dirtyBySmoothing();
+
 };
 
 class constraintSerialization
@@ -95,7 +122,7 @@ public:
 	virtual bool saveToFile(FILE* fout);
 
 	// How can a I load the references.
-	virtual bool loadFromFile(FILE* fout);
+	virtual bool loadFromFile(ifstream& in);
 
 };
 
@@ -110,9 +137,8 @@ public:
 		fout = fout; // for delete warning 
 		return true;
 	}
-	virtual bool loadFromFile(FILE* fout)
+	virtual bool loadFromFile(ifstream& in)
 	{
-		fout = fout; // for delete warning
 		return true;
 	}
 
@@ -136,6 +162,8 @@ public:
 
 		smoothingPasses = 3;
 		smoothPropagationRatio = 0.25;
+
+		iam = DEFGRAPH_NODE;
 	}
 
 	vector<DefGroup*> roots;
@@ -153,20 +181,13 @@ public:
 	float smoothPropagationRatio;
 
 	bool saveToFile(FILE* fout);
-	bool loadFromFile(FILE* fout);
-};
+	bool loadFromFile(ifstream& in, airRigSerialization* sData);
 
-
-class airRigSerialization
-{
-public:
-	string sModelName;
-	vector<string> sSkeletonName;
 };
 
 // This class containst all the info and processes for
 // build a perfect rig.
-class AirRig : public rig
+class AirRig : public Rig
 {
 public:
 
@@ -176,26 +197,27 @@ public:
 	// Elements for control the rig
 	ControlGraph controlRig;
 
-	// The base model
-	Modelo* model;
-
-	// The skeletons used to compute skinning, or used as output
-	vector<skeleton*> skeletons;
-
 	//The deformer
-	AirSkinning* skinning;
+	AirSkinning* airSkin;
 
 	// Parameters for computation
-	double iniTwist; // To replace in the group parameters
-	double finTwist; // To replace in the group parameters
-	bool enableTwist; // To replace in the group parameters
+	//Default twist values;
+	double iniTwist;
+	double finTwist;
+	bool enableTwist;
+
+	// Default smooth value;
+	int defaultSmoothPasses;
+
+	// Toogle from rigg to animation mode
+	bool rigginMode;
 
 	airRigSerialization* serializedData;
 
 	// Constructors
 	AirRig(int id); // default, without model bind
-	AirRig(Modelo* model, int id);
-	AirRig(Modelo* model, vector<skeleton*>& skts, int id);
+	//AirRig(Modelo* model, int id);
+	//AirRig(Modelo* model, vector<skeleton*>& skts, int id);
 
 	// Parameter inizialization
 	void initParameters();
@@ -208,15 +230,30 @@ public:
 	bool updateDefGroups();
 
 	bool saveToFile(FILE* fout);
-	bool loadFromFile(FILE* fout);
+	bool loadFromFile(ifstream& in);
 
 	// Load the rig defined in the file
 	virtual bool loadRigging(string sFile);
 
-	virtual bool bindRigToScene(Modelo& model, vector<skeleton*>& skeletons);
+	virtual bool bindLoadedRigToScene(Modelo* model, vector<skeleton*>& skeletons);
+
+	virtual bool bindRigToModelandSkeleton(Modelo* in_model, vector<skeleton*>& in_skeletons, float subdivision);
+
+	bool preprocessModelForComputations();
+
+	// This functions changes de values and propagates the 
+	// dirty flag properly.
+	bool translateDefGroup(Vector3d newPos, int nodeId);
+	bool rotateDefGroup(double rx, double ry, double rz, bool radians, int nodeId);
+	bool changeExpansionValue(float value, int nodeId);
+	bool changeSmoothValue(float value, int nodeId);
+
+	//bool changeTwistValues(float ini, float fin, bool enable);
 
 };
 
+void saveAirBinding(binding* bd, string fileName);
+void loadAirBinding(binding* bd, string fileName);
 
 class PointConstraint : public Constraint
 {
@@ -236,9 +273,8 @@ public:
 		fout = fout; // for delete warning
 		return true;
 	}
-	virtual bool loadFromFile(FILE* fout)
+	virtual bool loadFromFile(ifstream& in)
 	{ 
-		fout = fout; // for delete warning
 		return true;
 	}
 
@@ -263,9 +299,8 @@ public:
 		return true;
 	}
 
-	virtual bool loadFromFile(FILE* fout)	
+	virtual bool loadFromFile(ifstream& in)	
 	{ 
-		fout = fout; // for delete warning
 		return true;
 	}
 };
@@ -288,9 +323,8 @@ public:
 		fout = fout; // for delete warning
 		return true;
 	}
-	virtual bool loadFromFile(FILE* fout)	
+	virtual bool loadFromFile(ifstream& in)	
 	{ 
-		fout = fout; // for delete warning
 		return true;
 	}
 };
@@ -311,9 +345,8 @@ public:
 		fout = fout; // for delete warning
 		return true;
 	}
-	virtual bool loadFromFile(FILE* fout)	
+	virtual bool loadFromFile(ifstream& in)	
 	{ 
-		fout = fout; // for delete warning
 		return true;
 	}
 };
@@ -333,9 +366,8 @@ public:
 		fout = fout; // for delete warning
 		return true;
 	}
-	virtual bool loadFromFile(FILE* fout)	
+	virtual bool loadFromFile(ifstream& in)	
 	{ 
-		fout = fout; // for delete warning
 		return true;
 	}
 };
@@ -346,7 +378,7 @@ public:
 bool propagateExpansion(DefGroup& gr, float parentValue, int childId, float childValue);
 
 // Process just one skeleton adding the info to last loaded skeletons
-bool processSkeleton(skeleton* skt, DefGraph& defRig);
+bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions);
 
 // Propose deformation nodes depending on the joint linked
 bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups );

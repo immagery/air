@@ -18,7 +18,7 @@ void AirSkinning::cacheSkinning()
 	// We are considering just one model
 	// with just one binding.
 
-	binding* bd = bindings[0];
+	binding* bd = bind;
 	weights.clear();
 	weights.resize(bd->pointData.size());
 
@@ -33,8 +33,9 @@ void AirSkinning::cacheSkinning()
 	}
 }
 
-void AirSkinning::getDeformerRestPositions()
+void AirSkinning::getDeformerRestPositions(AirRig* rig)
 {
+
 	// By now, we take the joint positions as a rest poses, but
 	// next will be taken some control prositions solved for every deformer or group.
 	deformersRestPosition.clear();
@@ -55,8 +56,11 @@ void AirSkinning::saveBindingToFile (string path)
 
 }
 
-void AirSkinning::loadBindingForModel(Modelo *m, string path, const vector< skeleton* >& skeletons) 
+void AirSkinning::loadBindingForModel(Modelo *m, AirRig* rig) 
 {
+
+	// Done in previous pases
+	/*
 	printf("Loading binding data...");
 
 	ifstream in(path.c_str(), ios::in);
@@ -68,12 +72,10 @@ void AirSkinning::loadBindingForModel(Modelo *m, string path, const vector< skel
 		return;
 	}
 
-	int modelIndex = deformedModels.size();
-
 	binding* bd = bind = new binding();
 
-	deformedModels.push_back((Geometry*) m);
-	originalModels.push_back(m->originalModel);
+	deformedModel = (Geometry*) m;
+	originalModel = m->originalModel;
 
 	int counter = 0;
 	while (!in.eof()) {
@@ -147,10 +149,13 @@ void AirSkinning::loadBindingForModel(Modelo *m, string path, const vector< skel
 			}
 		}
     }
+
+	*/
 }
 
-void AirSkinning::computeDeformations()
+void AirSkinning::computeDeformations(AirRig* rig)
 {
+
 	//if (deformersRestPosition.size() == 0) return;
 	if(!rig) return;
 
@@ -170,15 +175,15 @@ void AirSkinning::computeDeformations()
 	
 	bool updated = false;
 
-	for (int i = 0; i < deformedModels.size(); ++i) 
+	//for (int i = 0; i < deformedModels.size(); ++i) 
 	{		
 		// It's a bad way to ensure that we are deforming the right mdoel.
-		if (!deformedModels[i]->shading->visible) return;
+		if (!deformedModel->shading->visible) return;
 
-		Geometry *m = deformedModels[i];
+		Geometry *m = deformedModel;
 
 		// loop through all bindings
-		binding * b = bindings[i];
+		binding * b = bind;
 
 		for (int k = 0; k < b->pointData.size(); ++k) 
 		{ 
@@ -196,7 +201,7 @@ void AirSkinning::computeDeformations()
 				int skID = data.influences[kk].label;
 				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
-				Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
+				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
 				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 					
 				float currentWeight = data.influences[kk].weightValue;
@@ -259,7 +264,7 @@ double reScaleTwist(double twist, double ini, double fin)
 	return newTwist;
 }
 
-void AirSkinning::computeDeformationsWithSW()
+void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 {
 	//if (deformersRestPosition.size() == 0) return;
 	if(!rig) return;
@@ -280,15 +285,15 @@ void AirSkinning::computeDeformationsWithSW()
 	
 	bool updated = false;
 
-	for (int i = 0; i < deformedModels.size(); ++i) 
+	//for (int i = 0; i < deformedModels.size(); ++i) 
 	{		
 		// It's a bad way to ensure that we are deforming the right mdoel.
-		if (!deformedModels[i]->shading->visible) return;
+		if (!deformedModel->shading->visible) return;
 
-		Geometry *m = deformedModels[i];
+		Geometry *m = deformedModel;
 
 		// loop through all bindings
-		binding * b = bindings[i];
+		binding * b = bind;
 
 		for (int k = 0; k < b->pointData.size(); ++k) 
 		{ 
@@ -307,41 +312,16 @@ void AirSkinning::computeDeformationsWithSW()
 				//joint& jt = deformersRestPosition[skID];
 				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
-				Vector3d& restPosition = originalModels[i]->nodes[vertexID]->position;
+				if(!jt) continue;
+
+				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
 				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 
-				Quaterniond apliedRotation = jt->rotation;
-					
+				Quaterniond apliedRotation = jt->rotation;			
 				float currentWeight = data.influences[kk].weightValue;
 
-				if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1)
+				if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1 && rig->defRig.defGroupsRef[skID]->relatedGroups[0]->enableTwist)
 				{
-					/*
-					double twist = 0;
-						
-					Vector3d axis = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->translation - rig->defRig.defGroupsRef[skID]->transformation->translation;
-					axis.normalize();
-
-					//necesito guardar la transformacion hasta el padre
-
-					Vector3d tempRestRot = rig->defRig.defGroupsRef[skID]->transformation->rRotation._transformVector(axis);
-
-					Quaterniond localRotationChild =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qOrient * 
-														rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->qrot;
-
-					Quaterniond localRotationChildRest =  rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->restRot;
-
-					Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
-					Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
-
-					if(!referenceRest.isApprox(referenceCurr))
-						int parar = 0;
-
-					Quaterniond nonRollrotation;
-					nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
-						
-					Quaterniond twistExtraction = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
-					*/
 
 					if(data.secondInfluences[kk].size() == 0)
 						continue;
@@ -349,7 +329,9 @@ void AirSkinning::computeDeformationsWithSW()
 					float secondWeight = data.secondInfluences[kk][0];
 
 					// Twist Rescaling
-					secondWeight = reScaleTwist(secondWeight, rig->iniTwist, rig->finTwist);
+					float iniTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->iniTwist;
+					float finTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->finTwist;
+					secondWeight = reScaleTwist(secondWeight, iniTwist , finTwist);
 
 					Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
 					Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
@@ -364,13 +346,20 @@ void AirSkinning::computeDeformationsWithSW()
 
 					Quaterniond twistRotation = Quaterniond::Identity().slerp(secondWeight, childTwist);
 
+					/*
 					//Quaterniond unTwist = Quaterniond::Identity().slerp(cuttedWeight, twist);
-					Quaterniond unTwist = Quaterniond::Identity();
+					//Quaterniond unTwist = Quaterniond::Identity();
+
+					//if(jt->father)
+					//	apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					//else
+					//	apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					*/
 
 					if(jt->father)
-						apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+						apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*twistRotation;
 					else
-						apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+						apliedRotation = jt->qOrient*jt->qrot*twistRotation;
 
 				}
 
