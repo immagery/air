@@ -374,6 +374,9 @@ public:
 // Propagate a expansión value, depending of the child associated
 bool propagateExpansion(DefGroup& gr, float parentValue, int childId, float childValue);
 
+// Propagate a expansión value, depending of the child associated
+bool propagateExpansion(DefGroup& gr);
+
 // Process just one skeleton adding the info to last loaded skeletons
 bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions);
 
@@ -389,5 +392,7 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 void BuildGroupTree(DefGraph& graph);
 
 bool bindRigToScene(Modelo* model, vector<skeleton*>skeletons, AirRig* rig);
+
+bool getBDEmbedding(Modelo* model);
 
 #endif // AIR_RIG_H

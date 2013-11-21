@@ -264,25 +264,32 @@ void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, i
 	}
 }
 
+// Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
+void weightsNoSmooting(Modelo& m, binding* bd,
+                      vector< int >& front,
+                      int idFront)
+{
+	for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
+    {
+		PointData& pd = bd->pointData[front[frIdx]];
+		pd.auxInfluences.push_back(weight(idFront, pd.ownerWeight));
+	}
+}
+
 void SmoothFromSegment(Modelo& m, binding* bd, DefGroup* group, int frontId)
 {
     // Fronts creation using frontId
-    vector< int > front;
+    vector< int > front(0);
 
-    // Init grid for weights smoothing
+    // Init model for weights smoothing
 	if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n");fflush(0);
     initSurfaceWeightsSmoothing(m, bd, front, frontId);
 
     // Smoothing (sin corte jerárquico)
 	if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
 
-	//int smoothingPasses = bd->smoothingPasses;
-	//float realSmooth = bd->smoothPropagationRatio;
-
-	// TODO: get the global smoothin value
+	// get the global or local smoothing value
 	int smoothingPasses = group->smoothingPasses;
-	if(group->localSmooth)
-		smoothingPasses = group->smoothingPasses;
 	float realSmooth = group->smoothPropagationRatio;
 
     weightsSmoothing(m, bd, front, realSmooth, frontId, smoothingPasses);
@@ -335,13 +342,15 @@ void weightsSmoothing(Modelo& m, binding* bd,
 	double weightsSum = 0;
 	float weightsCount = 0;
     if(VERBOSE)printf("Front size: %d\n", front.size());
+	int frontSize = 0;
 	while(iter < smoothingPasses)
     {
+		/*vector<int> toAddToFront;
         for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
         {
             int frontIdx = front[frIdx];
 			PointData& pd = bd->pointData[frontIdx];
-			GraphNode* sn = bd->mainSurface->nodes[frontIdx];
+			GraphNode* sn = pd.node;//bd->mainSurface->nodes[frontIdx];
 
 			weightsSum = 0;
 			weightsCount = 0;
@@ -349,10 +358,14 @@ void weightsSmoothing(Modelo& m, binding* bd,
 			for(unsigned int neighboursIdx = 0; neighboursIdx < sn->connections.size(); neighboursIdx++)
             {
 				GraphNode* snNeighbour =  sn->connections[neighboursIdx];
+				bool visitedEarly = true;
 				if(!snNeighbour->visited)
 				{
 					snNeighbour->visited = true;
-					front.push_back(snNeighbour->id);
+					toAddToFront.push_back(snNeighbour->id);
+					//bd->pointData[snNeighbour->id].ownerWeight = 0.0;
+					//bd->pointData[snNeighbour->id].tempOwnerWeight = 0.0;
+					visitedEarly = false;
 				}
 
 				// Distancia entre puntos... cuando tenga biharmonic distances ya estará calculado.
@@ -361,34 +374,95 @@ void weightsSmoothing(Modelo& m, binding* bd,
 				float distanceWeight = computeWeightProportional(edgeDistance, smoothPropagationRatio, true);
 
 				// La media es ponderada
-				weightsSum += bd->pointData[snNeighbour->id].ownerWeight*distanceWeight;
-				weightsCount += 1*distanceWeight;
+				weightsSum += bd->pointData[snNeighbour->id].ownerWeight;//*distanceWeight;
+
+				weightsCount += 1;//*distanceWeight;
 			}
 
 			if(weightsCount > 0)
 				weightsSum = weightsSum / weightsCount;
 			else
 			{
-				//printf("Como puede ser que no haya ningun peso?.\n");
+				printf("Como puede ser que no haya ningun peso?.\n");
 				weightsSum = 0;
 			}
 
 			pd.tempOwnerWeight = weightsSum;
+
+
         }
 
 		for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
         {
             PointData& pd = bd->pointData[front[frIdx]];
 			pd.ownerWeight = pd.tempOwnerWeight;
+			pd.tempOwnerWeight = 0;
+		}
+
+		for(unsigned int frIdx = 0; frIdx < toAddToFront.size(); frIdx++)
+		{
+			front.push_back(toAddToFront[frIdx]);
+		}
+		*/
+
+
+		for(unsigned int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
+        {
+			PointData& pd = bd->pointData[ptIdx];
+			GraphNode* sn = pd.node;
+
+			if(!sn->visited)
+			{
+				weightsSum = 0;
+				weightsCount = 0;
+				// Para cada elemento del frente realizamos la expansión.
+				for(unsigned int neighboursIdx = 0; neighboursIdx < sn->connections.size(); neighboursIdx++)
+				{
+					GraphNode* snNeighbour =  sn->connections[neighboursIdx];
+
+					//Vector3d vec = pd.node->position - bd->pointData[snNeighbour->id].node->position;
+					//float edgeDistance = vec.norm();
+					//float distanceWeight = computeWeightProportional(edgeDistance, smoothPropagationRatio, true);
+
+					// La media es ponderada
+					weightsSum += bd->pointData[snNeighbour->id].ownerWeight;
+					weightsCount += 1;
+				}
+
+				if(weightsCount > 0)
+					weightsSum = weightsSum / weightsCount;
+				else
+				{
+					printf("Como puede ser que no haya ningun peso?.\n");
+					weightsSum = 0;
+				}
+				pd.tempOwnerWeight = weightsSum;
+			}
+
+        }
+
+		for(unsigned int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
+        {
+            PointData& pd = bd->pointData[ptIdx];
+			if(!pd.node->visited)
+			{
+				pd.ownerWeight = pd.tempOwnerWeight;
+				pd.tempOwnerWeight = 0;
+			}
 		}
 
         iter++;
     }
 
-	for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
+	for(unsigned int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
     {
-		PointData& pd = bd->pointData[front[frIdx]];
-		pd.auxInfluences.push_back(weight(idFront, pd.ownerWeight));
+		PointData& pd = bd->pointData[ptIdx];
+
+		int i = findWeight(pd.auxInfluences, idFront);
+		if(i < 0)
+			pd.auxInfluences.push_back(weight(idFront, pd.ownerWeight));
+		else
+			pd.auxInfluences[i] = weight(idFront, pd.ownerWeight);
 	}
 }
 
@@ -433,6 +507,11 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, 
 	for(unsigned int id = 0; id < graph.deformers.size(); id++)
 		traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
 
+	// Adding the father to the fight
+	createTraductionTable(&group, traductionTable, group.nodeId, true);
+	segmentationIds.push_back(group.nodeId);
+
+	// Adding the childs to the fight
 	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
 	{
 		// Preparamos la traduccion para el grid.
@@ -440,10 +519,8 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, 
         segmentationIds.push_back(group.relatedGroups[i]->nodeId);
 	}
 
-
 	// 2.b. Add also the father for fighting (TODEBUG IN TEST-TIME)
 	createTraductionTable(&group, traductionTable, group.nodeId, true);
-	//segmentationIds.push_back(jt->nodeId);
 
 	// 2.c. We translate all the cells according to its node influencer.
 	if(VERBOSE)printf("2.c Translation\n");fflush(0);
@@ -472,8 +549,24 @@ void clearOlderComputations(Modelo& m)
 
 	for(int ptIdx = 0; ptIdx< m.bind->pointData.size(); ptIdx++)
 	{
-		m.bind->pointData[ptIdx].influences.clear();
-		m.bind->pointData[ptIdx].secondInfluences.clear();
+		PointData& pd = m.bind->pointData[ptIdx];
+
+		pd.influences.clear();
+		pd.auxInfluences.clear();
+		
+		for(int i = 0; i< pd.secondInfluences.size(); i++)
+			pd.secondInfluences[i].clear();
+		pd.secondInfluences.clear();
+		
+		pd.domain = 0;
+		pd.domainId = -1;
+		pd.ownerLabel = -1;
+		pd.ownerWeight = 0;
+		pd.tempOwnerWeight = 0;
+
+		pd.itPass = 0;
+		pd.validated = false;
+		pd.assigned = false;
 	}
 	
 
@@ -511,7 +604,8 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
             }
             else
             {
-                // In this case there is NO influence over this cell from domainId node.
+                // In this case there is NO influence over this cell from domainId node
+				// and it is not battled by the childs
                 pd.domain = 0;
                 pd.domainId = domainId_init;
             }

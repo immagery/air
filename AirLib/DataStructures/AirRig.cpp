@@ -583,6 +583,50 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 	return true;
 }
 
+DefGroup* getChildFromGroupId(DefGroup* gr, int id)
+{
+	for(int i = 0; i< gr->relatedGroups.size(); i++)
+	{
+		if(gr->relatedGroups[i]->nodeId == id)
+			return gr->relatedGroups[i];
+	}
+
+	return NULL;
+}
+
+// Propagate a expansión value, depending of the child associated
+bool propagateExpansion(DefGroup& gr)
+{
+	for(int group = 0; group < gr.deformers.size(); group++)
+	{	
+		DefGroup* child = getChildFromGroupId(&gr, gr.deformers[group].childBoneId);
+
+		if(child == NULL)
+			continue;
+
+		// Expansion propagation
+		float expValue = gr.expansion;
+		float expValue2 = child->expansion;
+
+		//float expValue = parent->expansion;
+		//float expValue2 = child->expansion;
+
+		// Queda por decidir si queremos continuidad entre las expansiones o no.
+		float ratio2 = gr.deformers[group].ratio/ratioExpansion_DEF;
+		if(ratio2 > 1) ratio2 = 1;
+		if(ratio2 < 0) ratio2 = 0;
+
+        float dif = 1-expValue;
+        float newValue =  expValue + dif*ratio2;
+
+		gr.deformers[group].expansion = newValue;
+		gr.deformers[group].segmentationDirtyFlag = true;
+	}
+
+	return true;
+}
+
+
 // Propagate a expansión value, depending of the child associated
 bool propagateExpansion(DefGroup& gr, float parentValue, int childId, float childValue)
 {
@@ -853,11 +897,24 @@ bool AirRig::bindLoadedRigToScene(Modelo* in_model, vector<skeleton*>& in_skelet
 		delete defRig.defGroups[defgroupIdx]->serializedData;
 		defRig.defGroups[defgroupIdx]->serializedData = NULL;
 
+		// Updating deformers ids...
+		for(int defIdx = 0; defIdx < defRig.defGroups[defgroupIdx]->deformers.size(); defIdx++)
+		{
+			DefNode& dnode = defRig.defGroups[defgroupIdx]->deformers[defIdx];
+			dnode.boneId = groupRel[dnode.boneId];
+			dnode.childBoneId = groupRel[dnode.childBoneId];
+
+			defRig.defNodesRef[dnode.nodeId] = &dnode;
+
+			defRig.deformers.push_back(&dnode);
+		}
+
 		// get correspondence
 		//for(int defIdx = 0; defIdx< defRig.defGroups[defgroupIdx]->deformers.size(); defIdx++)
 		//{
 		//	groupRel[defRig.defGroups[defgroupIdx]->deformers[defIdx].sNode->nodeId] = defRig.defGroups[defgroupIdx]->deformers[defIdx].nodeId;
 		//}
+		defRig.defGroupsRef[defRig.defGroups[defgroupIdx]->nodeId] =defRig.defGroups[defgroupIdx];
 	}
 
 	// Bind Constraint Relation

@@ -307,18 +307,6 @@ void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, i
 }
 
 // Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
-void weightsNoSmooting(Modelo& m, binding* bd,
-                      vector< int >& front,
-                      int idFront)
-{
-	for(unsigned int frIdx = 0; frIdx < front.size(); frIdx++)
-    {
-		PointData& pd = bd->pointData[front[frIdx]];
-		pd.auxInfluences.push_back(weight(idFront, pd.ownerWeight));
-	}
-}
-
-// Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
 void weightsSmoothing(Modelo& m, binding* bd,
                       vector< int >& front,
                       float smoothPropagationRatio,
