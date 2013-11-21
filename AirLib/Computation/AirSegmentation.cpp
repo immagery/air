@@ -411,7 +411,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 			PointData& pd = bd->pointData[ptIdx];
 			GraphNode* sn = pd.node;
 
-			if(!sn->visited)
+			//if(!sn->visited)
 			{
 				weightsSum = 0;
 				weightsCount = 0;
@@ -444,7 +444,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 		for(unsigned int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
         {
             PointData& pd = bd->pointData[ptIdx];
-			if(!pd.node->visited)
+			//if(!pd.node->visited)
 			{
 				pd.ownerWeight = pd.tempOwnerWeight;
 				pd.tempOwnerWeight = 0;
@@ -508,8 +508,8 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, 
 		traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
 
 	// Adding the father to the fight
-	createTraductionTable(&group, traductionTable, group.nodeId, true);
-	segmentationIds.push_back(group.nodeId);
+	//createTraductionTable(&group, traductionTable, group.nodeId, true);
+	//segmentationIds.push_back(group.nodeId);
 
 	// Adding the childs to the fight
 	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
@@ -612,6 +612,7 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
         }
 
         pd.itPass = 0;
+		pd.auxInfluences.clear();
     }
 }
 
