@@ -218,14 +218,14 @@ void AirSkinning::computeDeformations(AirRig* rig)
 		{		
 			m->computeNormals();
 		}
-	}
+	} 
 }
 
 float isOverItsDefGroup(DefGroup* group, int nodeId)
 {
 	for(int defIdx = 0; defIdx < group->deformers.size(); defIdx++)
 	{
-		if(group->deformers[defIdx].nodeId = nodeId)
+		if(group->deformers[defIdx].nodeId == nodeId)
 			return 1.0;
 	}
 
@@ -299,13 +299,14 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 			Vector3d finalPosition (0,0,0);
 			float totalWeight = 0;
 
+			unsigned int *idAlucinante = &(rig->defRig.deformers[0]->nodeId);
+
 			Vector3d rotDir; 
 			for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
 			{   
 				int skID = data.influences[kk].label;
-				//joint& jt = deformersRestPosition[skID];
-				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
+				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 				if(!jt) continue;
 
 				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
@@ -328,12 +329,12 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 					secondWeight = reScaleTwist(secondWeight, iniTwist , finTwist);
 
 					Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
-					Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
+					//Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
 
-					float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
-					double cuttedWeight = currentWeight * (1.0-cutTwist);
+					//float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
+					//double cuttedWeight = currentWeight * (1.0-cutTwist);
 
-					float secondCutTwist = 0.0;
+					//float secondCutTwist = 0.0;
 
 					//if(!thereIsInfluenceOf(data.influences,skID))
 					//	cuttedWeight = 0;
@@ -358,7 +359,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 				}
 
 				Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
-				finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
+				finalPosition = finalPosition + finalPos2 * currentWeight;
 
 				totalWeight += data.influences[kk].weightValue;
 					

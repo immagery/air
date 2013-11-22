@@ -562,7 +562,7 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 	// Limpiamos los deformadores que pudieran existir antes
 	group.deformers.clear();
 
-	group.deformers.push_back(DefNode(jt->translation, jt->nodeId));
+	group.deformers.push_back(DefNode(jt->translation, group.nodeId));
 	group.deformers.back().relPos = group.deformers.back().pos-jt->translation;
 	group.deformers.back().nodeId = scene::getNewId();
 	group.deformers.back().ratio = 0.0;

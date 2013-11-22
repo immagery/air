@@ -227,6 +227,7 @@ void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int 
 	    // Los nodos correspondientes al hueso jt
 	for(unsigned int i = 0; i< group->deformers.size(); i++)
     {
+		int node = group->deformers[i].nodeId;
         traductionTable[group->deformers[i].nodeId] = idNode;
     }
 
@@ -719,12 +720,14 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
 	if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
     normalizeWeightsByDomain(bd);
 
+	cleanZeroInfluences(bd);
+
 	for(unsigned int i = 0; i< graph.roots.size(); i++)
 	{
         propagateHierarchicalSkinning( model,  bd, graph, *graph.roots[i]);
 	}
 
-    cleanZeroInfluences(bd);
+ 
 }
 
 
