@@ -155,6 +155,7 @@ bool getBDEmbedding(Modelo* model)
         {
             // En el caso de existir simplemente tenemos que cargar las distancias.
             loaded = LoadEmbeddings(*model, bindingFileNameComplete);
+			model->computedBindings = true;
         }
 
         //B. En el caso de que no se haya cargado o haya incongruencias con lo real, lo recomputamos.
@@ -169,6 +170,8 @@ bool getBDEmbedding(Modelo* model)
             }
             else 
 				SaveEmbeddings(*model, bindingFileName, ascii);
+
+			model->computedBindings = true;
         }
     }
 

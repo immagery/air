@@ -169,6 +169,9 @@ double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& 
 
 void updateAirSkinning(DefGraph& graph, Modelo& model)
 {
+
+	clock_t ini = clock();
+
 	vector<int> traductionTable;
 	map<int, DefNode*> nodeIds;
 
@@ -199,10 +202,11 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 										  graph.deformers[defId]->weightsSort, 
 										  graph.deformers[defId]->cuttingThreshold);
 
+			//TODEBUG: BihDistances as a matrix
 			// By now just one embedding
 			graph.deformers[defId]->precomputedDistances = PrecomputeDistancesSingular_sorted(graph.deformers[defId]->MVCWeights, 
 																							  graph.deformers[defId]->weightsSort, 
-																							  bd->BihDistances, 
+																							  bd->BihDistances[0], 
 																							  graph.deformers[defId]->cuttingThreshold);
 			graph.deformers[defId]->dirtyFlag = false;
 			graph.deformers[defId]->segmentationDirtyFlag = true;
@@ -219,6 +223,9 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 
 	// Compute Secondary weights ... by now compute all the sec. weights
 	computeSecondaryWeights(model, model.bind, graph);
+
+	clock_t fin = clock();
+	printf("Calculo de pesos total: %f ms\n", timelapse(fin,ini)*1000); fflush(0);
 	
 }
 
@@ -621,19 +628,26 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 {
 	binding* bds = model.bind;
 
-	// Computation indices
-	vector<int> indices;
-	indices.resize(bds->pointData.size());
-	for(int idx = 0; idx < bds->pointData.size(); idx++)
-	{
-		//indices.push_back(idx);
-		//indices.push_back(bds[bind]->pointData[idx].node->id);
-		indices[idx] = bds->pointData[idx].node->id;
-	}
+	bds->BihDistances.resize(bds->surfaces.size());
 
-	printf("\n\nCalculo de A para embeding: [%d puntos]\n", bds->pointData.size());
-	fflush(0);
-	bindingBD( model, bds, indices, bds->BihDistances, withPatches);
+	for(int surf = 0; surf < bds->surfaces.size(); surf++)
+	{
+		// Computation indices
+		vector<int> indices;
+		indices.resize(bds->surfaces[surf].nodes.size());
+		for(int idx = 0; idx < bds->surfaces[surf].nodes.size(); idx++)
+		{
+			//indices.push_back(idx);
+			//indices.push_back(bds[bind]->pointData[idx].node->id);
+			indices[idx] = bds->surfaces[surf].nodes[idx]->id;
+		}
+
+		printf("\n\nCalculo de A para embeding: [%d puntos]\n", bds->surfaces[surf].nodes.size());
+		fflush(0);
+
+		//TODEBUG: BihDistances with matrix approach... uggh!
+		bindingBD( model, bds, indices, bds->BihDistances[surf], withPatches);
+	}
 
 	return true;
 }
@@ -655,6 +669,7 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 	if(bindSize != m.bind->surfaces.size())
 		return false;
 
+	m.bind->BihDistances.resize(m.bind->surfaces.size());
 	for(int bind = 0; bind < m.bind->surfaces.size(); bind++)
 	{
 		int pointsSize = 0;
@@ -664,14 +679,14 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 		if(pointsSize != m.bind->surfaces[bind].nodes.size())
 			return false;
 
-		m.bind->BihDistances.resize(pointsSize);
-		for(int row = 0; row < m.bind->BihDistances.size; row++)
+		m.bind->BihDistances[bind].resize(pointsSize);
+		for(int row = 0; row < m.bind->BihDistances[bind].size; row++)
 		{
-			for(int col = row; col < m.bind->BihDistances.size; col++)
+			for(int col = row; col < m.bind->BihDistances[bind].size; col++)
 			{
 				double value = 0;
 				finbin.read( (char*) &value,  sizeof(double) );
-				m.bind->BihDistances.set(row,col,value);
+				m.bind->BihDistances[bind].set(row,col,value);
 			}
 		}
 	}
@@ -816,16 +831,30 @@ int indexOfNode(int nodeId, vector<DefNode>& nodes)
 	return -1;
 }
 
+bool isInTheBrach( DefGroup* defGroup, int idx)
+{
+	if(indexOfNode(idx, defGroup->deformers) >= 0)
+		return true;
+
+	for(int i = 0; i< defGroup->relatedGroups.size(); i++)
+	{
+		if(isInTheBrach( defGroup->relatedGroups[i], idx))
+			return true;
+	}
+
+	return false;
+}
+
 void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 {
     // No hay ningun binding
     if(!bd ) return;
 
 	vector< DefNode >& points = bd->intPoints;
-	vector< vector<double> >& weights = bd->embeddedPoints;
-	vector< vector<int> >& sortedWeights = bd->weightsSort;
-	vector< vector<weight> >& weightsClean = bd->weightsFiltered; 
-		
+	//vector< vector<double> >& weights = bd->embeddedPoints;
+	//vector< vector<int> >& sortedWeights = bd->weightsSort;
+	//vector< vector<weight> >& weightsClean = bd->weightsFiltered;
+
 	for(int pt = 0; pt < bd->pointData.size(); pt++)
 	{
 		if(pt%300 == 0)
@@ -841,7 +870,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			int idInfl = dp.influences[infl].label;
 			DefGroup* group = graph.defGroupsRef[idInfl];
 
-			dp.secondInfluences[infl].resize(group->relatedGroups.size(), 0.0);
+			dp.secondInfluences[infl].resize(group->relatedGroups.size());
 			vector<bool> assigned;
 			assigned.resize(group->relatedGroups.size(), false);
 
@@ -850,13 +879,12 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 
 			if(idxNodeAsignedAux<0)
 			{
-				bool found = false;
-				for(int childIdx = 0; childIdx < group->relatedGroups.size() && !found; childIdx++)
+				for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
 				{
-					found |= (indexOfNode(dp.segmentId,group->relatedGroups[childIdx]->deformers)>= 0);
-					if(found)
+					if(isInTheBrach(group->relatedGroups[childIdx], dp.segmentId))
 					{
-						dp.secondInfluences[infl][childIdx] = 1.0;
+						dp.secondInfluences[infl][childIdx].alongBone = 1.0;
+						assigned[childIdx] = true;
 						break;
 					}
 				}
@@ -867,11 +895,9 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			DefNode* asignedNode = &group->deformers[idxNodeAsignedAux];
 			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
 			{
-				if(assigned[childIdx]) continue;
-
 				if(group->relatedGroups[childIdx]->nodeId == asignedNode->childBoneId)
 				{
-					dp.secondInfluences[infl][childIdx] = asignedNode->ratio;
+					dp.secondInfluences[infl][childIdx].alongBone = asignedNode->ratio;
 					assigned[childIdx] = true;
 				}
 			}
@@ -933,7 +959,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 					// Tenemos un elementos fuera, o no parece que no se acerca a nadie
 					if(nodeIdChildSegment >= 0)
 					{
-						dp.secondInfluences[infl][childIdx] = defs[nodeIdChildSegment]->ratio;
+						dp.secondInfluences[infl][childIdx].alongBone = defs[nodeIdChildSegment]->ratio;
 					}
 					else
 					{
@@ -942,6 +968,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 
 				}
 			}
+
 			/*
 				if(group)
 					// Recogemos los nodos relevantes.
@@ -1011,6 +1038,103 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			*/
 		}
 	}
+
+	map<int, int> fromThisGroup;
+	for(int defIdx = 0; defIdx < graph.deformers.size(); defIdx++)
+		fromThisGroup[graph.deformers[defIdx]->nodeId] = -1;
+
+	for(int defGroupIdx = 0; defGroupIdx < graph.defGroups.size(); defGroupIdx++)
+	{
+		DefGroup* defGroup = graph.defGroups[defGroupIdx];
+
+		map<int, int> childsFromGroup;
+		
+		// Relacionamos idGrupo con el hijo 
+		for(int defIdx = 0; defIdx < defGroup->relatedGroups.size(); defIdx++)
+			childsFromGroup[defGroup->relatedGroups[defIdx]->nodeId] = defIdx;
+
+		// Ponemos a cero el mapa
+		for(int defIdx = 0; defIdx < graph.deformers.size(); defIdx++)
+			fromThisGroup[graph.deformers[defIdx]->nodeId] = -1;
+
+		// Asignamos los hijos
+		for(int defIdx = 0; defIdx < defGroup->deformers.size(); defIdx++)
+			fromThisGroup[defGroup->deformers[defIdx].nodeId] = childsFromGroup[defGroup->deformers[defIdx].childBoneId];
+
+		// We get only this segment from the model and init values of segmentation
+		vector<PointData*> pointsFromThisGroup(0);
+		for(int ptIdx = 0; ptIdx< bd->pointData.size(); ptIdx++)
+		{
+			PointData &pd = bd->pointData[ptIdx];
+
+			if(fromThisGroup[pd.segmentId] >= 0)
+			{
+				//if(defGroup->relatedGroups.size() <= 1)
+				//{
+					// Solo hay un hijo, el valor es el valor por defecto.
+				//	continue;
+				//}
+				//else
+				//{
+					pd.auxInfluences.clear();
+					pd.ownerLabel = fromThisGroup[pd.segmentId];
+					pointsFromThisGroup.push_back(&pd);
+				//}
+			}
+			else
+			{
+					pd.auxInfluences.clear();
+					pd.ownerLabel = -1;
+					pointsFromThisGroup.push_back(&pd);
+			}
+		}
+
+		// Smooth the values iterating and doing a normalization.
+		for(int childIdx = 0; childIdx < defGroup->relatedGroups.size(); childIdx++)
+		{
+			SmoothFromSegment(model, bd, defGroup, childIdx);
+		}
+		
+		
+		for(int ptIdx = 0; ptIdx < pointsFromThisGroup.size(); ptIdx++)
+		{
+			PointData* pd = pointsFromThisGroup[ptIdx];
+
+			float sum = 0;
+			for(int i = 0; i< pd->auxInfluences.size(); i++)
+				sum += pd->auxInfluences[i].weightValue;
+
+			if(pd->auxInfluences.size() > 0 && sum!= 0)
+			{
+				for(int i = 0; i< pd->auxInfluences.size(); i++)
+				{
+					float value = pd->auxInfluences[i].weightValue/sum;
+					int inflIdx = findWeight(pd->influences, defGroup->nodeId);
+					if(inflIdx >= 0)
+					{
+						pd->secondInfluences[inflIdx][pd->auxInfluences[i].label].wideBone = value;
+					}
+					else
+					{
+						// La influencia debería estar asignada, 
+						//sería un poco raro que no lo estuviera
+						assert(false);
+					}
+
+				}
+			}
+			else if(sum == 0) 
+			{
+				// es un poco curioso que pase esto
+				//assert(false);
+			}
+			else 
+			{
+				// En este caso no hacemos nada, en principio los pesos 
+				// secundarios tendran valores por defecto, es decir 1.
+			}
+		}
+	}
 }
 
 void SaveEmbeddings(Modelo& model, char* fileName, bool ascii)
@@ -1031,27 +1155,42 @@ void SaveEmbeddings(Modelo& model, char* fileName, bool ascii)
 	else
 	{
 		foutbin.open(binFile, ios::binary);
-		printf("Guardado embedding en fichero de texto: %s\n", binFile);
+		printf("Guardado embedding en fichero binario: %s\n", binFile);
 	}
 
 	if(ascii)
-		fprintf(foutascii,"%d\n", model.bind->pointData.size());
+		fprintf(foutascii,"%d\n", model.bind->surfaces.size());
 	else
 	{
-		int ss = model.bind->pointData.size();
+		int ss = model.bind->surfaces.size();
 		foutbin.write((const char*) &ss, sizeof(int));
 	}
 
-	for(int row = 0; row < model.bind->BihDistances.size; row++)
+	for(int surfaceIdx = 0 ; surfaceIdx < model.bind->surfaces.size(); surfaceIdx++)
 	{
-		for(int col = row; col < model.bind->BihDistances.size; col++)
+		// Number of nodes.
+		if(ascii)
 		{
-			if(ascii)
-				fprintf(foutascii,"%f\n", model.bind->BihDistances.get(row,col));
-			else
+			fprintf(foutascii,"%f\n", model.bind->surfaces[surfaceIdx].nodes.size());
+		}
+		else
+		{
+			int ss2 = model.bind->surfaces[surfaceIdx].nodes.size();
+			foutbin.write((const char*) &ss2, sizeof(int));
+		}
+
+		// Matriz de distancias.
+		for(int row = 0; row < model.bind->BihDistances[surfaceIdx].size; row++)
+		{
+			for(int col = row; col < model.bind->BihDistances[surfaceIdx].size; col++)
 			{
-				double val = model.bind->BihDistances.get(row,col);
-				foutbin.write((const char*) &val, sizeof(double));
+				if(ascii)
+					fprintf(foutascii,"%f\n", model.bind->BihDistances[surfaceIdx].get(row,col));
+				else
+				{
+					double val = model.bind->BihDistances[surfaceIdx].get(row,col);
+					foutbin.write((const char*) &val, sizeof(double));
+				}
 			}
 		}
 	}

@@ -299,70 +299,122 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 			Vector3d finalPosition (0,0,0);
 			float totalWeight = 0;
 
-			unsigned int *idAlucinante = &(rig->defRig.deformers[0]->nodeId);
-
 			Vector3d rotDir; 
 			for (int kk = 0; kk < data.influences.size(); ++kk) // and check all joints associated to them
 			{   
 				int skID = data.influences[kk].label;
+				DefGroup* currentGroup = rig->defRig.defGroupsRef[skID];
 
-				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
+				joint* jt = currentGroup->transformation;
 				if(!jt) continue;
 
 				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
-				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 
-				Quaterniond apliedRotation = jt->rotation;			
+				Quaterniond apliedRotation = jt->rotation;
 				float currentWeight = data.influences[kk].weightValue;
 
-				if(rig->defRig.defGroupsRef[skID]->relatedGroups.size() == 1 && rig->defRig.defGroupsRef[skID]->relatedGroups[0]->enableTwist)
+				if(data.secondInfluences[kk].size() != 0)
 				{
+					// Tenemos pesos secundarios según este hueso
+					vector<Quaterniond> inducedTwists;
+					for(int childGroupIdx = 0; childGroupIdx< currentGroup->relatedGroups.size(); childGroupIdx++)
+					{
+						DefGroup* childGroup = currentGroup->relatedGroups[childGroupIdx];
 
-					if(data.secondInfluences[kk].size() == 0)
-						continue;
+						if(childGroup->enableTwist)
+						{
+							float secondWeight = data.secondInfluences[kk][childGroupIdx].alongBone;
+							Quaterniond childTwist = childGroup->transformation->twist;
 
-					float secondWeight = data.secondInfluences[kk][0];
+							// Twist Rescaling
+							float iniTwist = childGroup->iniTwist;
+							float finTwist = childGroup->finTwist;		
 
-					// Twist Rescaling
-					float iniTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->iniTwist;
-					float finTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->finTwist;
-					secondWeight = reScaleTwist(secondWeight, iniTwist , finTwist);
+							secondWeight = reScaleTwist(secondWeight, iniTwist , finTwist);
 
-					Quaterniond childTwist = rig->defRig.defGroupsRef[skID]->relatedGroups[0]->transformation->twist;
-					//Quaterniond twist = rig->defRig.defGroupsRef[skID]->transformation->twist;
+							inducedTwists.push_back(Quaterniond::Identity().slerp(secondWeight, childTwist));
+						}
+						else
+						{
+							inducedTwists.push_back(Quaterniond::Identity());
+						}
+					}
+					
+					vector<Vector3d> inducedPoints(inducedTwists.size());
+					for(int it = 0; it< inducedTwists.size(); it++)
+					{
+						if(jt->father)
+							apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*inducedTwists[it];
+						else
+							apliedRotation = jt->qOrient*jt->qrot*inducedTwists[it];
 
-					//float cutTwist = isOverItsDefGroup(rig->defRig.defGroupsRef[skID], data.segmentId);
-					//double cuttedWeight = currentWeight * (1.0-cutTwist);
+						inducedPoints[it] = apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPosition-jt->rTranslation)) + jt->translation;
+					}
 
-					//float secondCutTwist = 0.0;
+					double weight = 0;
+					Vector3d finalPos2(0,0,0);
+					for(int it = 0; it< inducedPoints.size(); it++)
+					{
+						finalPos2 += inducedPoints[it] * data.secondInfluences[kk][it].wideBone;
+						weight += data.secondInfluences[kk][it].wideBone;
+					}
 
-					//if(!thereIsInfluenceOf(data.influences,skID))
-					//	cuttedWeight = 0;
-
-					Quaterniond twistRotation = Quaterniond::Identity().slerp(secondWeight, childTwist);
+					if(weight != 0) finalPos2 /= weight;
 
 					/*
-					//Quaterniond unTwist = Quaterniond::Identity().slerp(cuttedWeight, twist);
-					//Quaterniond unTwist = Quaterniond::Identity();
+					//vector<Quaterniond*> otherTwists;
+					if(inducedTwists.size() > 0)
+					{
+						twistRotation = inducedTwists[0];
+
+						// Solo estaran los habilitados, es imposible o al menos eso parece
+						// hacer una mezcla lógica ocn todos. 
+						for(int twistIdx = 1; twistIdx < inducedTwists.size(); twistIdx++)
+						{
+							//if(currentGroup->relatedGroups[twistIdx]->nodeId != principalTwist)
+							//{
+								float wide = data.secondInfluences[kk][twistIdx].wideBone;
+								//float influenceWeightValue = data.influences[kk].weightValue;
+								twistRotation.slerp(wide, inducedTwists[twistIdx]);
+							//}
+						}
+						
+
+						// Buscar el principal.
+						//int principalTwist = rig->defRig.defNodesRef[data.segmentId]->childBoneId;
+							
+						//for(int twistIdx = 0; twistIdx < inducedTwists.size(); twistIdx++)
+						//{
+						//	if(currentGroup->relatedGroups[twistIdx]->nodeId == principalTwist)
+						//	{
+						//		twistRotation = inducedTwists[twistIdx];
+						//		break;
+						//	}
+							//float wide = data.secondInfluences[kk][twistIdx].wideBone;
+							//float influenceWeightValue = data.influences[kk].weightValue;
+							//twistRotation *= Quaterniond::Identity().slerp(wide*influenceWeightValue, inducedTwists[twistIdx]);
+						//}
+
+					}
+					
 
 					//if(jt->father)
-					//	apliedRotation = jt->father->rotation*unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					//	apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*twistRotation;
 					//else
-					//	apliedRotation = unTwist.inverse()*jt->qOrient*twistRotation*jt->qrot;
+					//	apliedRotation = jt->qOrient*jt->qrot*twistRotation;
 					*/
 
-					if(jt->father)
-						apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*twistRotation;
-					else
-						apliedRotation = jt->qOrient*jt->qrot*twistRotation;
+					finalPosition = finalPosition + finalPos2 * currentWeight;
+					totalWeight += currentWeight;
 
 				}
+				else
+				{
+					Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPosition-jt->rTranslation)) + jt->translation;
+					finalPosition = finalPosition + finalPos2 * currentWeight;
 
-				Vector3d finalPos2 =  apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
-				finalPosition = finalPosition + finalPos2 * currentWeight;
-
-				totalWeight += data.influences[kk].weightValue;
-					
+					totalWeight += data.influences[kk].weightValue;
+				}					
 			}
 
 			finalPosition = finalPosition / totalWeight;
