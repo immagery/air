@@ -258,6 +258,26 @@ double reScaleTwist(double twist, double ini, double fin)
 	return newTwist;
 }
 
+float smoothEndings(double partDistance,
+					double baseDistance  = 1,
+                    bool invert = false,
+                    double K = 100,
+                    double alpha= 10)
+{
+    double S = 1;
+    //double K = 100;
+    //double alpha = 10;
+
+    double t = (partDistance/baseDistance);
+    if(invert)
+        t = 1-t;
+
+    // Formula de smoothing
+    float weight = S/(1.0+K*exp(-1.0*alpha*t));
+
+    return weight;
+}
+
 void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 {
 	//if (deformersRestPosition.size() == 0) return;
@@ -331,6 +351,9 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 							float finTwist = childGroup->finTwist;		
 
 							secondWeight = reScaleTwist(secondWeight, iniTwist , finTwist);
+
+							if(childGroup->smoothTwist)
+								secondWeight = smoothEndings(secondWeight);
 
 							inducedTwists.push_back(Quaterniond::Identity().slerp(secondWeight, childTwist));
 						}

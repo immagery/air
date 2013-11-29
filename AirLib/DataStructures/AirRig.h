@@ -15,7 +15,7 @@
 #include <Eigen/Dense>
 
 #define endChop_DEF 0.001
-#define ratioExpansion_DEF 0.7
+#define ratioExpansion_DEF 1.0
 
 #define default_SMOOTHING_PASES 3
 #define default_SMOOTHING_RATIO 0.25
@@ -77,6 +77,7 @@ public:
 	float iniTwist;
 	float finTwist;
 	bool enableTwist;
+	bool smoothTwist;
 
 	DefGroupType type; 
 

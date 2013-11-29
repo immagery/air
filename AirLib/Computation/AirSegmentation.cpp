@@ -780,15 +780,20 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 														 def->expansion, 
 														 def->precomputedDistances, 
 														 def->cuttingThreshold);
-				if(distance > newDistance || newSegmentId == -1)
+				if(newSegmentId < 0 || distance > newDistance)
 				{
 					distance = newDistance;
 					newSegmentId = def->nodeId;
 				}
 			}
 
-			pd.segmentId = newSegmentId;
-			pd.segmentDistance = distance;
+			if(newSegmentId > 0)
+			{
+				if(distance<0)
+					int j = 0;
+				pd.segmentId = newSegmentId;
+				pd.segmentDistance = distance;
+			}
 		}
 	}
 
@@ -809,7 +814,7 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 														 def->expansion, 
 														 def->precomputedDistances, 
 														 def->cuttingThreshold);
-				if(newDistance < pd.segmentDistance)
+				if(pd.segmentId < 0 || newDistance < pd.segmentDistance)
 				{
 					pd.segmentDistance = newDistance;
 					pd.segmentId = def->nodeId;
@@ -845,6 +850,17 @@ bool isInTheBrach( DefGroup* defGroup, int idx)
 	return false;
 }
 
+bool getDefomersfromBranch( DefGroup* defGroup, vector<DefNode*>& deformers)
+{
+	for(int i = 0; i< defGroup->deformers.size(); i++)
+		deformers.push_back(&defGroup->deformers[i]);
+
+	for(int i = 0; i< defGroup->relatedGroups.size(); i++)
+		getDefomersfromBranch(defGroup->relatedGroups[i], deformers);
+
+	return true;
+}
+
 void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 {
     // No hay ningun binding
@@ -854,6 +870,57 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 	//vector< vector<double> >& weights = bd->embeddedPoints;
 	//vector< vector<int> >& sortedWeights = bd->weightsSort;
 	//vector< vector<weight> >& weightsClean = bd->weightsFiltered;
+	for(int pt = 0; pt < bd->pointData.size(); pt++)
+	{
+		PointData& dp = bd->pointData[pt];
+		dp.secondInfluences.resize(dp.influences.size());
+		for(int infl = 0; infl< dp.influences.size(); infl++)
+		{
+			int idInfl = dp.influences[infl].label;
+			DefGroup* group = graph.defGroupsRef[idInfl];
+			dp.secondInfluences[infl].resize(group->relatedGroups.size());
+
+			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
+			{
+				float dist = 9999999;
+				int nodeIdChildSegment = -1;
+				for(int defNodeIdx = 0; defNodeIdx < group->deformers.size(); defNodeIdx++)
+				{
+					DefNode* def = &group->deformers[defNodeIdx];
+					if(group->relatedGroups[childIdx]->nodeId != def->childBoneId)
+						continue;
+
+					float newDistance = -BiharmonicDistanceP2P_sorted(
+										def->MVCWeights, 
+										def->weightsSort, 
+										pt, bd, 
+										def->expansion, 
+										def->precomputedDistances, 
+										def->cuttingThreshold);
+
+					if(nodeIdChildSegment < 0 || newDistance < dist)
+					{
+						nodeIdChildSegment = defNodeIdx;
+						dist = newDistance;
+					}
+				}
+
+				if(nodeIdChildSegment> 0)
+				{
+					DefNode* def = &group->deformers[nodeIdChildSegment];
+					dp.secondInfluences[infl][childIdx].alongBone = def->ratio;
+				}
+				else
+				{
+					dp.secondInfluences[infl][childIdx].alongBone = 0.0;
+				}
+			}
+		}
+	}
+
+	
+	if(false)
+	{
 
 	for(int pt = 0; pt < bd->pointData.size(); pt++)
 	{
@@ -883,8 +950,39 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 				{
 					if(isInTheBrach(group->relatedGroups[childIdx], dp.segmentId))
 					{
-						dp.secondInfluences[infl][childIdx].alongBone = 1.0;
-						assigned[childIdx] = true;
+						/*
+						vector<DefNode*> deformersFromBranch;
+						getDefomersfromBranch(group->relatedGroups[childIdx], deformersFromBranch);
+
+						float distance = 999999;
+						int assignedIdx = -1;
+						for(int defbranchIdx = 0; defbranchIdx< deformersFromBranch.size(); defbranchIdx++)
+						{
+							DefNode* def = deformersFromBranch[defbranchIdx];
+							float newDistance = -BiharmonicDistanceP2P_sorted(
+												def->MVCWeights, 
+												def->weightsSort, 
+												pt, bd, 
+												def->expansion, 
+												def->precomputedDistances, 
+												def->cuttingThreshold);
+
+							if(assignedIdx < 0 || distance > newDistance)
+							{
+								assignedIdx = defbranchIdx;
+								distance = newDistance;
+							}
+						}
+
+						if(assignedIdx >= 0)
+						*/
+						{
+							// The point is asociated with some child, we can try to do a proyection over this bone
+							// and get this value, the other points takes a 0.
+							dp.secondInfluences[infl][childIdx].alongBone = 1.0;
+							assigned[childIdx] = true;
+						}
+
 						break;
 					}
 				}
@@ -1037,6 +1135,8 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			}
 			*/
 		}
+	}
+
 	}
 
 	map<int, int> fromThisGroup;

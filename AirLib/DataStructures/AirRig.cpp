@@ -333,6 +333,7 @@ DefGroup::DefGroup(int nodeId) : object(nodeId)
 	iniTwist = default_INI_TWIST;
 	finTwist = default_END_TWIST;
 	enableTwist = true;
+	smoothTwist = false;
 
 	localSmooth = false;
 
@@ -605,7 +606,11 @@ bool propagateExpansion(DefGroup& gr)
 		DefGroup* child = getChildFromGroupId(&gr, gr.deformers[group].childBoneId);
 
 		if(child == NULL)
+		{
+			gr.deformers[group].expansion = gr.expansion;
+			gr.deformers[group].segmentationDirtyFlag = true;
 			continue;
+		}
 
 		// Expansion propagation
 		float expValue = gr.expansion;
@@ -622,7 +627,8 @@ bool propagateExpansion(DefGroup& gr)
         float dif = 1-expValue;
         float newValue =  expValue + dif*ratio2;
 
-		gr.deformers[group].expansion = newValue;
+		//gr.deformers[group].expansion = newValue;
+		gr.deformers[group].expansion = gr.expansion;
 		gr.deformers[group].segmentationDirtyFlag = true;
 	}
 
