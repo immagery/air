@@ -162,7 +162,7 @@ void AirSkinning::computeDeformations(AirRig* rig)
 		if (rig->defRig.roots[i]->transformation->dirtyFlag) 
 		{
 			oneDirtySkeleton = true;
-			rig->defRig.roots[i]->transformation->computeWorldPos();
+			rig->defRig.roots[i]->computeWorldPos(rig->defRig.roots[i]);
 		}
 	}
 	if (!oneDirtySkeleton) return;
@@ -196,11 +196,10 @@ void AirSkinning::computeDeformations(AirRig* rig)
 				joint* jt = rig->defRig.defGroupsRef[skID]->transformation;
 
 				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
-				Vector3d restPos2(restPosition.x(), restPosition.y(), restPosition.z());
 					
 				float currentWeight = data.influences[kk].weightValue;
 
-				Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPos2-jt->rTranslation)) + jt->translation;
+				Vector3d finalPos2 =  jt->rotation._transformVector(jt->rRotation.inverse()._transformVector(restPosition-jt->rTranslation)) + jt->translation;
 				finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
 
 				totalWeight += data.influences[kk].weightValue;
@@ -292,7 +291,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		if (rig->defRig.roots[i]->transformation->dirtyFlag) 
 		{
 			oneDirtySkeleton = true;
-			rig->defRig.roots[i]->transformation->computeWorldPos();
+			rig->defRig.roots[i]->computeWorldPos(rig->defRig.roots[i]);
 		}
 	}
 	if (!oneDirtySkeleton) return;
@@ -329,8 +328,8 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 				if(!jt) continue;
 
 				Vector3d& restPosition = originalModel->nodes[vertexID]->position;
-
 				Quaterniond apliedRotation = jt->rotation;
+
 				float currentWeight = data.influences[kk].weightValue;
 
 				if(data.secondInfluences[kk].size() != 0)
@@ -367,7 +366,10 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 					for(int it = 0; it< inducedTwists.size(); it++)
 					{
 						if(jt->father)
-							apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*inducedTwists[it];
+						{
+							//apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*inducedTwists[it];
+							apliedRotation = jt->rotation*inducedTwists[it];
+						}
 						else
 							apliedRotation = jt->qOrient*jt->qrot*inducedTwists[it];
 

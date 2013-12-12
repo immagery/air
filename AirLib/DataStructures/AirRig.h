@@ -79,6 +79,8 @@ public:
 	bool enableTwist;
 	bool smoothTwist;
 
+	int parentType; 
+
 	DefGroupType type; 
 
 	// For computational pourposes.
@@ -95,6 +97,9 @@ public:
 	bool dirtyByTransformation(bool alsoFather, bool hierarchically = true);
 	bool dirtyBySegmentation();
 	bool dirtyBySmoothing();
+
+	void computeRestPos(DefGroup* dg, DefGroup* father = NULL);
+	void computeWorldPos(DefGroup* dg, DefGroup* father = NULL);
 
 };
 
