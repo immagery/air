@@ -509,8 +509,8 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 
 		if(parentType > 0)
 		{
-			Quaterniond noFather = fatherJt->rotation*fatherJt->rRotation.inverse();
-			localRotationChild = noFather*jt->qOrient * jt->qrot;
+			//Quaterniond noFather = fatherJt->rotation*fatherJt->rRotation.inverse();
+			//localRotationChild = noFather*jt->qOrient * jt->qrot;
 		}
 
 		Vector3d tempRestRot = fatherJt->rRotation.inverse()._transformVector(axis);
