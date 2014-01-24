@@ -101,6 +101,34 @@ public:
 	void computeRestPos(DefGroup* dg, DefGroup* father = NULL);
 	void computeWorldPos(DefGroup* dg, DefGroup* father = NULL);
 
+	virtual bool propagateDirtyness()
+    {
+        dirtyFlag = true;
+
+		for(int i = 0; i< relatedGroups.size(); i++)
+			relatedGroups[i]->propagateDirtyness();
+
+        return true;
+    }
+
+    virtual bool update()
+    {
+        if(!dirtyFlag)
+            return true;
+        else
+		{
+			transformation->update();
+
+			for(int i = 0; i< relatedGroups.size(); i++)
+			{
+				relatedGroups[i]->update();
+			}
+
+			dirtyFlag = false;
+            return true;
+		}
+    }
+
 };
 
 class constraintSerialization
@@ -253,6 +281,33 @@ public:
 	bool rotateDefGroup(double rx, double ry, double rz, bool radians, int nodeId);
 	bool changeExpansionValue(float value, int nodeId);
 	bool changeSmoothValue(float value, int nodeId);
+
+	virtual bool propagateDirtyness()
+    {
+        dirtyFlag = true;
+
+		for(int i = 0; i< defRig.roots.size(); i++)
+			defRig.roots[i]->propagateDirtyness();
+
+        return true;
+    }
+
+    virtual bool update()
+    {
+        if(!dirtyFlag)
+            return true;
+        else
+		{
+			for(int i = 0; i< defRig.roots.size(); i++)
+			{
+				defRig.roots[i]->transformation->computeWorldPos();
+				defRig.roots[i]->update();
+			}
+
+			dirtyFlag = false;
+            return true;
+		}
+    }
 
 	//bool changeTwistValues(float ini, float fin, bool enable);
 
