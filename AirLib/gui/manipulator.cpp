@@ -2,6 +2,8 @@
 #include <utils\utilGL.h>
 #include <utils\util.h>
 
+#define CURVE_RES 50
+
 using namespace Eigen;
 
 void airFrame::getMatrix(Matrix4d& mtx)
@@ -125,21 +127,23 @@ void manipulator::drawNamesWithProjectingPlane()
 
 void manipulator::applyTransformation(object* obj, transformMode mode)
 {
-	obj->qrot = currentframe.rotation;
-	obj->pos = currentframe.position;
+	obj->setTranslation(currentframe.position.x(),currentframe.position.y(),currentframe.position.z(), false);
+	obj->setRotation(currentframe.rotation, false);
 
 	if(obj->shading)
 		obj->shading->dirtyFlag = true;
 
 	obj->dirtyFlag = true;
 
-	//obj->update();
-
-	//obj->scl = currentframe.scale;
+	obj->update();
 }
 
-void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
+void manipulator::setManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 {
+	orig = rayOrigin;
+	dir = rayDir;
+	previousframe = currentframe;
+
 	if(type == MANIP_MOVE)
 	{
 		Vector3d u,v;
@@ -149,50 +153,30 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 		if(axis == AXIS_X)
 		{
 			u = Vector3d(1,0,0);
-			v1 = Vector3d(0,1,0);
-			v2 = Vector3d(0,0,1);
 		}
 		else if(axis == AXIS_Y)
 		{
 			u = Vector3d(0,1,0);
-			v1 = Vector3d(1,0,0);
-			v2 = Vector3d(0,0,1);
 		}
 		else if(axis == AXIS_Z)
 		{
 			u = Vector3d(0,0,1);
-			v1 = Vector3d(0,1,0);
-			v2 = Vector3d(1,0,0);
 		}
 		
 		u = currentframe.rotation._transformVector(u);
-		v1 = currentframe.rotation._transformVector(v1);
-		v2 = currentframe.rotation._transformVector(v2);
-
-		if(fabs(v1.dot(rayDir)) < fabs(v2.dot(rayDir)))
-			v = v1;
-		else
-			v = v2;
-
-		Ray R;
-		R.P0 = rayOrigin;
-		R.P1 = rayOrigin+rayDir;
+		v = u.cross(rayDir);
+		v.normalize();
 
 		Vector3d I; 
-		int intersecFlag = intersect3D_RayPlane(R, selectedPoint, u, v, I);
-
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position,  v, u, I);
 		if(intersecFlag != 1) 
-			return;
+			return; 
 
-		Vector3d applyIncrement = I-selectedPoint;
-		applyIncrement = applyIncrement.dot(u.normalized())*u;
-		currentframe.position = previousframe.position + applyIncrement;
-
-		projectedPoint = I;
+		selectedPoint = I;
 	}
 	else if(type == MANIP_ROT)
 	{
-		Vector3d u,v;
+		Vector3d u(0,0,0),v(0,0,0);
 
 		// Get directions
 		if(axis == AXIS_X)
@@ -211,33 +195,119 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 			v = Vector3d(0,1,0);
 		}
 		
-		u = previousframe.rotation.inverse()._transformVector(u);
-		v = previousframe.rotation.inverse()._transformVector(v);
+		u = previousframe.rotation._transformVector(u);
+		v = previousframe.rotation._transformVector(v);
 
-		Ray R;
-		R.P0 = rayOrigin;
-		R.P1 = rayOrigin+rayDir;
+		u.normalize();
+		v.normalize();
 
 		Vector3d I; 
-		int intersecFlag = intersect3D_RayPlane(R, selectedPoint, u, v, I);
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position,v,u, I);
+
+		if(intersecFlag != 1) 
+		{
+			//printf("No intersecciona!\n");
+			return;
+		}
+
+		selectedPoint = I;
+		//printf("Setting transformation->selectedPoint: %f %f %f\n",selectedPoint.x(), selectedPoint.y(),selectedPoint.z());
+	}
+}
+
+
+void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
+{
+	if(type == MANIP_MOVE)
+	{
+		Vector3d u,v;
+		Vector3d v1,v2;
+
+		// Get directions
+		if(axis == AXIS_X)
+		{
+			u = Vector3d(1,0,0);
+		}
+		else if(axis == AXIS_Y)
+		{
+			u = Vector3d(0,1,0);
+		}
+		else if(axis == AXIS_Z)
+		{
+			u = Vector3d(0,0,1);
+		}
+		
+		u = currentframe.rotation._transformVector(u);
+		v = u.cross(rayDir);
+		v.normalize();
+
+		Vector3d I; 
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position, v, u, I);
 
 		if(intersecFlag != 1) 
 			return;
 
+		Vector3d applyIncrement = applyIncrement.dot(u.normalized())*u;
+		currentframe.position = previousframe.position + applyIncrement;
+
+		projectedPoint = I;
+	}
+	else if(type == MANIP_ROT)
+	{
+		Vector3d u(0,0,0),v(0,0,0);
+
+		// Get directions
+		if(axis == AXIS_X)
+		{
+			u = Vector3d(0,1,0);
+			v = Vector3d(0,0,1);
+		}
+		else if(axis == AXIS_Y)
+		{
+			u = Vector3d(0,0,1);
+			v = Vector3d(1,0,0);
+		}
+		else if(axis == AXIS_Z)
+		{
+			u = Vector3d(1,0,0);
+			v = Vector3d(0,1,0);
+		}
+		
+		u = previousframe.rotation._transformVector(u);
+		v = previousframe.rotation._transformVector(v);
+
+		u.normalize();
+		v.normalize();
+
+		// Compute projection
+		Vector3d I; 
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position, v, u, I);
+
+		if(intersecFlag != 1) 
+		{
+			printf("No intersecciona!\n");
+			return;
+		}
+
 		Vector3d v1, v2;
-		v1 = (I-previousframe.position).normalized();
-		v2 = (selectedPoint-previousframe.position).normalized();
+		v1 = (I-previousframe.position);
+		v2 = (selectedPoint-previousframe.position);
+
+		v1.normalize();
+		v2.normalize();
 
 		Quaterniond appliedRot;
 		appliedRot.setFromTwoVectors(v2, v1);
-
-		currentframe.rotation = previousframe.rotation*appliedRot.normalized();
-
-		//Vector3d applyIncrement = I-selectedPoint;
-		//applyIncrement = applyIncrement.dot(u.normalized())*u;
-		//currentframe.position = previousframe.position + applyIncrement;
-
+		currentframe.rotation = appliedRot.normalized()*previousframe.rotation;
 		projectedPoint = I;
+
+		//float angle = acos(v2.dot(v1))/(v2.norm()*v1.norm())*360/(2*M_PI);
+		//printf("rayOrigin: %f %f %f\n",rayOrigin.x(), rayOrigin.y(),rayOrigin.z());
+		//printf("rayDir: %f %f %f\n",rayDir.x(), rayDir.y(),rayDir.z());
+		//printf("angle: %f \n",angle);
+		//printf("previousframe.position: %f %f %f\n",previousframe.position.x(), previousframe.position.y(),previousframe.position.z());
+		//printf("selectedPoint: %f %f %f\n",selectedPoint.x(), selectedPoint.y(),selectedPoint.z());
+		//printf("I: %f %f %f\n\n",I.x(), I.y(),I.z());
 	}
 	else if(type == MANIP_SCL)
 	{
@@ -248,8 +318,6 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 void manipulator::drawFuncNames()
 {
 	if(!bEnable) return;
-
-	glDisable(GL_DEPTH_TEST);
 
 	glPushMatrix();
 
@@ -316,13 +384,13 @@ void manipulator::drawFuncNames()
 		//glColor3f(1.0,0,0);
 
 		glPushName(1.0);
-		drawCircle(20, size);
+		drawCircle(CURVE_RES, size);
 		glPopName();
 
 		glRotatef(90, 0,1,0); // rotar en y
 		//glColor3f(0,1.0,0);
 		glPushName(3.0);
-		drawCircle(20,size);
+		drawCircle(CURVE_RES,size);
 		glPopName();
 		glPopMatrix();
 
@@ -330,7 +398,7 @@ void manipulator::drawFuncNames()
 		//glColor3f(0,0,1.0); // rotar en x
 		glRotatef(90, 0,0,1);
 		glPushName(2.0);
-		drawCircle(20, size);
+		drawCircle(CURVE_RES, size);
 		glPopName();
 		glPopMatrix();
 		glEnable(GL_LIGHTING);
@@ -341,8 +409,6 @@ void manipulator::drawFuncNames()
 	}
 
 	glPopMatrix();
-
-	glEnable(GL_DEPTH_TEST);
 }
 
 void manipulator::setCurrentFrame(Vector3d pos_, Quaterniond rot_, Vector3d scl_)
@@ -365,7 +431,7 @@ void manipulator::setFrame(Vector3d pos_, Quaterniond rot_, Vector3d scl_)
 
 void manipulator::drawFunc()
 {
-	glDisable(GL_DEPTH_TEST);
+	//glDisable(GL_DEPTH_TEST);
 
 	if(!bEnable) return;
 
@@ -406,17 +472,35 @@ void manipulator::drawFunc()
 		{
 			Vector3d v1, v2;
 
-			v1 = (selectedPoint - previousframe.position).normalized()*size*5;
-			v2 = (projectedPoint - previousframe.position).normalized()*size*5;
+			v1 = (selectedPoint - previousframe.position);
+			v2 = (projectedPoint - previousframe.position);
+
+			Vector3d pt1 = previousframe.position+v1.normalized()*size;
+			Vector3d pt2 = previousframe.position+v2.normalized()*size;
+
+			if(pt2.norm() > 0)
+				int parar = 0;
+
 
 			glPointSize(size*1.5);
+			glDisable(GL_LIGHTING);
 			glBegin(GL_LINES);
-			glColor3f(0.5,0.5,0.5);
+			glColor3f(0.7,0.7,0.7);
 			glVertex3d(previousframe.position.x(),previousframe.position.y(),previousframe.position.z());
-			glVertex3d(previousframe.position.x()+v1.x(),previousframe.position.y()+v1.y(),previousframe.position.z()+v1.z());
+			glVertex3d(pt1.x(),pt1.y(),pt1.z());
+
 			glVertex3d(previousframe.position.x(),previousframe.position.y(),previousframe.position.z());
-			glVertex3d(previousframe.position.x()+v2.x(),previousframe.position.y()+v2.y(),previousframe.position.z()+v2.z());
+			glVertex3d(pt2.x(),pt2.y(),pt2.z());
 			glEnd();
+
+			glBegin(GL_POINTS);
+			glColor3f(1,1,1);
+			glVertex3d(pt1.x(),pt1.y(),pt1.z());
+			glVertex3d(previousframe.position.x(),previousframe.position.y(),previousframe.position.z());
+			glVertex3d(pt2.x(),pt2.y(),pt2.z());
+			glEnd();
+
+			glEnable(GL_LIGHTING);
 		}
 
 	}
@@ -440,13 +524,6 @@ void manipulator::drawFunc()
 	else if(type == MANIP_MOVE)
 	{
 		glDisable(GL_LIGHTING);
-
-		/*glPointSize(5);
-		glBegin(GL_POINT);
-		glColor3f(1.0,1.0,1.0);
-		glVertex3d(0,0,0);
-		glEnd();
-		*/
 		glLineWidth(size);
 		
 		if(axis== AXIS_X)
@@ -516,7 +593,7 @@ void manipulator::drawFunc()
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
 		glColor3f(1.0,0,0);
-		drawCircle(20, size);
+		drawCircle(CURVE_RES, size);
 
 		if(axis== AXIS_Z)
 			glLineWidth(size*1.2);
@@ -525,7 +602,7 @@ void manipulator::drawFunc()
 
 		glRotatef(90, 0,1,0); // rotar en y
 		glColor3f(0,0.0,1.0);
-		drawCircle(20, size);
+		drawCircle(CURVE_RES, size);
 		glPopMatrix();
 
 		if(axis== AXIS_Y)
@@ -536,7 +613,7 @@ void manipulator::drawFunc()
 		glPushMatrix();
 		glColor3f(0,1.0,0.0); // rotar en x
 		glRotatef(90, 0,0,1);
-		drawCircle(20, size);
+		drawCircle(CURVE_RES, size);
 		glPopMatrix();
 		glEnable(GL_LIGHTING);
 	}
@@ -547,5 +624,5 @@ void manipulator::drawFunc()
 
 	glPopMatrix();
 
-	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_DEPTH_TEST);
 }

@@ -60,6 +60,7 @@ public:
 	virtual void drawFuncNames();
 	virtual void drawNamesWithProjectingPlane();
 
+	void setManipulator(Vector3d& rayOrigin, Vector3d& rayDir);
 	void moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir);
 
 	void applyTransformation(object* obj, transformMode mode = TM_WORLD);

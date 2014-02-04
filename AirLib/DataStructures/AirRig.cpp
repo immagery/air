@@ -325,6 +325,7 @@ bool DefGraph::loadFromFile(ifstream& in, airRigSerialization* sData)
 DefGroup::DefGroup(int nodeId) : object(nodeId)
 {
 	transformation = NULL;
+	rigTransform = NULL;
 	smoothingPasses = default_SMOOTHING_PASES;
 	smoothPropagationRatio = default_SMOOTHING_RATIO;
 	subdivisionRatio = default_SUBDIVISION_RATIO;
@@ -342,7 +343,11 @@ DefGroup::DefGroup(int nodeId) : object(nodeId)
 	shading = new DefGroupRender(this);
 
 	parentType = 0;
+
+	// To perform bulge effect
+	bulgeEffect = false;
 }
+
 
 DefGroup::DefGroup(int nodeId, joint* jt) : object(nodeId)
 {
@@ -364,6 +369,219 @@ DefGroup::DefGroup(int nodeId, joint* jt) : object(nodeId)
 	shading = new DefGroupRender(this);
 
 	parentType = 0;
+
+	// To perform bulge effect
+	bulgeEffect = false;
+}
+
+bool DefGroup::selectRec(bool bToogle)
+{
+	shading->selected = bToogle;
+	for(unsigned int i = 0; i< relatedGroups.size(); i++)
+		relatedGroups[i]->selectRec(bToogle);
+
+	return true;
+}
+
+bool DefGroup::select(bool bToogle, unsigned int id)
+{
+	bToogle &= ((unsigned int)id == nodeId);
+
+	shading->selected = bToogle;
+	for(unsigned int i = 0; i< relatedGroups.size(); i++)
+		relatedGroups[i]->selectRec(bToogle);
+
+	return true;
+}
+
+void DefGroup::computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg)
+{
+	Eigen::Matrix3d rotationMatrix;
+
+	joint* jt = dg->transformation;
+	joint* father = NULL;
+
+	if(fatherDg != NULL) 
+		father = fatherDg->transformation;
+
+	if(!fatherDg)
+	{
+		jt->translation = jt->pos;
+		jt->rotation =  jt->qOrient * jt->qrot;
+
+		rotationMatrix = jt->rotation.toRotationMatrix();
+
+		jt->twist = Quaterniond::Identity();
+		jt->parentRot = Eigen::Quaterniond::Identity();
+	}
+	else
+	{
+		jt->translation = father->translation + 
+						  father->rotation._transformVector(jt->pos);
+		
+		jt->rotation =  father->rotation * jt->qOrient * jt->qrot;
+
+		rotationMatrix = ( jt->qOrient * jt->qrot).toRotationMatrix();
+
+		// TwistComputation:
+		Vector3d axis = jt->rTranslation - father->rTranslation;
+		axis.normalize();
+
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restRot;
+
+		Vector3d tempRestRot = father->rRotation.inverse()._transformVector(axis);
+
+		Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
+		Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
+
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+		
+		// Ejes Locales
+		jt->twist = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
+
+		Vector3d quatAxis(jt->twist.x(),jt->twist.y(),jt->twist.z());
+		quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
+		//quatAxis = father->qOrient._transformVector(quatAxis);
+		//quatAxis = (father->qOrient * father->qrot).inverse()._transformVector(quatAxis);
+	
+		jt->twist.x() = quatAxis.x();
+		jt->twist.y() = quatAxis.y();
+		jt->twist.z() = quatAxis.z();
+
+		Vector3d referencePoint = father->rotation.inverse()._transformVector(jt->translation - father->translation);
+		Quaterniond redir;
+		jt->parentRot = father->rotation * redir.setFromTwoVectors(Vector3d(1,0,0),referencePoint);	
+
+	}
+	
+	//Eigen::Matrix3d rotationMatrix;
+	//rotationMatrix = jt->rRotation.toRotationMatrix();
+
+	Eigen::Matrix4f transformMatrix2;
+	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
+					    rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
+					    rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
+						0.0,				0.0,				0.0,			1.0;
+
+	transformMatrix2.transposeInPlace();
+	jt->world = transformMatrix2;
+
+	jt->worldPosition = jt->translation;
+	jt->W = transformMatrix2.transpose();
+	
+
+	for(unsigned int i = 0; i< dg->relatedGroups.size(); i++)
+    {
+        computeWorldPosRec(dg->relatedGroups[i], dg);
+    }
+
+	return;
+
+}
+
+
+void DefGroup::addTranslation(double tx, double ty, double tz)
+{
+}
+
+void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
+{
+	if(local)
+	{
+		// The in quaternion is expresed in local coords.
+		// we can assign it directly.
+		transformation->pos = Vector3d(tx, ty, tz);
+		qrot.normalize();
+		dirtyFlag = true;
+	}
+	else
+	{
+		if(dependentGroups.size() == 0)
+		{
+			// The in quaternion is expressed in global coords.
+			// We need to do transformation to bring it to local coords.
+			Vector3d despl = Vector3d(tx, ty, tz);
+			transformation->pos = despl;
+			dirtyFlag = true;
+		}
+		else
+		{
+			// The in quaternion is expressed in global coords.
+			// We need to do transformation to bring it to local coords.
+			Vector3d despl = Vector3d(tx, ty, tz)-dependentGroups[0]->getTranslation(false);
+			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
+			transformation->pos = despl;
+			dirtyFlag = true;
+		}
+
+	}
+}
+
+void DefGroup::addRotation(double rx, double ry, double rz)
+{
+
+}
+
+void DefGroup::addRotation(Eigen::Quaternion<double> q, bool local)
+{
+
+}
+
+void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
+{
+	if(local)
+	{
+		// The in quaternion is expresed in local coords.
+		// we can assign it directly.
+		q.normalize();
+		transformation->qrot = q;
+		transformation->qrot.normalize();
+		dirtyFlag = true;
+	}
+	else
+	{
+		// The in quaternion is expressed in global coords.
+		// We need to do transformation to bring it to local coords.
+		q.normalize();
+		if(dependentGroups.size() == 0)
+		{
+			// Is the root
+			transformation->qrot = transformation->qOrient.inverse()*q;
+			transformation->qrot.normalize();
+			dirtyFlag = true;
+		}
+		else
+		{
+			transformation->qrot = dependentGroups[0]->getRotation(false).inverse()*transformation->qOrient.inverse()*q;
+			transformation->qrot.normalize();
+			dirtyFlag = true;
+		}
+	}
+}
+
+Quaterniond DefGroup::getRotation(bool local)
+{
+	Quaterniond rot;
+
+	if(local)
+		return transformation->qrot;
+	else
+		return transformation->rotation;
+
+	return rot;
+}
+
+Vector3d DefGroup::getTranslation(bool local)
+{
+	if(local)
+		return transformation->pos;
+	else
+		return transformation->translation;
+
+	Vector3d pos(0,0,0);
+	return pos;
 }
 
 bool DefGroup::saveToFile(FILE* fout)
@@ -982,6 +1200,19 @@ bool AirRig::changeExpansionValue(float value, int nodeId)
 	updateAirSkinning(defRig, *model);
 
 	return true;
+}
+
+void AirRig::highlight(int _nodeId, bool hl)
+{
+	for(int i = 0; i< defRig.defGroups.size(); i++)
+	{
+		if(defRig.defGroups[i]->nodeId == _nodeId)
+			defRig.defGroups[i]->shading->highlight = hl;
+		else
+			defRig.defGroups[i]->shading->highlight = false;
+	}
+	
+
 }
 
 bool AirRig::changeSmoothValue(float value, int nodeId)

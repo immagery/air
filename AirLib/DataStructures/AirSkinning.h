@@ -2,6 +2,7 @@
 #define AIR_SKINNING_H
 
 #include <DataStructures/Skinning.h>
+#include <Computation\BulgeDeformer.h>
 #include <vector>
 using namespace std;
 
@@ -9,7 +10,7 @@ class AirRig;
 class AirSkinning : public Skinning
 {
 public:
-	AirSkinning() : Skinning() { useSecondaryWeights = false; }
+	AirSkinning() : Skinning()  { useSecondaryWeights = false; }
 	~AirSkinning();
 
 	virtual void loadBindingForModel(Modelo *m, AirRig* rig);
@@ -27,6 +28,8 @@ public:
 	// Reference to rigg deformers
 	map< int, joint* > deformersRestPosition;
 	map< int, joint* > deformersPosition;
+
+	BulgeDeformer bulge;
 };
 
 void saveAirBinding(binding* bd, string fileName);

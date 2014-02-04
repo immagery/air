@@ -79,7 +79,9 @@ public:
 	bool enableTwist;
 	bool smoothTwist;
 
-	int parentType; 
+	int parentType;
+
+	bool bulgeEffect;
 
 	DefGroupType type; 
 
@@ -93,6 +95,15 @@ public:
 	bool loadFromFile(ifstream& in, airRigSerialization* sData);
 
 	virtual void setRotation(double rx, double ry, double rz, bool radians);
+	
+	void addTranslation(double tx, double ty, double tz);
+	void setTranslation(double tx, double ty, double tz, bool local);
+	void addRotation(double rx, double ry, double rz);
+	void addRotation(Eigen::Quaternion<double> q, bool local = true);
+	void setRotation(Eigen::Quaternion<double> q, bool local = true);
+
+	Quaterniond getRotation(bool local = true);
+	Vector3d getTranslation(bool local = true);
 
 	bool dirtyByTransformation(bool alsoFather, bool hierarchically = true);
 	bool dirtyBySegmentation();
@@ -117,18 +128,29 @@ public:
             return true;
         else
 		{
-			transformation->update();
+			// Se supone que el padre esta bien
+			// Transmitimos el update a los hijos a
+			// partir de aqui.
 
-			for(int i = 0; i< relatedGroups.size(); i++)
+			if(dependentGroups.size() > 0)
+				computeWorldPosRec(this, dependentGroups[0]);
+			else
+				computeWorldPosRec(this, NULL);
+
+			/*for(int i = 0; i< relatedGroups.size(); i++)
 			{
 				relatedGroups[i]->update();
 			}
-
+			*/
 			dirtyFlag = false;
             return true;
 		}
     }
 
+	virtual bool select(bool bToogle, unsigned int id);
+	virtual bool selectRec(bool bToogle);
+
+	void computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg);
 };
 
 class constraintSerialization
@@ -281,6 +303,8 @@ public:
 	bool rotateDefGroup(double rx, double ry, double rz, bool radians, int nodeId);
 	bool changeExpansionValue(float value, int nodeId);
 	bool changeSmoothValue(float value, int nodeId);
+
+	void highlight(int _nodeId, bool hl);
 
 	virtual bool propagateDirtyness()
     {
@@ -445,7 +469,7 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions);
 bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups );
 
 // Propose a division in deformers from a given stick
-int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
+int subdivideStick(Vector3d origen, Vector3d fin, int defGroupIdx, int childDefGroupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio);
 
 // Takes all the groups and constraints and

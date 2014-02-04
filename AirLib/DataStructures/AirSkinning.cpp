@@ -149,10 +149,8 @@ void AirSkinning::loadBindingForModel(Modelo *m, AirRig* rig)
 
 void AirSkinning::computeDeformations(AirRig* rig)
 {
-
-	//if (deformersRestPosition.size() == 0) return;
+	// Flags por si acaso
 	if(!rig) return;
-
 	if (rig->defRig.defGroups.size() == 0) return;
 
 	// Check if there's at least one dirty skeleton. In that case, proceed
@@ -203,7 +201,6 @@ void AirSkinning::computeDeformations(AirRig* rig)
 				finalPosition = finalPosition + Vector3d(finalPos2(0), finalPos2(1), finalPos2(2)) * currentWeight;
 
 				totalWeight += data.influences[kk].weightValue;
-					
 			}
 
 			finalPosition = finalPosition / totalWeight;
@@ -212,6 +209,9 @@ void AirSkinning::computeDeformations(AirRig* rig)
 
 			m->nodes[vertexID]->position = finalPosition;
 		}
+
+		// Apply Bulge Deformation
+		bulge.applyDeformation(m, b, rig);
 
 		if (updated)
 		{		
@@ -301,7 +301,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 	//for (int i = 0; i < deformedModels.size(); ++i) 
 	{		
 		// It's a bad way to ensure that we are deforming the right mdoel.
-		if (!deformedModel->shading->visible) return;
+		if (!deformedModel || !deformedModel->shading->visible) return;
 
 		Geometry *m = deformedModel;
 
@@ -448,6 +448,11 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 
 			m->nodes[vertexID]->position = finalPosition;
 		}
+
+		// Apply Bulge Deformation
+		if(bulge.enabled)
+			bulge.applyDeformation(m, b, rig);
+
 		if (updated)
 		{		
 			m->computeNormals();
