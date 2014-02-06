@@ -167,20 +167,11 @@ double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& 
 	return res;
 }
 
+
 void updateAirSkinning(DefGraph& graph, Modelo& model)
 {
 
 	clock_t ini = clock();
-
-	vector<int> traductionTable;
-	map<int, DefNode*> nodeIds;
-
-	// Creamos la tabla de traducción general.
-	traductionTable.resize(graph.deformers.size());
-
-    for(unsigned int j = 0; j< traductionTable.size(); j++)
-        nodeIds[graph.deformers[j]->nodeId] = graph.deformers[j];
-
 	binding* bd = model.bind;
 
 	// Updating deformer's info
@@ -1169,17 +1160,9 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 
 			if(fromThisGroup[pd.segmentId] >= 0)
 			{
-				//if(defGroup->relatedGroups.size() <= 1)
-				//{
-					// Solo hay un hijo, el valor es el valor por defecto.
-				//	continue;
-				//}
-				//else
-				//{
-					pd.auxInfluences.clear();
-					pd.ownerLabel = fromThisGroup[pd.segmentId];
-					pointsFromThisGroup.push_back(&pd);
-				//}
+				pd.auxInfluences.clear();
+				pd.ownerLabel = fromThisGroup[pd.segmentId];
+				pointsFromThisGroup.push_back(&pd);
 			}
 			else
 			{

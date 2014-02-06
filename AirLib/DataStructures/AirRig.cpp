@@ -7,6 +7,9 @@
 
 #include <iostream>
 #include <fstream>
+#include <queue>
+
+riggingMode AirRig::mode = MODE_RIG;
 
 // Serialization
 bool Constraint::saveToFile(FILE* fout)
@@ -193,8 +196,6 @@ AirRig::AirRig(int id) : Rig(id)
 	if(skin) delete skin;
 	airSkin = new AirSkinning();
 	skin = (Skinning*) airSkin;
-
-	rigginMode = false;
 }
 
 /*
@@ -343,6 +344,7 @@ DefGroup::DefGroup(int nodeId) : object(nodeId)
 	shading = new DefGroupRender(this);
 
 	parentType = 0;
+	type = DEF_STICK;
 
 	// To perform bulge effect
 	bulgeEffect = false;
@@ -369,6 +371,8 @@ DefGroup::DefGroup(int nodeId, joint* jt) : object(nodeId)
 	shading = new DefGroupRender(this);
 
 	parentType = 0;
+
+	type = DEF_STICK;
 
 	// To perform bulge effect
 	bulgeEffect = false;
@@ -493,8 +497,11 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 		// The in quaternion is expresed in local coords.
 		// we can assign it directly.
 		transformation->pos = Vector3d(tx, ty, tz);
-		qrot.normalize();
-		dirtyFlag = true;
+
+	    // parent and all the childs
+		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+			dirtyByTransformation(false);
+
 	}
 	else
 	{
@@ -502,9 +509,10 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 		{
 			// The in quaternion is expressed in global coords.
 			// We need to do transformation to bring it to local coords.
-			Vector3d despl = Vector3d(tx, ty, tz);
-			transformation->pos = despl;
-			dirtyFlag = true;
+			transformation->pos = Vector3d(tx, ty, tz);
+
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+				dirtyByTransformation(true);
 		}
 		else
 		{
@@ -513,7 +521,9 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			Vector3d despl = Vector3d(tx, ty, tz)-dependentGroups[0]->getTranslation(false);
 			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
 			transformation->pos = despl;
-			dirtyFlag = true;
+
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+				dirtyByTransformation(false);
 		}
 
 	}
@@ -536,9 +546,13 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 		// The in quaternion is expresed in local coords.
 		// we can assign it directly.
 		q.normalize();
-		transformation->qrot = q;
-		transformation->qrot.normalize();
-		dirtyFlag = true;
+
+		// The defgraph is in this rig
+		transformation->setRotation(q);
+
+		 // not parent but all the childs
+		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+			dirtyByTransformation(true);
 	}
 	else
 	{
@@ -548,15 +562,22 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 		if(dependentGroups.size() == 0)
 		{
 			// Is the root
-			transformation->qrot = transformation->qOrient.inverse()*q;
-			transformation->qrot.normalize();
-			dirtyFlag = true;
+			// The defgraph is in this rig
+			transformation->setRotation(transformation->qOrient.inverse()*q);
+
+			// not parent but all the childs
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+				dirtyByTransformation(true);
 		}
 		else
 		{
-			transformation->qrot = dependentGroups[0]->getRotation(false).inverse()*transformation->qOrient.inverse()*q;
-			transformation->qrot.normalize();
-			dirtyFlag = true;
+			Quaterniond newq = dependentGroups[0]->getRotation(false).inverse()*transformation->qOrient.inverse()*q;
+			newq.normalize();
+			transformation->setRotation(newq);
+
+			// not parent but all the childs
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+				dirtyByTransformation(true);
 		}
 	}
 }
@@ -690,6 +711,7 @@ void DefGroup::computeRestPos(DefGroup* dg, DefGroup* father)
 }
 
 
+
 void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 {
 	Eigen::Matrix3d rotationMatrix;
@@ -811,6 +833,24 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
     }
 
 	return;
+}
+
+void DefGroup::restorePoses(DefGroup* dg, DefGroup* father)
+{
+	joint* jt = dg->transformation;
+
+	jt->qrot = jt->restRot;
+	jt->pos = jt->restPos;
+	jt->qOrient = jt->qOrient;
+
+	jt->translation = jt->rTranslation;
+	jt->rotation = jt->rRotation;
+	jt->twist = jt->rTwist;
+
+	for(int jtChild = 0; jtChild < dg->relatedGroups.size(); jtChild++)
+	{
+		dg->relatedGroups[jtChild]->restorePoses(dg->relatedGroups[jtChild], dg);
+	}
 }
 
 // Loads data from this file, it is important to bind
@@ -1147,7 +1187,7 @@ bool AirRig::loadRigging(string sFile)
 	return true;
 }
 
-bool AirRig::translateDefGroup(Vector3d newPos, int nodeId)
+bool AirRig::translateDefGroup(Vector3d newPos, int nodeId, bool update)
 {
 	// Escoger transformación como punto simple o como jerarquía...
 	// de entrada algo normal.
@@ -1161,12 +1201,34 @@ bool AirRig::translateDefGroup(Vector3d newPos, int nodeId)
 
 	// Relanzar el cálculo completo: presuponemos que se ha actualizado bien el grafo
 	// The deformers structure will be updated
-	updateAirSkinning(defRig, *model);
+	if(update)
+		updateAirSkinning(defRig, *model);
 
 	return true;
 }
 
-bool AirRig::rotateDefGroup(double rx, double ry, double rz, bool radians, int nodeId)
+
+bool AirRig::rotateDefGroup(Quaterniond _q, int nodeId, bool update)
+{
+		// Escoger transformación como punto simple o como jerarquía...
+	// de entrada algo normal.
+	if(!defRig.defGroupsRef[nodeId]) return false;
+	
+	// The defgraph is in this rig
+	defRig.defGroupsRef[nodeId]->transformation->setRotation( _q);
+
+	 // parent and all the childs
+	defRig.defGroupsRef[nodeId]->dirtyByTransformation(false);
+
+	// Relanzar el cálculo completo: presuponemos que se ha actualizado bien el grafo
+	// The deformers structure will be updated
+	if(update)
+		updateAirSkinning(defRig, *model);
+
+	return true;
+}
+
+bool AirRig::rotateDefGroup(double rx, double ry, double rz, bool radians, int nodeId, bool update)
 {
 		// Escoger transformación como punto simple o como jerarquía...
 	// de entrada algo normal.
@@ -1180,12 +1242,13 @@ bool AirRig::rotateDefGroup(double rx, double ry, double rz, bool radians, int n
 
 	// Relanzar el cálculo completo: presuponemos que se ha actualizado bien el grafo
 	// The deformers structure will be updated
-	updateAirSkinning(defRig, *model);
+	if(update)
+		updateAirSkinning(defRig, *model);
 
 	return true;
 }
 
-bool AirRig::changeExpansionValue(float value, int nodeId)
+bool AirRig::changeExpansionValue(float value, int nodeId, bool update)
 {
 	// set expansion value
 	defRig.defGroupsRef[nodeId]->expansion = value;
@@ -1202,6 +1265,15 @@ bool AirRig::changeExpansionValue(float value, int nodeId)
 	return true;
 }
 
+bool AirRig::changeSmoothValue(float value, int nodeId, bool update)
+{
+	defRig.defGroupsRef[nodeId]->smoothingPasses = value;
+	defRig.defGroupsRef[nodeId]->localSmooth = true;
+
+	updateAirSkinning(defRig, *model);
+	return true;
+}
+
 void AirRig::highlight(int _nodeId, bool hl)
 {
 	for(int i = 0; i< defRig.defGroups.size(); i++)
@@ -1213,15 +1285,6 @@ void AirRig::highlight(int _nodeId, bool hl)
 	}
 	
 
-}
-
-bool AirRig::changeSmoothValue(float value, int nodeId)
-{
-	defRig.defGroupsRef[nodeId]->smoothingPasses = value;
-	defRig.defGroupsRef[nodeId]->localSmooth = true;
-
-	updateAirSkinning(defRig, *model);
-	return true;
 }
 
 void BuildGroupTree(DefGraph& graph)
@@ -1261,6 +1324,24 @@ void BuildGroupTree(DefGraph& graph)
 	}
 }
 
+bool AirRig::saveRestPoses()
+{
+	for(int j = 0; j < defRig.roots.size(); j++) 
+	{
+		defRig.roots[j]->computeRestPos(defRig.roots[j]);
+	}
+	return true;
+}
+
+bool AirRig::restorePoses()
+{
+	for(int j = 0; j < defRig.roots.size(); j++) 
+	{
+		defRig.roots[j]->restorePoses(defRig.roots[j]);
+		defRig.roots[j]->computeWorldPos(defRig.roots[j]);
+	}
+	return true;
+}
 
 bool AirRig::preprocessModelForComputations()
 {
@@ -1273,6 +1354,86 @@ bool AirRig::preprocessModelForComputations()
 
 	return true;
 }
+
+void AirRig::initRigWithModel(Modelo* in_model)
+{
+	if(in_model->rigBinded) return;
+
+	bindModel(in_model);
+
+	// Preprocesses like distances over the surface
+	// could be done, maybe as a backgroud process.
+	// The data path and files from the model need to be coherent
+	getBDEmbedding(model);
+
+	// Se podría constuir todo el grafo de conectividad y estructuras para el proceso aquí.
+
+	in_model->rigBinded = true;
+}
+
+void AirRig::RefineGroup(DefGroup* def)
+{
+
+}
+
+void AirRig::BuildGroup(DefGroup* def)
+{
+		//defRig.defGroups[i]->subdivisionRatio = subdivisions;
+		def->expansion = 1;
+
+		// Constraint basico de relacion
+		if(def->dependentGroups.size() > 0)
+		{
+			defRig.relations.push_back(new Constraint());
+			defRig.relations.back()->parent = defRig.defGroupsRef[def->dependentGroups[0]->nodeId];
+			defRig.relations.back()->child = defRig.defGroupsRef[def->nodeId];
+			defRig.relations.back()->weight = 1.0;
+		}
+
+		// habría que ver si simplemente hay que reposicionar o reconstruir
+		
+		if(def->type == DEF_STICK)
+		{
+			proposeDefNodesFromStick(*def, def->relatedGroups);
+		}
+		else
+		{
+			printf("No conozco el tipo de este deformador.\n");
+		}
+
+		for(int defId = 0; defId < def->deformers.size(); defId++)
+			defRig.deformers.push_back(&def->deformers[defId]);
+}
+
+void AirRig::getWorkToDo(queue<DefNode*>& preprocess, queue<DefNode*>& segmentation)
+{
+	// Revisar los defGroups para ver si hay que reposicionar los nodos o que
+	for(int i = 0; i < defRig.defGroups.size(); i++)
+	{
+		if(defRig.defGroups[i]->dirtyTransformation)
+		{
+			for(int defId = 0; defId < defRig.defGroups[i]->deformers.size(); defId++)
+			{
+				preprocess.push(&defRig.defGroups[i]->deformers[defId]);
+				segmentation.push(&defRig.defGroups[i]->deformers[defId]);
+			}
+		}
+		else if(defRig.defGroups[i]->dirtySegmentation)
+		{
+			for(int defId = 0; defId < defRig.defGroups[i]->deformers.size(); defId++)
+			{
+				// Solo hay que hacer el cálculo de segmentacion porque se ha tocado algun parametro
+				segmentation.push(&defRig.defGroups[i]->deformers[defId]);
+			}
+		}
+		else
+		{
+			// Solo tenemos que hacer el smoothing
+			// de momento no guardamos ninguna referencia
+		}
+	}
+}
+
 
 bool AirRig::bindRigToModelandSkeleton(Modelo* in_model, vector<skeleton*>& in_skeletons, float subdivisions)
 {

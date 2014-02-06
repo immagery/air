@@ -27,12 +27,12 @@ void main()
 {
 	vec3 N = normalize(Normal);
     vec3 L = normalize(vec3(light.position));
-    vec3 a = light.intensity * gl_Color * material.ka.x;
+    vec3 a = light.intensity * gl_Color * 0.1;
 	float sDotN = dot(L,N);
-    vec3 d = max(0.0, sDotN) * light.intensity * gl_Color * material.kd.x;
+    vec3 d = max(0.0, sDotN) * light.intensity * gl_Color * 1;
 	vec3 V = normalize(-P);
     vec3 R = reflect(-L,N);
-    vec3 s = step(0.0, sDotN) * light.intensity * gl_Color * material.ks.x * pow(max(0.0, dot(R,V)), material.shininess);
+    vec3 s = step(0.0, sDotN) * light.intensity * gl_Color * 0.1 * pow(max(0.0, dot(R,V)), 1.0);
 		
     gl_FragColor = vec4((a+d+s).xyz, material.opacity);
 }
