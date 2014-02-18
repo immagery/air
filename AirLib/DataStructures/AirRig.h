@@ -112,6 +112,9 @@ public:
 	Quaterniond getRotation(bool local = true);
 	Vector3d getTranslation(bool local = true);
 
+	Vector3d getRestTranslation(bool local = true);
+	Quaterniond getRestRotation(bool local = true);
+
 	bool dirtyByTransformation(bool alsoFather, bool hierarchically = true);
 	bool dirtyBySegmentation();
 	bool dirtyBySmoothing();

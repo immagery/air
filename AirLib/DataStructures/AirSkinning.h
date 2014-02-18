@@ -29,7 +29,7 @@ public:
 	map< int, joint* > deformersRestPosition;
 	map< int, joint* > deformersPosition;
 
-	BulgeDeformer bulge;
+	vector<BulgeDeformer> bulge;
 };
 
 void saveAirBinding(binding* bd, string fileName);

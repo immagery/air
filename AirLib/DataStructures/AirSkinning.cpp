@@ -173,6 +173,7 @@ void AirSkinning::computeDeformations(AirRig* rig)
 		if (!deformedModel->shading->visible) return;
 
 		Geometry *m = deformedModel;
+		Geometry *mOrig = originalModel;
 
 		// loop through all bindings
 		binding * b = bind;
@@ -211,7 +212,8 @@ void AirSkinning::computeDeformations(AirRig* rig)
 		}
 
 		// Apply Bulge Deformation
-		bulge.applyDeformation(m, b, rig);
+		for(int bulgeIdx = 0; bulgeIdx < bulge.size(); bulgeIdx++)
+			bulge[bulgeIdx].applyDeformation(m, mOrig, b, rig);
 
 		if (updated)
 		{		
@@ -304,6 +306,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		if (!deformedModel || !deformedModel->shading->visible) return;
 
 		Geometry *m = deformedModel;
+		Geometry *mOrig = originalModel;
 
 		// loop through all bindings
 		binding * b = bind;
@@ -450,8 +453,11 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		}
 
 		// Apply Bulge Deformation
-		if(bulge.enabled)
-			bulge.applyDeformation(m, b, rig);
+		for(int bulgeIdx = 0; bulgeIdx < bulge.size(); bulgeIdx++)
+		{
+			if(bulge[bulgeIdx].enabled)
+				bulge[bulgeIdx].applyDeformation(m, mOrig, b, rig);
+		}
 
 		if (updated)
 		{		

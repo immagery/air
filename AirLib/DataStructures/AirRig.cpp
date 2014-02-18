@@ -594,6 +594,30 @@ Quaterniond DefGroup::getRotation(bool local)
 	return rot;
 }
 
+Quaterniond DefGroup::getRestRotation(bool local)
+{
+	Quaterniond rot;
+
+	if(local)
+		return transformation->qrot;
+	else
+		return transformation->rRotation;
+
+	return rot;
+}
+
+Vector3d DefGroup::getRestTranslation(bool local)
+{
+	if(local)
+		return transformation->pos;
+	else
+		return transformation->rTranslation;
+
+	Vector3d pos(0,0,0);
+	return pos;
+}
+
+
 Vector3d DefGroup::getTranslation(bool local)
 {
 	if(local)
