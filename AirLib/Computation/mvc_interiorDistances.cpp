@@ -57,6 +57,9 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
         normas[idVert] = norm;
     }
 
+    //for(int i = 0; i < 10; i++) 
+	//	printf(" CPU - v.x: %f, v.y: %f, v.z: %f, n:%f\n", unitVectors[i].x(),unitVectors[i].y(), unitVectors[i].z(), normas[i]);
+
     double totalW = 0;
 
     //MyMesh::FaceIterator fj;
@@ -116,6 +119,8 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
         w[1] = (O[1]- c[0]*O[2] - c[2]*O[0])/(normas[idVerts[1]]*sin(O[2])*s[0]);
         w[2] = (O[2]- c[1]*O[0] - c[0]*O[1])/(normas[idVerts[2]]*sin(O[0])*s[1]);
 
+        //if(fj < 30) printf(" CPU - w[0]: %f, w[1]: %f, w[2]: %f\n", w[0], w[1], w[2]);
+
 		for(int i = 0; i<3; i++)
 		{  
 			// Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
@@ -129,6 +134,9 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
     {
 		sum2 += weights[i];
 	}
+
+
+	//printf(" sum - CPU - : %f\n", sum2);
 
 	for(int i = 0; i< weights.size(); i++)
 	{

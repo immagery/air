@@ -683,6 +683,8 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 	}
 	
 	finbin.close();
+
+    printf("Cargado---\n");
 	return true;
 }
 

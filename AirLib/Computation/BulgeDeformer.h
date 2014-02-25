@@ -89,6 +89,7 @@ public:
 class Geometry;
 class binding;
 class AirRig;
+class DefGroup;
 
 class BulgeDeformer : public node
 {
@@ -97,6 +98,9 @@ public:
 	// Funciones
 	BulgeDeformer();
 	void applyDeformation(Geometry* m, Geometry* origM,binding* b, AirRig* rig);
+
+	void applyDeformationInGroup(Geometry* m, Geometry* mOrig, binding* b, AirRig* rig,
+								DefGroup* dgParent, DefGroup* dg, DefGroup* dgChild, int bgIdx, bool direction);
 
 	// Each joint has at least two groups-> father->joint, joint->child
 	vector<BulgeGroup*> groups;

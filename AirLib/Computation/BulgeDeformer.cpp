@@ -35,41 +35,6 @@ void wireDeformer::init(Vector3d dir, Vector3d n, vector<Vector3d>& curvePointsi
 		}
 	}
 
-	/*
-	vector<Vector3d> curvePoints2(curvePoints.size());
-	for(int i = 0; i< curvePoints.size(); i++)
-		curvePoints2[i] = curvePoints[i];
-
-	vector<Vector3d> curveCoords2(curveCoords.size());
-	for(int i = 0; i< curveCoords.size(); i++)
-		curveCoords2[i] = curveCoords[i];
-
-	int firstNode = 0;
-
-	
-	// Clean vectors
-	curvePoints.clear();
-	curveCoords.clear();
-
-	// Push the first node
-	curveCoords.push_back(curveCoords2[firstNode]);
-	curvePoints.push_back(curvePoints2[firstNode]);
-	
-	firstNode++;
-
-	// Push nodes if the distance is big enough
-	for(int i = firstNode; i< curvePoints2.size(); i++)
-	{
-		Vector3d displ = curvePoints2[i]-curvePoints.back();
-		if(displ.dot(displ) > 0.03)
-		{
-			curvePoints.push_back(curvePoints2[i]);
-			curveCoords.push_back(curveCoords2[i]);
-		}
-	}
-	curvePoints2.clear();
-	*/
-
 	pos = curvePoints2.front();
 	mDir = (curvePoints2.back()-pos).normalized();
 	mN = n.normalized(); 
@@ -1017,8 +982,11 @@ void refineParameter(int vertId, int minDistId, float minDistance001, vector<flo
 	newDist = newMinDist;
 	newUParam = uCandidates[newMinDistIdx];
 
-	if(newDist > minDistance001)
-		printf("Houston, tenemos un problema con el refinamiento\n");
+	/*if(newDist > minDistance001)
+	{
+		printf("Houston, tenemos un problema con el refinamiento, %f - %f\n", newDist, minDistance001);
+		printf("Y nos indices son, %d - %d\n", newMinDistIdx, minDistId);
+	}*/
 
 
 }
@@ -1094,375 +1062,437 @@ void dicotomicSearch(int vertId, int minDistId, float minDistance001, vector<flo
 	newUParam = uParameter[minDistId-1] + (res.x()/(pt2-pt0).dot(v02))*(uParameter[minDistId+1]-uParameter[minDistId-1]);
 }
 
+void BulgeDeformer::applyDeformationInGroup(Geometry* m, Geometry* mOrig, binding* b, AirRig* rig,
+											DefGroup* dgParent, DefGroup* dg, DefGroup* dgChild, int bgIdx, bool direction)
+{
+	int currentDGFatherIdx = dgParent->nodeId;
+	int currentDGIdx = dg->nodeId;
+	int childDGIdx = dgChild->nodeId;
+
+	groups[bgIdx]->pressure.clear();
+	groups[bgIdx]->pressurePoints.clear();
+
+	// Obtenemos desplazamientos.
+	Vector3d v1 = dgParent->getTranslation(false) - dg->getTranslation(false);
+	Vector3d v2 = dgChild->getTranslation(false) - dg->getTranslation(false);
+	Vector3d v3 = dgChild->getTranslation(false) - dgParent->getTranslation(false);
+	v1.normalize();
+	v2.normalize();
+
+	float childBoneLength = v2.norm();
+
+	// Esto controla si estan alineados -> en ese caso no aplica ningun efecto
+	if(fabs(fabs(v1.dot(v2))-1) < SMALL_NUM) return;
+
+	Quaterniond q; q.setFromTwoVectors(v1,v2);
+	Vector3d bisectriz = q.slerp(0.5, Quaterniond::Identity())._transformVector(v1);
+	bisectriz.normalize();
+
+	// La IK debería haber colocado bien los joints... aqui partimos de que esta todo bien alineado.
+	// Obtenemos los planos centrados en dg
+	Vector3d nT = v1.cross(v2).normalized();
+	Vector3d nC = nT.cross(bisectriz).normalized();
+	Vector3d nB = nC.cross(nT).normalized();
+
+	Vector3d planeOrigin = dg->getTranslation(false);
+
+	// inicializacion para construir la curva antes de tocar nada.
+	vector<GraphNodePolygon*> triangleGroup;
+	vector<GraphNodePolygon*> origTriangleGroup;
+	vector< vector<int> > triVertMap;
+	triVertMap.resize(m->nodes.size());
+
+	for(int triIdx = 0; triIdx < m->triangles.size(); triIdx++)
+		for(int triVertIdx = 0; triVertIdx < 3; triVertIdx++)
+			triVertMap[m->triangles[triIdx]->verts[triVertIdx]->id].push_back(triIdx);
+
+	vector< bool > triPushed;
+	triPushed.resize(m->triangles.size(), false);
+
+	for(int vertIdx = 0; vertIdx < groups[bgIdx]->vertexGroup.size(); vertIdx++)
+	{
+		for(int vertTriIdx = 0; vertTriIdx < triVertMap[groups[bgIdx]->vertexGroup[vertIdx]].size(); vertTriIdx++)
+		{
+			int idx = triVertMap[groups[bgIdx]->vertexGroup[vertIdx]][vertTriIdx];
+			if(!triPushed[idx])
+			{
+				triangleGroup.push_back(m->triangles[idx]);
+				origTriangleGroup.push_back(mOrig->triangles[idx]);
+				triPushed[idx] = true;
+			}
+		}
+	}
+
+	int firstTri = -1, lastTri = -1;
+
+	// Get first curve Point
+	Vector3d curveOrigin(0,0,0);
+	Vector3d D(0,0,0);
+	int typeO = INT_NO_INT;
+
+	// Obtenemos el rayo bisectriz con el esqueleto en reposo.
+	Vector3d planeOriginOriginalModel, bisectriz2, bisectrizOriginalModel, coordsProjectionOriginalModel;
+
+	if(!direction)
+	{
+		// usual direction
+		planeOriginOriginalModel = dg->getRestTranslation(false);
+		bisectriz2 = dg->getRotation(false).inverse()._transformVector(bisectriz);
+		bisectrizOriginalModel = dg->getRestRotation(false)._transformVector(bisectriz2);
+		coordsProjectionOriginalModel;
+	}
+	else
+	{
+		//parent direction
+		planeOriginOriginalModel = dg->getRestTranslation(false);
+		bisectriz2 = dgChild->getRotation(false).inverse()._transformVector(bisectriz);
+		bisectrizOriginalModel = dgChild->getRestRotation(false)._transformVector(bisectriz2);
+		coordsProjectionOriginalModel;
+	}
+
+	// Obtenemos la interseccion del rayo con el modelo en reposo.
+	firstTri = getRayProjectionCoords(planeOriginOriginalModel, bisectrizOriginalModel, mOrig, origTriangleGroup, coordsProjectionOriginalModel, typeO);
+
+	if(firstTri < 0) return;
+
+	// Calculo del punto deformado, segun las coordenadas.
+	Vector3d pt0 = triangleGroup[firstTri]->verts[0]->position;
+	Vector3d pt1 = triangleGroup[firstTri]->verts[1]->position;
+	Vector3d pt2 = triangleGroup[firstTri]->verts[2]->position; 
+	curveOrigin = pt0*coordsProjectionOriginalModel.x()+
+					pt1*coordsProjectionOriginalModel.y()+
+					pt2*coordsProjectionOriginalModel.z();
+
+	// Obtenemos el rayo perpendicular a la bisectriz con el esqueleto en reposo.
+	Vector3d nBisectriz, nBisectrizRestTemp, nBisectrizRest, maxRadiousProjectionPoint001, maxRadiousProjectionPoint002;
+	Vector3d boneNormal, boneNormalTemp, boneNormalRest, boneNormalIntCoords;
+
+	if(!direction)
+	{
+		// usual direction
+		nBisectriz = -(nT.cross(v2));//v1.cross(bisectriz);
+		nBisectrizRestTemp = dg->getRotation(false).inverse()._transformVector(nBisectriz);
+		nBisectrizRest = dg->getRestRotation(false)._transformVector(nBisectrizRestTemp);
+
+		boneNormal = nBisectriz.cross(v1);
+		boneNormalTemp = dg->getRotation(false).inverse()._transformVector(nBisectriz);
+		boneNormalRest = dg->getRestRotation(false)._transformVector(boneNormalTemp);
+		boneNormalIntCoords;
+	}
+	else
+	{
+		// parent direction
+		nBisectriz = -(nT.cross(v2));//v1.cross(bisectriz);
+		nBisectrizRestTemp = dgChild->getRotation(false).inverse()._transformVector(nBisectriz);
+		nBisectrizRest = dgChild->getRestRotation(false)._transformVector(nBisectrizRestTemp);
+
+		boneNormal = nBisectriz.cross(v1);
+		boneNormalTemp = dgChild->getRotation(false).inverse()._transformVector(nBisectriz);
+		boneNormalRest = dgChild->getRestRotation(false)._transformVector(boneNormalTemp);
+		boneNormalIntCoords;
+	}
+	
+	int typeNB01, typeNB02;
+	int topTri = getRayProjectionCoords(planeOriginOriginalModel, boneNormal, mOrig, origTriangleGroup, boneNormalIntCoords, typeNB01);
+	int rightTri = getRayProjectionCoords(planeOriginOriginalModel, nBisectrizRest, mOrig, origTriangleGroup, maxRadiousProjectionPoint001, typeNB01);
+	int leftTri = getRayProjectionCoords(planeOriginOriginalModel, -nBisectrizRest, mOrig, origTriangleGroup, maxRadiousProjectionPoint002, typeNB02);
+
+	if(topTri < 0 || rightTri < 0 || leftTri < 0) return;
+
+	// Distancia segun biharmonics del origen al punto izquierdo
+	float leftDist = 0;
+	for(int triIdx001 = 0; triIdx001 < 3; triIdx001++)
+	{
+		int id01 = origTriangleGroup[topTri]->verts[triIdx001]->id;
+		float interpolatedDist = 0;
+		for(int triIdx002 = 0; triIdx002 < 3; triIdx002++)
+		{
+			int id10 = origTriangleGroup[leftTri]->verts[triIdx002]->id;
+			interpolatedDist += maxRadiousProjectionPoint002[triIdx002]*b->BihDistances[0].get(id01,id10);
+		}
+
+		leftDist += interpolatedDist * boneNormalIntCoords[triIdx001];
+	}
+
+	// Distancia segun biharmonics del origen al punto derecho
+	float rightDist = 0;
+	for(int triIdx001 = 0; triIdx001 < 3; triIdx001++)
+	{
+		int id01 = origTriangleGroup[topTri]->verts[triIdx001]->id;
+		float interpolatedDist = 0;
+		for(int triIdx002 = 0; triIdx002 < 3; triIdx002++)
+		{
+			int id10 = origTriangleGroup[rightTri]->verts[triIdx002]->id;
+			interpolatedDist += maxRadiousProjectionPoint001[triIdx002]*b->BihDistances[0].get(id01,id10);
+		}
+
+		rightDist += interpolatedDist * boneNormalIntCoords[triIdx001];
+	}
+
+	// Obtenemos el radio a partir de la media de los dos laterales.
+	float defaultDistanceForRadious = (leftDist+rightDist)/2;
+
+	// TODEBUG:  QUIZAS SERÍA NECESARIO CALCULAR TAMBIÉN EL DESTINO DE LA MISMA MANERA.
+
+	// Get final curve Point
+	float percent = 1;
+	int typeD = INT_NO_INT;
+	Vector3d endBone = dg->getTranslation(false) + (dgChild->getTranslation(false) - dg->getTranslation(false))*percent;
+	Vector3d nBone = -(nT.cross(v2));
+	lastTri = getRayProjection(endBone, nBone, m, triangleGroup, D, typeD);
+
+	// Procedemos al corte... hay algunos saltos... hay que ver de que va...
+	// Proyectar los puntos que toca
+	vector<Vector3d> displacements(groups[bgIdx]->vertexGroup.size());
+	vector<bool> displaced(groups[bgIdx]->vertexGroup.size());
+	float acumPressureChild = 0;
+	float acumPressureFather = 0;
+
+	float maxPressureFather = 0;
+	float maxPressureChild = 0;
+
+	Vector2f minI(99,99), maxI(-99,-99);
+
+	vector<bool> toModifyWithBulge;
+	toModifyWithBulge.resize(groups[bgIdx]->vertexGroup.size(), false);
+
+	for(int k = 0; k < groups[bgIdx]->vertexGroup.size(); k++)
+	{
+		int idxPt = groups[bgIdx]->vertexGroup[k];
+		// Proyectar el punto y guardarme el desplazamiento
+
+		PointData* pd = &(b->pointData[idxPt]);
+		Vector3d dir = (pd->node->position-planeOrigin);
+
+		float a = dir.dot(nC);
+
+		DefNode* df = rig->defRig.defNodesRef[pd->segmentId];
+
+		/*
+		if(a > 0 && df->boneId == currentDGFatherIdx)
+		{
+			// Esta asignado al padre y está en terreno del hijo
+			displaced[k] = true;
+
+			Vector3d I = -(a)*nC+ pd->node->position;
+				
+			// proyeccion talcu
+			pd->node->position = I;
+				
+		}
+		*/
+			
+		if((df->boneId == currentDGIdx && !direction) || (direction && df->boneId == childDGIdx))
+		{
+			if(a < 0)
+			{
+				// Esta asignado al hijo y está en terreno del padre.
+				displaced[k] = true;
+				Vector3d I = -(a)*nC+ pd->node->position;
+				displacements[k] = pd->node->position - I;
+
+				// Pressure computation
+				float pressure = displacements[k].norm();
+				maxPressureChild = max(maxPressureChild, pressure);
+				acumPressureChild+= pressure;
+
+				// Loading pressure measuremments of this point over the plane
+				Vector2f pressPoint(nT.dot(I-planeOrigin), nB.dot(I-planeOrigin));
+				groups[bgIdx]->pressurePoints.push_back(pressPoint);
+				groups[bgIdx]->pressure.push_back(pressure);
+
+				minI[0] = min(minI[0], pressPoint[0]);
+				minI[1] = min(minI[1], pressPoint[1]);
+
+				maxI[0] = max(maxI[0], pressPoint[0]);
+				maxI[1] = max(maxI[1], pressPoint[1]);
+
+				// proyeccion talq
+				pd->node->position = I;
+
+				// Prueba... vamos a modificar todos... a ver
+				toModifyWithBulge[k] = true;
+			}
+			else
+				toModifyWithBulge[k] = true;
+		}
+		else displaced[k] = false;
+	}
+
+	// El origen y destino ya estan calculados.
+	groups[bgIdx]->defCurve->origin = curveOrigin;
+	groups[bgIdx]->defCurve->D = D;
+
+	assert(firstTri >= 0 && lastTri >= 0);
+
+	// Build curve
+	groups[bgIdx]->refPoints.clear();
+	groups[bgIdx]->refCoords.clear();
+	groups[bgIdx]->triangleSequence.clear();
+
+	getCurvePoints(curveOrigin, typeO, D, nBone.normalized(), v2.normalized(), triangleGroup, triVertMap, 
+		groups[bgIdx]->refPoints, groups[bgIdx]->refCoords,  groups[bgIdx]->triangleSequence, firstTri, lastTri);
+
+	groups[bgIdx]->minI = minI;
+	groups[bgIdx]->maxI = maxI;
+
+	// Compute curve height.
+	Vector3d Length = dgChild->getTranslation(false) - dg->getTranslation(false);
+	float ND =  (Length.norm()-maxPressureChild)/2;
+	float h = sqrt((maxPressureChild*maxPressureChild)/4 + ND*maxPressureChild);
+
+	Vector3d newOrigin = curveOrigin;
+	Vector3d newDir = (D-newOrigin).normalized();
+	Vector3d nCurve = -(nT.cross(newDir.normalized()));
+
+	groups[bgIdx]->defCurve->init(newDir, nCurve, groups[bgIdx]->refPoints, groups[bgIdx]->refCoords, maxPressureChild);
+
+	vector<float> arcLenghtPoses(groups[bgIdx]->refPoints.size());
+	vector<float> uParameter(groups[bgIdx]->refPoints.size());
+	float currentLength = 0;
+	for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
+	{
+		if(i > 0)
+		{
+			currentLength += (groups[bgIdx]->refPoints[i]-groups[bgIdx]->refPoints[i-1]).norm();
+		}
+
+		arcLenghtPoses[i] = currentLength;
+	}
+	for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
+	{
+		uParameter[i] = arcLenghtPoses[i]/currentLength;
+	}
+
+	float length = (D-newOrigin).norm(); 
+
+	groups[bgIdx]->defCurve->r = defaultDistanceForRadious;
+	groups[bgIdx]->defCurve->lenght = length*percent;
+	groups[bgIdx]->defCurve->high = length;
+	//groups[bgIdx]->w.clear();
+	//groups[bgIdx]->u.clear();
+
+	// Perform the actual deformation
+	for(int k = 0; k < toModifyWithBulge.size(); k++)
+	{
+		if(!toModifyWithBulge[k]) continue;
+
+		if(groups[bgIdx]->refPoints.size() <= 3) continue;
+
+		int idxPt = groups[bgIdx]->vertexGroup[k];
+		// Proyectar el punto y guardarme el desplazamiento
+
+		PointData* pd = &(b->pointData[idxPt]);
+		Vector3d dir = (pd->node->position-newOrigin);
+		float a = dir.dot(nC);
+
+		DefNode* df = rig->defRig.defNodesRef[pd->segmentId];
+
+		vector<float> distances;
+		distances.resize(groups[bgIdx]->refPoints.size());
+			
+		//Projection over rest curve
+		// First: linear search over the curve
+		float minDistance001 = 9999;
+		int minDistId = -1;
+		for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
+		{
+			int ptIdx0 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[0]->id;
+			int ptIdx1 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[1]->id;
+			int ptIdx2 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[2]->id; 
+
+			int tri = groups[bgIdx]->triangleSequence[i];
+
+			// WARNING: ONE A MATRIX
+			assert(ONLY_ONE_A_MATRIX);
+			// Usamos la primera matriz... deberiamos llevar un control de esto.
+			double d1 = b->BihDistances[0].get((int)pd->node->id,ptIdx0);
+			double d2 = b->BihDistances[0].get((int)pd->node->id,ptIdx1);
+			double d3 = b->BihDistances[0].get((int)pd->node->id,ptIdx2);
+
+			double dist = groups[bgIdx]->refCoords[i].x()*d1 + 
+							groups[bgIdx]->refCoords[i].y()*d2 + 
+							groups[bgIdx]->refCoords[i].z()*d3; 
+
+			distances[i] = dist;
+
+			if(minDistId < 0 || minDistance001 > dist)
+			{
+				minDistId = i;
+				minDistance001 = dist;
+			}
+		}
+
+		float newDist, newParam;
+		// Second: taking the pre and post points we refine the rearch to get a better result.
+		//dicotomicSearch((int)pd->node->id, minDistId, minDistance001, distances, uParameter, groups[bgIdx]->refPoints, triangleGroup, 
+		///				groups[bgIdx]->triangleSequence, b->BihDistances[0] , newDist, newParam );
+
+		refineParameter((int)pd->node->id, minDistId, minDistance001, distances, uParameter, groups[bgIdx]->refPoints, triangleGroup, 
+						groups[bgIdx]->triangleSequence, b->BihDistances[0] , newDist, newParam );
+
+		Vector3d proj = newDir.dot(pd->node->position - newOrigin)*newDir;
+		float val = newDir.dot(pd->node->position - newOrigin);
+		float u = val/length;
+
+		if(val < 0) u = 0;
+
+		//float u = uParameter[minDistId];
+		u = newParam;
+
+		//Weight depending on the distance
+		//float dist = (proj+newOrigin-pd->node->position).norm();
+		//float w = groups[bgIdx]->defCurve->implicitFunction(dist);
+		//float w = groups[bgIdx]->defCurve->implicitFunction(minDistance001);
+		float w = groups[bgIdx]->defCurve->implicitFunction(newDist);
+
+		groups[bgIdx]->w[k] = w;
+		groups[bgIdx]->u[k] = u;
+
+		Vector3d displ(0,0,0);
+		groups[bgIdx]->defCurve->getDisplacement(pd->node->position, u, w, displ);
+
+		pd->node->position += displ;
+
+	}
+
+	//printf("h: %f sobre %f, ND:%f.\n", h, Length.norm(), ND);
+	//printf("Max. Preasure: father->%f, child->%f.\n", maxPressureFather, maxPressureChild);
+	//printf("Preasure Child:%f Father:%f\n", acumPressureFather, acumPressureChild);
+}
+
 
 void BulgeDeformer::applyDeformation(Geometry* m, Geometry* mOrig, binding* b, AirRig* rig)
 {
 	// Solo tenemos dos pointers, current y el padre... quizás podría eliminarse este
 	// informacion repetida.
-
-	DefGroup *dg = NULL, *dgParent = NULL;
+	DefGroup *dg = NULL, *dgParent = NULL, *dgChild = NULL;
 	
-	// El primer grupo corresponde al padre.
-	int currentDGFatherIdx = groups[0]->childDeformerId;
-	if(currentDGFatherIdx >= 0)
-		dgParent = rig->defRig.defGroupsRef[currentDGFatherIdx];
-
-	if(!dgParent)
-	{
-		printf("Hay algun problema, no tenemos padre...y todavia no se procesar esto.\n"); fflush(0);
-		assert(false);
-	}
-	else
-	{
-		// Aqui procesariamos al padre, pero de momento lo saltamos
-		// debería cogerse una media de los hijos para la dirección de arrugas,
-		// dependiendo de cuales estén abiertos... no? Aunque no esta del todo
-		// claro.
-	}
-
-	// Al menos tiene un hijo
-	int currentDGIdx = groups[1]->deformerId;
-	dg = rig->defRig.defGroupsRef[currentDGIdx];
-	
-	// Tenemos que asegurar que el indice principal existe
-	if(currentDGIdx < 0 ) return;
-
 	// Solo calculamos hacia los hijos, y del hijo hacia el padre.
-	for(int bgIdx = 1; bgIdx < groups.size(); bgIdx++)
+	for(int bgIdx = 0; bgIdx < groups.size(); bgIdx++)
 	{
 		// Cogemos el hijo
-		int childDGIdx = groups[bgIdx]->childDeformerId;
-		DefGroup* dgChild = rig->defRig.defGroupsRef[childDGIdx];
-
-		if(dgChild == NULL) continue;
-
-		groups[bgIdx]->pressure.clear();
-		groups[bgIdx]->pressurePoints.clear();
-
-		// Obtenemos desplazamientos.
-		Vector3d v1 = dgParent->getTranslation(false) - dg->getTranslation(false);
-		Vector3d v2 = dgChild->getTranslation(false) - dg->getTranslation(false);
-
-		float childBoneLength = v2.norm();
-
-		v1.normalize();
-		v2.normalize();
-
-		// Esto controla si estan alineados -> en ese caso no aplica ningun efecto
-		if(fabs(fabs(v1.dot(v2))-1) < SMALL_NUM) return;
-
-		Vector3d v3 = dgChild->getTranslation(false) - dgParent->getTranslation(false);
-		Quaterniond q; q.setFromTwoVectors(v1,v2);
-		Vector3d bisectriz = q.slerp(0.5, Quaterniond::Identity())._transformVector(v1);
-		bisectriz.normalize();
-
-		// La IK debería haber colocado bien los joints... aqui partimos de que esta todo bien alineado.
-		// Obtenemos los planos centrados en dg
-		Vector3d nT = v1.cross(v2).normalized();
-		Vector3d nC = nT.cross(bisectriz).normalized();
-		Vector3d nB = nC.cross(nT).normalized();
-
-		Vector3d planeOrigin = dg->getTranslation(false);
-
-		// inicializacion para construir la curva antes de tocar nada.
-		vector<GraphNodePolygon*> triangleGroup;
-		vector<GraphNodePolygon*> origTriangleGroup;
-		vector< vector<int> > triVertMap;
-		triVertMap.resize(m->nodes.size());
-
-		for(int triIdx = 0; triIdx < m->triangles.size(); triIdx++)
-			for(int triVertIdx = 0; triVertIdx < 3; triVertIdx++)
-				triVertMap[m->triangles[triIdx]->verts[triVertIdx]->id].push_back(triIdx);
-
-		vector< bool > triPushed;
-		triPushed.resize(m->triangles.size(), false);
-
-		for(int vertIdx = 0; vertIdx < groups[bgIdx]->vertexGroup.size(); vertIdx++)
+		if(groups[bgIdx]->direction) // father
 		{
-			for(int vertTriIdx = 0; vertTriIdx < triVertMap[groups[bgIdx]->vertexGroup[vertIdx]].size(); vertTriIdx++)
+			if(groups.size() > bgIdx+1)
 			{
-				int idx = triVertMap[groups[bgIdx]->vertexGroup[vertIdx]][vertTriIdx];
-				if(!triPushed[idx])
-				{
-					triangleGroup.push_back(m->triangles[idx]);
-					origTriangleGroup.push_back(mOrig->triangles[idx]);
-					triPushed[idx] = true;
-				}
+				int childDGIdx = groups[bgIdx+1]->childDeformerId;
+				dgParent = rig->defRig.defGroupsRef[childDGIdx];
+				dgChild = rig->defRig.defGroupsRef[groups[bgIdx]->deformerId];
+				dg = rig->defRig.defGroupsRef[groups[bgIdx]->childDeformerId];
 			}
+			else continue;
+		}
+		else // Child groups
+		{
+			// El primer grupo corresponde al padre.
+			dgParent = rig->defRig.defGroupsRef[groups[0]->deformerId];
+			dgChild = rig->defRig.defGroupsRef[groups[bgIdx]->childDeformerId];
+			dg = rig->defRig.defGroupsRef[groups[bgIdx]->deformerId];
 		}
 
-		int firstTri = -1, lastTri = -1;
+		if(dgChild == NULL || dgParent == NULL || dg == NULL ) continue;
 
-		// Get first curve Point
-		Vector3d curveOrigin(0,0,0);
-		Vector3d D(0,0,0);
-		int typeO = INT_NO_INT;
-
-		// Obtenemos el rayo bisectriz con el esqueleto en reposo.
-		Vector3d planeOriginOriginalModel = dg->getRestTranslation(false);
-		Vector3d bisectriz2 = dg->getRotation(false).inverse()._transformVector(bisectriz);
-		Vector3d bisectrizOriginalModel = dg->getRestRotation(false)._transformVector(bisectriz2);
-		Vector3d coordsProjectionOriginalModel;
-
-		// Obtenemos la interseccion del rayo con el modelo en reposo.
-		firstTri = getRayProjectionCoords(planeOriginOriginalModel, bisectrizOriginalModel, mOrig, origTriangleGroup, coordsProjectionOriginalModel, typeO);
-		 
-		//Vector3d otherCurveOrigin;
-		//int firstTri002;
-		//firstTri002 = getRayProjection(planeOrigin, bisectriz, m, triangleGroup, otherCurveOrigin, typeO);
-
-		// Calculo del punto deformado, segun las coordenadas.
-		Vector3d pt0 = triangleGroup[firstTri]->verts[0]->position;
-		Vector3d pt1 = triangleGroup[firstTri]->verts[1]->position;
-		Vector3d pt2 = triangleGroup[firstTri]->verts[2]->position; 
-		curveOrigin = pt0*coordsProjectionOriginalModel.x()+
-					  pt1*coordsProjectionOriginalModel.y()+
-					  pt2*coordsProjectionOriginalModel.z();
-
-		// TODEBUG:  QUIZAS SERÍA NECESARIO CALCULAR TAMBIÉN EL DESTINO DE LA MISMA MANERA.
-
-		// Get final curve Point
-		float percent = 1;
-		int typeD = INT_NO_INT;
-		Vector3d endBone = dg->getTranslation(false) + (dgChild->getTranslation(false) - dg->getTranslation(false))*percent;
-		Vector3d nBone = -(nT.cross(v2));
-		lastTri = getRayProjection(endBone, nBone, m, triangleGroup, D, typeD);
-
-		// Procedemos al corte... hay algunos saltos... hay que ver de que va...
-		// Proyectar los puntos que toca
-		vector<Vector3d> displacements(groups[bgIdx]->vertexGroup.size());
-		vector<bool> displaced(groups[bgIdx]->vertexGroup.size());
-		float acumPressureChild = 0;
-		float acumPressureFather = 0;
-
-		float maxPressureFather = 0;
-		float maxPressureChild = 0;
-
-		Vector2f minI(99,99), maxI(-99,-99);
-
-		vector<bool> toModifyWithBulge;
-		toModifyWithBulge.resize(groups[bgIdx]->vertexGroup.size(), false);
-
-		for(int k = 0; k < groups[bgIdx]->vertexGroup.size(); k++)
-		{
-			int idxPt = groups[bgIdx]->vertexGroup[k];
-			// Proyectar el punto y guardarme el desplazamiento
-
-			PointData* pd = &(b->pointData[idxPt]);
-			Vector3d dir = (pd->node->position-planeOrigin);
-
-			float a = dir.dot(nC);
-
-			DefNode* df = rig->defRig.defNodesRef[pd->segmentId];
-
-			if(a > 0 && df->boneId == currentDGFatherIdx)
-			{
-				// Esta asignado al padre y está en terreno del hijo
-				displaced[k] = true;
-
-				Vector3d I = -(a)*nC+ pd->node->position;
-				
-				// De momento solo proyectamos, por eso esta comentado todo esto
-				/*
-					displacements[k] = pd->node->position - I;
-					float pressure = displacements[k].norm();
-					maxPressureFather = max(maxPressureFather, pressure);
-					acumPressureFather+= pressure;
-				*/
-				
-				// proyeccion talcu
-				pd->node->position = I;
-				
-			}
-			
-			if(df->boneId == currentDGIdx)
-			{
-				if(a < 0)
-				{
-					// Esta asignado al hijo y está en terreno del padre.
-					displaced[k] = true;
-					Vector3d I = -(a)*nC+ pd->node->position;
-					displacements[k] = pd->node->position - I;
-
-					// Pressure computation
-					float pressure = displacements[k].norm();
-					maxPressureChild = max(maxPressureChild, pressure);
-					acumPressureChild+= pressure;
-
-					// Loading pressure measuremments of this point over the plane
-					Vector2f pressPoint(nT.dot(I-planeOrigin), nB.dot(I-planeOrigin));
-					groups[bgIdx]->pressurePoints.push_back(pressPoint);
-					groups[bgIdx]->pressure.push_back(pressure);
-
-					minI[0] = min(minI[0], pressPoint[0]);
-					minI[1] = min(minI[1], pressPoint[1]);
-
-					maxI[0] = max(maxI[0], pressPoint[0]);
-					maxI[1] = max(maxI[1], pressPoint[1]);
-
-					// proyeccion talq
-					pd->node->position = I;
-
-					// Prueba... vamos a modificar todos... a ver
-					toModifyWithBulge[k] = true;
-				}
-				else
-					toModifyWithBulge[k] = true;
-			}
-			else displaced[k] = false;
-		}
-
-		// El origen y destino ya estan calculados.
-		groups[bgIdx]->defCurve->origin = curveOrigin;
-		groups[bgIdx]->defCurve->D = D;
-
-		assert(firstTri >= 0 && lastTri >= 0);
-
-		// Build curve
-		groups[bgIdx]->refPoints.clear();
-		groups[bgIdx]->refCoords.clear();
-		groups[bgIdx]->triangleSequence.clear();
-
-		getCurvePoints(curveOrigin, typeO, D, nBone.normalized(), v2.normalized(), triangleGroup, triVertMap, 
-			groups[bgIdx]->refPoints, groups[bgIdx]->refCoords,  groups[bgIdx]->triangleSequence, firstTri, lastTri);
-
-		groups[bgIdx]->minI = minI;
-		groups[bgIdx]->maxI = maxI;
-
-		// Compute curve height.
-		Vector3d Length = dgChild->getTranslation(false) - dg->getTranslation(false);
-		float ND =  (Length.norm()-maxPressureChild)/2;
-		float h = sqrt((maxPressureChild*maxPressureChild)/4 + ND*maxPressureChild);
-
-		//groups[bgIdx]->defCurve->W.clear();
-		//groups[bgIdx]->defCurve->W.addPoint(0.0, 0.0);
-		//groups[bgIdx]->defCurve->W.addPoint(0.25, maxPressureChild/Length.norm()*1.5);
-		//groups[bgIdx]->defCurve->W.addPoint(1.0, 0.0);
-
-		//groups[bgIdx]->defCurve->R.clear();
-		//groups[bgIdx]->defCurve->R.addPoint(0.0, 0.0);
-		//groups[bgIdx]->defCurve->R.addPoint(0.5, 0.0);
-		//groups[bgIdx]->defCurve->R.addPoint(1.0, 0.0);
-
-		// TO CHANGE -> new curve parametrization
-		Vector3d newOrigin = curveOrigin;
-		Vector3d newDir = (D-newOrigin).normalized();
-
-		Vector3d nCurve = -(nT.cross(newDir.normalized()));
-
-		groups[bgIdx]->defCurve->init(newDir, nCurve, groups[bgIdx]->refPoints, groups[bgIdx]->refCoords, maxPressureChild);
-
-		vector<float> arcLenghtPoses(groups[bgIdx]->refPoints.size());
-		vector<float> uParameter(groups[bgIdx]->refPoints.size());
-		float currentLength = 0;
-		for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
-		{
-			if(i > 0)
-			{
-				currentLength += (groups[bgIdx]->refPoints[i]-groups[bgIdx]->refPoints[i-1]).norm();
-			}
-
-			arcLenghtPoses[i] = currentLength;
-		}
-		for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
-		{
-			uParameter[i] = arcLenghtPoses[i]/currentLength;
-		}
-
-		float length = (D-newOrigin).norm(); 
-
-		groups[bgIdx]->defCurve->r = 1;
-		groups[bgIdx]->defCurve->lenght = length*percent;
-		groups[bgIdx]->defCurve->high = length;
-		//groups[bgIdx]->w.clear();
-		//groups[bgIdx]->u.clear();
-
-		// Perform the actual deformation
-		for(int k = 0; k < toModifyWithBulge.size(); k++)
-		{
-			if(!toModifyWithBulge[k]) continue;
-
-			if(groups[bgIdx]->refPoints.size() <= 3) continue;
-
-			int idxPt = groups[bgIdx]->vertexGroup[k];
-			// Proyectar el punto y guardarme el desplazamiento
-
-			PointData* pd = &(b->pointData[idxPt]);
-			Vector3d dir = (pd->node->position-newOrigin);
-			float a = dir.dot(nC);
-
-			DefNode* df = rig->defRig.defNodesRef[pd->segmentId];
-
-			vector<float> distances;
-			distances.resize(groups[bgIdx]->refPoints.size());
-			
-			//Projection over rest curve
-			// First: linear search over the curve
-			float minDistance001 = 9999;
-			int minDistId = -1;
-			for(int i = 0; i< groups[bgIdx]->refPoints.size(); i++)
-			{
-				int ptIdx0 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[0]->id;
-				int ptIdx1 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[1]->id;
-				int ptIdx2 = triangleGroup[groups[bgIdx]->triangleSequence[i]]->verts[2]->id; 
-
-				int tri = groups[bgIdx]->triangleSequence[i];
-
-				// WARNING: ONE A MATRIX
-				assert(ONLY_ONE_A_MATRIX);
-				// Usamos la primera matriz... deberiamos llevar un control de esto.
-				double d1 = b->BihDistances[0].get((int)pd->node->id,ptIdx0);
-				double d2 = b->BihDistances[0].get((int)pd->node->id,ptIdx1);
-				double d3 = b->BihDistances[0].get((int)pd->node->id,ptIdx2);
-
-				double dist = groups[bgIdx]->refCoords[i].x()*d1 + 
-							  groups[bgIdx]->refCoords[i].y()*d2 + 
-							  groups[bgIdx]->refCoords[i].z()*d3; 
-
-				distances[i] = dist;
-
-				if(minDistId < 0 || minDistance001 > dist)
-				{
-					minDistId = i;
-					minDistance001 = dist;
-				}
-			}
-
-			float newDist, newParam;
-			// Second: taking the pre and post points we refine the rearch to get a better result.
-			//dicotomicSearch((int)pd->node->id, minDistId, minDistance001, distances, uParameter, groups[bgIdx]->refPoints, triangleGroup, 
-			///				groups[bgIdx]->triangleSequence, b->BihDistances[0] , newDist, newParam );
-
-			refineParameter((int)pd->node->id, minDistId, minDistance001, distances, uParameter, groups[bgIdx]->refPoints, triangleGroup, 
-							groups[bgIdx]->triangleSequence, b->BihDistances[0] , newDist, newParam );
-
-			Vector3d proj = newDir.dot(pd->node->position - newOrigin)*newDir;
-			float val = newDir.dot(pd->node->position - newOrigin);
-			float u = val/length;
-
-			if(val < 0) u = 0;
-
-			//float u = uParameter[minDistId];
-			u = newParam;
-
-			//Weight depending on the distance
-			//float dist = (proj+newOrigin-pd->node->position).norm();
-			//float w = groups[bgIdx]->defCurve->implicitFunction(dist);
-			//float w = groups[bgIdx]->defCurve->implicitFunction(minDistance001);
-			float w = groups[bgIdx]->defCurve->implicitFunction(newDist);
-
-			groups[bgIdx]->w[k] = w;
-			groups[bgIdx]->u[k] = u;
-
-			Vector3d displ(0,0,0);
-			groups[bgIdx]->defCurve->getDisplacement(pd->node->position, u, w, displ);
-
-			pd->node->position += displ;
-
-		}
-
-		//printf("h: %f sobre %f, ND:%f.\n", h, Length.norm(), ND);
-		//printf("Max. Preasure: father->%f, child->%f.\n", maxPressureFather, maxPressureChild);
-		//printf("Preasure Child:%f Father:%f\n", acumPressureFather, acumPressureChild);
+		applyDeformationInGroup( m,  mOrig,  b,  rig, dgParent, dg, dgChild, bgIdx, groups[bgIdx]->direction);
 	}
 }
