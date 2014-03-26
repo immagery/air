@@ -1,6 +1,62 @@
 #ifndef CUDA_MVC_H
 #define CUDA_MVC_H
 
+#include "cudaDefinitions.cuh"
+
+#include "lock.cuh"
+
+#define M_PI 3.14159265
+#define tresh1 0.000001
+#define tresh2 0.00001
+#define tresh3 0.0001
+
+PRECISION cudaSign(PRECISION v);
+__device__ PRECISION cSign(PRECISION v);
+
+__device__ PRECISION cDet(PRECISION3 u1, PRECISION3 u2, PRECISION3 u3);
+__device__ PRECISION norm(PRECISION3& pt1);
+
+__device__ PRECISION3 divide_Pt_f(PRECISION3& pt1, PRECISION val);
+__device__ void divide_on_Pt_f(PRECISION3& pt1, PRECISION val);
+
+__device__ PRECISION sq_norm(PRECISION3& pt1);
+
+__global__ void unitVectorsComputation( int nv,
+										PRECISION3 point,
+										cudaTextureObject_t nodePos,
+										//PRECISION3* nodePos,   	
+										PRECISION3* unitVectors,  
+										PRECISION* normas,
+										PRECISION* weights,
+										int* lockVertexes);
+
+__global__ void coordsComputation( int nt, 
+								   PRECISION3 point,
+								   cudaTextureObject_t triangles,
+								   cudaTextureObject_t unitVectors,
+								   cudaTextureObject_t normas,
+								   int* lockVertexes,
+								   PRECISION* weights);
+
+__global__ void sumWeightsRedux(int* lock,
+								PRECISION* tempWeights, 
+								int ntri, 
+								PRECISION* cudaSum);
+
+__global__ void sumWeightsParcial(int* lockVertexes,
+								  PRECISION* tempWeights, 
+								  int ntri, 
+								  int npts, 
+								  cudaTextureObject_t triangleIdx, 
+								  PRECISION* weights);
+
+__global__ void normalizeWeights(PRECISION* weights, PRECISION* sum, int nv);
+
+
+/*
+#define PRECISION double
+#define PRECISION3 double3
+
 #include <vector_types.h>
 
 /*
@@ -118,25 +174,62 @@ public:
 
 */
 
+	/*
 class cudaModel
 {
 public:
-	double3* nodes;
-	int3* triangles;
-	float** coords;
 
-	unsigned int nv;
-	unsigned int nt;
+	int id;
 
-	unsigned int getMemorySize()
+	PRECISION3* hostPositions;
+	int3* hostTriangles;
+	double* hostBHDistances;
+
+	PRECISION3* cudaPositions;
+	int3* cudaTriangles;
+	double* cudaBHDistances;
+
+	unsigned int npts;
+	unsigned int ntri;
+
+	// Temporal data for MVC
+	PRECISION* cudaNormas;
+	PRECISION3* cudaUnitVectors;
+
+	PRECISION* resWeights;
+	PRECISION* cudaWeights;
+
+	PRECISION* cudaCoords;
+	PRECISION* tempResults;
+
+	static int getMemorySize()
 	{
-		unsigned int sum = nv*nv/2;
-		
-		return nv*sizeof(double3) + 
-			   nt*sizeof(int3) + 
-			   sum*sizeof(float) + 
-			   sizeof(unsigned int)*2;
+		// All the data are pointers or ints
+		int size = sizeof(PRECISION3*)*3 + sizeof(PRECISION*)*5 + sizeof(unsigned int)*2 +
+				   sizeof(int3*)*2 + sizeof(double*)*2 ;
+		return size;
 	}
+
+	cudaModel(int _id)
+	{
+		cudaPositions = NULL;
+		cudaTriangles = NULL;
+		cudaNormas = NULL;
+		cudaUnitVectors = NULL;
+		cudaCoords = NULL;
+		cudaWeights = NULL;
+		cudaBHDistances = NULL;
+
+		hostPositions = NULL;
+		hostTriangles = NULL;
+		hostBHDistances = NULL;
+		tempResults = NULL;
+
+		ntri = npts = 0; 
+
+		id = _id;
+	}
+
 };
 
 class cudaManager
@@ -145,55 +238,37 @@ public:
 
 	cudaManager()
 	{
-		nodePositions = NULL;
-		cudaTriangles = NULL;
-
-		cudaNormas = NULL;
-		cudaUnitVectors = NULL;
-		cudaCoords = NULL;
-		tempResults = NULL;
-
-		cudaWeights = NULL;
-
-
-		ntri = npts = 0; 
-
 		loaded = false;
+		models = NULL;
+		modelsLoaded = 0;
 	}
 
-	// Model
-	double3* nodePositions;
-	int3* cudaTriangles;
-
-	int npts;
-	int ntri;
-
-	// Temporal data
-	double* cudaNormas;
-	double3* cudaUnitVectors;
-
-	double* resWeights;
-	double* cudaWeights;
-
-	double* cudaCoords;
-	double* tempResults;
+	cudaModel* models;
+	int modelsLoaded;
 
 	bool loaded;
 	int blocksPerGrid;
 
 	// Allocate and load data
-	void loadModel(cudaModel& modelo);
-
-	void freeModel();
+	void loadModels(cudaModel* in_models, int modelsCount, bool collectData);
+	void freeModels(bool collectData = true);
 
 	// Compute coords
-	void cudaMVC(double3& point, 
-			 double* weights, 
-			 cudaModel& modelo);
+	void cudaMVC(PRECISION3& point, 
+				 PRECISION* weights,
+				 int modelId,
+				 int pointId,
+				 bool collectData = true);
+
+	double Precompute_Distances_CUDA(double* weights,
+									 int indSize,
+									 int* indirection, 
+									 double threshold);
+
 };
 
-void mvcAllBindings(double3 point, double* weights, cudaModel* modelo);
+void mvcAllBindings(PRECISION3 point, PRECISION* weights, cudaModel* modelo);
 
 int mainCuda();
-
+*/
 #endif

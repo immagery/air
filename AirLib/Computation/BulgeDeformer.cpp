@@ -721,7 +721,7 @@ int getRayProjection(Vector3d planeOrigin,Vector3d bisectriz, Geometry* m, vecto
 	return -1;
 }
 
-void refineParameter(int vertId, int minDistId, float minDistance001, vector<float>& distances, vector<float>& uParameter, vector<Vector3d>& refPoints, vector<GraphNodePolygon*>& triangleGroup, vector<int>& triangleSequence, symMatrix& BihDistances, float& newDist, float& newUParam)
+void refineParameter(int vertId, int minDistId, float minDistance001, vector<float>& distances, vector<float>& uParameter, vector<Vector3d>& refPoints, vector<GraphNodePolygon*>& triangleGroup, vector<int>& triangleSequence, symMatrixLight& BihDistances, float& newDist, float& newUParam)
 {
 	int idxIni, idxFin, idxCenter;
 	int triIni, triFinal;
@@ -992,7 +992,7 @@ void refineParameter(int vertId, int minDistId, float minDistance001, vector<flo
 }
 
 
-void dicotomicSearch(int vertId, int minDistId, float minDistance001, vector<float>& distances, vector<float>& uParameter, vector<Vector3d>& refPoints, vector<GraphNodePolygon*>& triangleGroup, vector<int>& triangleSequence, symMatrix& BihDistances, float& newDist, float& newUParam)
+void dicotomicSearch(int vertId, int minDistId, float minDistance001, vector<float>& distances, vector<float>& uParameter, vector<Vector3d>& refPoints, vector<GraphNodePolygon*>& triangleGroup, vector<int>& triangleSequence, symMatrixLight& BihDistances, float& newDist, float& newUParam)
 {
 	Vector3d pt0 , pt1, pt2;
 
@@ -1469,7 +1469,7 @@ void BulgeDeformer::applyDeformation(Geometry* m, Geometry* mOrig, binding* b, A
 	DefGroup *dg = NULL, *dgParent = NULL, *dgChild = NULL;
 	
 	// Solo calculamos hacia los hijos, y del hijo hacia el padre.
-	for(int bgIdx = 0; bgIdx < groups.size(); bgIdx++)
+	for(int bgIdx = 1; bgIdx < groups.size(); bgIdx++)
 	{
 		// Cogemos el hijo
 		if(groups[bgIdx]->direction) // father

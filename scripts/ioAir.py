@@ -306,3 +306,56 @@ def exportOFFMesh( mesh = None, filename = "" ):
 	print " " * 5 + "FIN EXPORTACION";
 	print "-" * 30;
 
+
+def exportSnakeDefinition( count, filename = "" ):
+	print "-" * 30;
+	print " " * 5 + "EXPORTACION DE LOCATORS POSICIONANDO LAS SERPIENTES";
+	print "-" * 30;
+
+	rootJoints = cmds.ls(sl=True, type='locator');	
+		
+	if rootJoints == None:
+		raise RuntimeError, 'Selecciona los locators.';		
+		
+	if filename == "":
+		raise RuntimeError, 'No filename for store Locator positions';		
+		
+	output = open(filename, 'w');
+
+	output.write("%d\n" % len(rootJoints/3));
+	
+	conuter = 0
+	while counter < count
+		baseName = ""
+		endName = ""
+		dirName = ""
+		
+		if count < 10 :
+			baseName = "serp0" + count + "_base"
+			endName = "serp0" + count + "_morro"
+			dirName = "serp0" + count + "_mandibula"
+		else :
+			baseName = "serp" + count + "_base"
+			endName = "serp" + count + "_morro"
+			dirName = "serp" + count + "_mandibula"
+			
+		for loc in rootJoints:
+			if loc == baseName:
+				worldPos = cmds.xform( loc, query = True, worldSpace = True,  translation = True);
+				output.write("%s %f %f %f\n" % (loc, worldPos[0], worldPos[1], worldPos[2]));
+		
+		for loc in rootJoints:
+			if loc == endName:
+				worldPos = cmds.xform( loc, query = True, worldSpace = True,  translation = True);
+				output.write("%s %f %f %f\n" % (loc, worldPos[0], worldPos[1], worldPos[2]));
+
+		for loc in rootJoints:
+			if loc == dirName:
+				worldPos = cmds.xform( loc, query = True, worldSpace = True,  translation = True);
+				output.write("%s %f %f %f\n" % (loc, worldPos[0], worldPos[1], worldPos[2]));
+				
+	output.close();
+
+	print "-" * 30;
+	print " " * 5 + "FIN EXPORTACION";
+	print "-" * 30;	

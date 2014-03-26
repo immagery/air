@@ -14,7 +14,7 @@ using Eigen::Vector3d;
 #include "DataStructures/Modelo.h"
 #include "DataStructures/SurfaceData.h"
 
-int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrix& dists, bool withPatches)
+int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixLight& dists, bool withPatches)
 {
 	
 	printf("Computing Biharmonic distances.\n"); fflush(0);

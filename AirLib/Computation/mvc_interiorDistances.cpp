@@ -14,10 +14,9 @@ using namespace Eigen;
 
 void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 {
-	
-    const double tresh1 = 0.0001;
-    const double tresh2 = 0.001;
-    const double tresh3 = 0.0001;
+    const float tresh1 = 0.000001;
+    const float tresh2 = 0.00001;
+    const float tresh3 = 0.0001;
 
 	// We use all the model
     int nopts = modelo.vn();
@@ -30,83 +29,115 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 	weights.clear();
     weights.resize(nopts,0.0); // incializamos el resultado
 
-    vector< Vector3d> unitVectors;
-    vector<double> normas;
-    unitVectors.resize(nopts);
-    normas.resize(nopts);
+    //vector< Vector3d> unitVectors;
+    //vector<double> normas;
+    //unitVectors.resize(nopts);
+    //normas.resize(nopts);
 
-    //MyMesh::VertexIterator vertIt;
-    //for(vertIt = modelo.vert.begin(); vertIt!=modelo.vert.end(); ++vertIt )
+    vector< Vector3f> unitVectors2;
+    vector<float> normas2;
+	unitVectors2.resize(nopts);
+    normas2.resize(nopts);
+
 	for(int vertIt = 0; vertIt < modelo.nodes.size(); vertIt++ )
 	{
 		//Vector3d dirVec = vertIt->P() - point;
-		Vector3d dirVec = point - modelo.nodes[vertIt]->position;
-        double norm = dirVec.norm();
+		float dirX = modelo.nodes[vertIt]->position.x() - point.x();
+		float dirY = modelo.nodes[vertIt]->position.y() - point.y();
+		float dirZ = modelo.nodes[vertIt]->position.z() - point.z();
+		//Vector3d dirVec = modelo.nodes[vertIt]->position - point;
+        float norm2 = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+		//double norm = dirVec.norm();
 		int idVert = modelo.nodes[vertIt]->id;
 
         assert(idVert >= 0 && idVert < nopts); // Comprobaci—n de los valors de IMark
 		
-        if(norm < tresh1)
+		
+        //normas[idVert] = norm;
+		normas2[idVert] = norm2/1000.0;
+
+        if(norm2 < tresh1)
         {
             // El punto est‡ muy cerca de este vŽrtice, devolvemos los valores en V tal cual.
 			weights[idVert] = 1.0;
+			//unitVectors[idVert] = Vector3d(0,0,0);
+			unitVectors2[idVert] = Vector3f(0,0,0);
             return; // Ya no tenemos que calcular nada m‡s para este punto.
         }
-            
-        unitVectors[idVert] = dirVec/norm;
-        normas[idVert] = norm;
+		else
+		{
+			//unitVectors[idVert] = dirVec/norm;
+
+			unitVectors2[idVert].x() = dirX/norm2;
+			unitVectors2[idVert].y() = dirY/norm2;
+			unitVectors2[idVert].z() = dirZ/norm2;
+		}
     }
+
+	/*
+	FILE* fout;
+	fout = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\tempData\\CPUoutUnitNorms.txt", "w");
+
+	fprintf(fout, "%d points... with point: [%f %f %f]\n", modelo.nodes.size(), point.x(), point.y(), point.z()); fflush(fout);
+	for(int idxPts = 0; idxPts < modelo.nodes.size(); idxPts++)
+	{
+		fprintf(fout, "%d: [%f, %f, %f]", modelo.nodes[idxPts]->id,
+			modelo.nodes[idxPts]->position.x(), modelo.nodes[idxPts]->position.y(),modelo.nodes[idxPts]->position.z());
+			
+		fprintf(fout, " -> [%5.10f, %5.10f, %5.10f], [%5.10f]\n", 
+			unitVectors2[idxPts].x(), unitVectors2[idxPts].y(), unitVectors2[idxPts].z(), normas2[idxPts]); fflush(fout);
+	}
+
+	fclose(fout);
+	*/
 
     //for(int i = 0; i < 10; i++) 
 	//	printf(" CPU - v.x: %f, v.y: %f, v.z: %f, n:%f\n", unitVectors[i].x(),unitVectors[i].y(), unitVectors[i].z(), normas[i]);
 
-    double totalW = 0;
+    float totalW = 0;
 
-    //MyMesh::FaceIterator fj;
-    //for(fj = modelo.face.begin(); fj!=modelo.face.end(); ++fj )
 	for(int fj = 0; fj < modelo.triangles.size(); fj++ )
 	{
-         Vector3d O, c, s;
+         Vector3d O, c, s, l;
          Vector3i idVerts;
-        //for(int i = 0; i<3; i++) // Obtenemos los indices de los vertices de t
-			//idVerts[i] = fj->V(i)->IMark();
-			//idVerts[2-i] = fj->V(i)->IMark();
 
 		idVerts[0] = modelo.triangles[fj]->verts[0]->id;
-		idVerts[1] = modelo.triangles[fj]->verts[2]->id;
-		idVerts[2] = modelo.triangles[fj]->verts[1]->id;
+		idVerts[1] = modelo.triangles[fj]->verts[1]->id;
+		idVerts[2] = modelo.triangles[fj]->verts[2]->id;
+
 
         for(int i = 0; i<3; i++)
         {
-            double l = (unitVectors[idVerts[(i+1)%3]]- unitVectors[idVerts[(i+2)%3]]).norm();
-            O[i] = 2*asin(l/2);
+            l[i] = (double)(unitVectors2[idVerts[(i+1)%3]]- unitVectors2[idVerts[(i+2)%3]]).norm();
+            O[i] = 2*asin(l[i]/2);
         }
 
         double h = (O[0]+O[1]+O[2])/2;
 
-         Vector3d w; double w_sum = 0; // espacio para coordenadas y la suma
+        Vector3f w; float w_sum = 0; // espacio para coordenadas y la suma
 
         if(M_PI - h < tresh2) // x esta sobre el triangulo t, usar coords bar 2D.
         {
             for(int i = 0; i<3; i++){  // Calculamos los valores de las coordenadas y la suma
-                w[i] = sin(O[i])*normas[idVerts[(i+1)%3]]*normas[idVerts[(i+2)%3]];
+                w[i] = sin(O[i])*l[(i+2)%3]*l[(i+1)%3];
                 w_sum += w[i];
             }
 
 			for(int i = 0; i<3; i++)
 			{  // Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
-				weights[idVerts[i]] = w[i]/w_sum;
+				weights[idVerts[i]] = (w[i]/w_sum);
 			}
 
             return; // Acabamos
         }
 
-		double determ = det(unitVectors[idVerts[0]], unitVectors[idVerts[1]], unitVectors[idVerts[2]]);
-
+		
+		float determ = det(unitVectors2[idVerts[0]], unitVectors2[idVerts[1]], unitVectors2[idVerts[2]]);
+		
         bool okValues = true;
         for(int i = 0; i<3 && okValues; i++)
         {
-            c[i] = 2*sin(h)*sin(h-O[i])/(sin(O[(i+1)%3])*sin(O[(i+2)%3]))-1;
+            c[i] = 2*sin(h)*sin(h-O[i])/(sin(O[(i+1)%3])*sin(O[(i+2)%3]))-1.0;
             s[i] = sign(determ)*sqrt(1-c[i]*c[i]);
 
             okValues &= (fabs(s[i]) > tresh3);
@@ -115,35 +146,50 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
         if(!okValues)
             continue;
 
-        w[0] = (O[0]- c[1]*O[2] - c[2]*O[1])/(normas[idVerts[0]]*sin(O[1])*s[2]);
-        w[1] = (O[1]- c[0]*O[2] - c[2]*O[0])/(normas[idVerts[1]]*sin(O[2])*s[0]);
-        w[2] = (O[2]- c[1]*O[0] - c[0]*O[1])/(normas[idVerts[2]]*sin(O[0])*s[1]);
+		for(int i = 0; i< 3; i++)
+		{
+			int id1 = (i+1)%3; 
+			int id2 = (i+2)%3;
 
-        //if(fj < 30) printf(" CPU - w[0]: %f, w[1]: %f, w[2]: %f\n", w[0], w[1], w[2]);
-
-		for(int i = 0; i<3; i++)
-		{  
-			// Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
-			weights[idVerts[i]] += w[i];		
-			totalW +=w[i];
+			weights[idVerts[i]] += (float)((O[i]- c[id1]*O[id2] - c[id2]*O[id1])/
+								  ((double)normas2[idVerts[i]]*sin(O[id1])*s[id2]));
 		}
+		
+		//w[0] = (O[0]- c[1]*O[2] - c[2]*O[1])/(normas[idVerts[0]]*sin(O[1])*s[2]);
+        //w[1] = (O[1]- c[0]*O[2] - c[2]*O[0])/(normas[idVerts[1]]*sin(O[2])*s[0]);
+        //w[2] = (O[2]- c[1]*O[0] - c[0]*O[1])/(normas[idVerts[2]]*sin(O[0])*s[1]);
+
+        //if(fj < 30) printf(" CPU - w[0]: %f, w[1]: %f, w[2]: %f\n", w[0], w[1], w[2]);		
     }
 
+	/*
+	fout = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\tempData\\CPU_weights_sin_sumar.txt", "w");
+
+	fprintf(fout, "%d points...with point: [%f %f %f]\n", modelo.nodes.size(), point.x(), point.y(), point.z()); fflush(fout);
+	for(int idxPts = 0; idxPts < weights.size(); idxPts++)
+	{
+		fprintf(fout, "%d:-> [%5.10f]\n", modelo.nodes[idxPts]->id,	weights[idxPts]);
+	}
+
+	fclose(fout);
+	*/
+
+	// Suma pesos
 	double sum2 = 0;
 	for(int i = 0; i< weights.size(); i++)
     {
 		sum2 += weights[i];
 	}
 
+	//printf("CPU sumaPesos : %5.10f\n", sum2);
 
-	//printf(" sum - CPU - : %f\n", sum2);
 
+	// Normalizacion
 	for(int i = 0; i< weights.size(); i++)
 	{
-		double auxWeight = weights[i];
 		weights[i] = weights[i]/sum2;
 	}
-
+	
 }
 
 // Computes mvc for each binding.

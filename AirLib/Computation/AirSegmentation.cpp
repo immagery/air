@@ -8,6 +8,8 @@
 
 #include <DataStructures/Scene.h>
 
+#include <cuda/cudaMgr.cuh>
+
 // Esta función debería actualizar los datos y relanzar los cálculos necesarios.
 bool AirRig::updateDefGroups()
 {
@@ -140,7 +142,7 @@ void doubleArrangeElements_wS_fast(vector<double>& weights, vector<int>& ordered
 	}
 }
 
-double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& indirection, symMatrix& BihDistances, double threshold)
+double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& indirection, symMatrixLight& BihDistances, double threshold)
 {
 	int size = BihDistances.size;
 	double res = 0;
@@ -167,10 +169,8 @@ double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& 
 	return res;
 }
 
-
 void updateAirSkinning(DefGraph& graph, Modelo& model)
 {
-
 	clock_t ini = clock();
 	binding* bd = model.bind;
 
@@ -184,6 +184,7 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 			mvcAllBindings(graph.deformers[defId]->pos, 
 						   graph.deformers[defId]->MVCWeights,
 						   model);
+			
 			
 			// TOREMOVE: it's only for select adaptative threshold
 			graph.deformers[defId]->cuttingThreshold = 1;
@@ -203,6 +204,121 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 			graph.deformers[defId]->segmentationDirtyFlag = true;
 		}
 	}
+
+	// By now we are reducing the process to just one binding.
+
+	// Updating Segmentation
+	segmentModelFromDeformers(model, model.bind, graph);
+
+	// Update Smooth propagation
+	propagateHierarchicalSkinning(model, model.bind, graph);
+
+	// Compute Secondary weights ... by now compute all the sec. weights
+	computeSecondaryWeights(model, model.bind, graph);
+
+	clock_t fin = clock();
+	printf("Calculo de pesos total: %f ms\n", timelapse(fin,ini)*1000); fflush(0);
+	
+}
+
+
+// Temp. debería estar unificado... porque hay código repetido.
+void getCompactRepresentationSegm(cudaModel& model, Modelo& m)
+{
+	// Load constants
+	model.npts = m.nodes.size();
+	model.ntri = m.triangles.size();
+
+	model.hostPositions = (PRECISION*) malloc(model.npts*sizeof(PRECISION)*3);
+	model.hostTriangles = (int*) malloc(model.ntri*sizeof(int)*3);
+
+	// Copiamos los vertices
+	for(int i = 0; i< m.nodes.size(); i++)
+	{
+		model.hostPositions[i*3+0] = m.nodes[i]->position.x();
+		model.hostPositions[i*3+1] = m.nodes[i]->position.y();
+		model.hostPositions[i*3+2] = m.nodes[i]->position.z();
+	}
+
+	// Copiamos los triangulos
+	for(int i = 0; i< m.triangles.size(); i++)
+	{
+		model.hostTriangles[i*3+0] = m.triangles[i]->verts[0]->id;
+		model.hostTriangles[i*3+1] = m.triangles[i]->verts[1]->id;
+		model.hostTriangles[i*3+2] = m.triangles[i]->verts[2]->id;
+	}
+
+
+	// Copiamos la matriz de distancias.
+	model.hostBHDistances = (float*) malloc((model.npts*model.npts+model.npts)/2*sizeof(float));
+	int count = 0; 
+	for(int i = 0; i< m.bind->BihDistances[0].size; i++)
+	{
+		for(int j = 0; j<= i; j++)
+		{
+			model.hostBHDistances[count] = m.bind->BihDistances[0].get(i,j);
+			count++;
+		}
+	}
+
+}
+
+void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
+{
+	// Test with MVC
+	//---------------
+	// Inicio init CUDA
+	//----------------
+
+	Modelo* m = &model; 
+	vector<cudaModel> models(1);
+
+	getCompactRepresentationSegm(models[0], *m);
+
+	cudaManager cudaMgr;
+	cudaMgr.loadModels(models.data(), 1);
+
+	//---------------
+	// Fin init CUDA
+	//----------------
+
+	clock_t ini = clock();
+	binding* bd = model.bind;
+
+	// Updating deformer's info
+	for(unsigned int defId = 0; defId< graph.deformers.size(); defId++)
+    {
+		// Only the dirty deformers
+		if(graph.deformers[defId]->dirtyFlag)
+		{
+			// Mean value coordinates computation.
+			PRECISION3 point;
+			point.x = graph.deformers[defId]->pos.x();
+			point.y = graph.deformers[defId]->pos.y();
+			point.z = graph.deformers[defId]->pos.z();
+			//cudaMgr.cudaMVC(point, graph.deformers[defId]->MVCWeights.data(), 0, 0);
+			
+			// TOREMOVE: it's only for select adaptative threshold
+			graph.deformers[defId]->cuttingThreshold = 1;
+
+			// TOOPTIMIZE: Weights sort, now with bubble approach
+			doubleArrangeElements_wS_fast(graph.deformers[defId]->MVCWeights, 
+										  graph.deformers[defId]->weightsSort, 
+										  graph.deformers[defId]->cuttingThreshold);
+
+			//TODEBUG: BihDistances as a matrix
+			// By now just one embedding
+			graph.deformers[defId]->precomputedDistances = PrecomputeDistancesSingular_sorted(graph.deformers[defId]->MVCWeights, 
+																							  graph.deformers[defId]->weightsSort, 
+																							  bd->BihDistances[0], 
+																							  graph.deformers[defId]->cuttingThreshold);
+			graph.deformers[defId]->dirtyFlag = false;
+			graph.deformers[defId]->segmentationDirtyFlag = true;
+		}
+	}
+
+	// Test with MVC
+	cudaMgr.freeModels();
 
 	// By now we are reducing the process to just one binding.
 

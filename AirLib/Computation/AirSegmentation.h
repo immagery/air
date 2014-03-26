@@ -38,7 +38,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches= false);
 
 void doubleArrangeElements_wS_fast(vector<double>& weights, vector<int>& orderedIndirection, double& threshold);
 
-double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& indirection, symMatrix& BihDistances, double threshold);
+double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& indirection, symMatrixLight& BihDistances, double threshold);
 
 void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, int nodeId);
 
