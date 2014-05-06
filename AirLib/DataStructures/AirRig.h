@@ -506,6 +506,10 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 int subdivideStick(Vector3d origen, Vector3d fin, int defGroupIdx, int childDefGroupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio);
 
+// Propose a division in deformers from a given stick
+int subdivideStick_FPMethod(Vector3d origen, Vector3d fin, int defGroupIdx, int childDefGroupIdx,
+							vector< DefNode >& nodePoints, float subdivisionRatio);
+
 // Takes all the groups and constraints and
 // build a relation tree for weights computation
 void BuildGroupTree(DefGraph& graph);

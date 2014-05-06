@@ -19,6 +19,8 @@
 
 const int threadsPerBlock = 256;
 
+const int threadsPerOnlyOneBlock = 1024;
+
 #define PRECISION float
 #define PRECISION3 float3
 

@@ -8,6 +8,6 @@ typedef unsigned long long uint64;
 
 cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time);
 
-int doSorting();
+int doSorting(int number);
 
 #endif

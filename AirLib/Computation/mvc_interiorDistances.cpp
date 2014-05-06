@@ -192,6 +192,127 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 	
 }
 
+#define W_FACTOR 1
+
+// PRE:
+// 1. weights is sized properly and initilized to zero
+void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo)
+{
+    const float tresh1 = 0.000001;
+    const float tresh2 = 0.00001;
+    const float tresh3 = 0.0001;
+
+	// We use all the model
+    int nopts = modelo.vn();
+    if(nopts == 0)
+    {
+        printf("ERROR!: El modelo no está bien inicializado!\n");
+        return;
+    }   
+
+	// temporal data.
+    vector< Vector3f> unitVectors2(nopts);
+    vector<float> normas2(nopts);
+
+	for(int vertIt = 0; vertIt < modelo.nodes.size(); vertIt++ )
+	{
+		float dirX = modelo.nodes[vertIt]->position.x() - point.x();
+		float dirY = modelo.nodes[vertIt]->position.y() - point.y();
+		float dirZ = modelo.nodes[vertIt]->position.z() - point.z();
+
+        float norm2 = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+		int idVert = modelo.nodes[vertIt]->id;
+
+        assert(idVert >= 0 && idVert < nopts);
+		
+		normas2[idVert] = norm2/1000.0;
+
+        if(norm2 < tresh1)
+        {
+			weights.col(id)[idVert] = 1.0 * W_FACTOR;
+			unitVectors2[idVert] = Vector3f(0,0,0);
+            return;
+        }
+		else
+		{
+			unitVectors2[idVert].x() = dirX/norm2;
+			unitVectors2[idVert].y() = dirY/norm2;
+			unitVectors2[idVert].z() = dirZ/norm2;
+		}
+    }
+
+    float totalW = 0;
+	for(int fj = 0; fj < modelo.triangles.size(); fj++ )
+	{
+         Vector3d O, c, s, l;
+         Vector3i idVerts;
+
+		idVerts[0] = modelo.triangles[fj]->verts[0]->id;
+		idVerts[1] = modelo.triangles[fj]->verts[1]->id;
+		idVerts[2] = modelo.triangles[fj]->verts[2]->id;
+
+
+        for(int i = 0; i<3; i++)
+        {
+            l[i] = (double)(unitVectors2[idVerts[(i+1)%3]]- unitVectors2[idVerts[(i+2)%3]]).norm();
+            O[i] = 2*asin(l[i]/2);
+        }
+
+        double h = (O[0]+O[1]+O[2])/2;
+
+        Vector3f w; float w_sum = 0; // espacio para coordenadas y la suma
+
+        if(M_PI - h < tresh2) // x esta sobre el triangulo t, usar coords bar 2D.
+        {
+            for(int i = 0; i<3; i++){  // Calculamos los valores de las coordenadas y la suma
+                w[i] = sin(O[i])*l[(i+2)%3]*l[(i+1)%3];
+                w_sum += w[i];
+            }
+
+			w_sum /= W_FACTOR;
+
+			for(int i = 0; i<3; i++)
+			{  // Guardamos la coordenada ponderada por la suma: hay que preservar la particion de unidad.
+				weights.col(id)[idVerts[i]] = (w[i]/w_sum);
+			}
+
+            return; // Acabamos
+        }
+
+		
+		float determ = det(unitVectors2[idVerts[0]], unitVectors2[idVerts[1]], unitVectors2[idVerts[2]]);
+		
+        bool okValues = true;
+        for(int i = 0; i<3 && okValues; i++)
+        {
+            c[i] = 2*sin(h)*sin(h-O[i])/(sin(O[(i+1)%3])*sin(O[(i+2)%3]))-1.0;
+            s[i] = sign(determ)*sqrt(1-c[i]*c[i]);
+
+            okValues &= (fabs(s[i]) > tresh3);
+        }
+
+        if(!okValues)
+            continue;
+
+		for(int i = 0; i< 3; i++)
+		{
+			int id1 = (i+1)%3; 
+			int id2 = (i+2)%3;
+
+			weights.col(id)[idVerts[i]] +=  (float)((O[i]- c[id1]*O[id2] - c[id2]*O[id1])/
+											((double)normas2[idVerts[i]]*sin(O[id1])*s[id2])) * W_FACTOR;
+		}	
+    }
+
+	// Suma de pesos y normalización
+	double sum2 = weights.col(id).sum();
+	double reduced_factor = sum2/W_FACTOR;
+	weights.col(id) /= reduced_factor;
+	
+}
+
+
+
 // Computes mvc for each binding.
 void mvcSingleBinding( Vector3d& point, vector<double>& weights, binding* bd, Modelo& modelo)
 {

@@ -10,6 +10,8 @@
 
 #include <cuda/cudaMgr.cuh>
 
+#include <algorithm>
+
 // Esta función debería actualizar los datos y relanzar los cálculos necesarios.
 bool AirRig::updateDefGroups()
 {
@@ -60,6 +62,60 @@ void insertInThisPos(vector<double>& valuesOrdered, vector<int>& weightsIndirect
 		value = tempValue;
 		element = tempIndirection;
 	}
+}
+
+int getSignificantWeights(vector<ordWeight>& weights,  VectorXf& cuttedWeights, VectorXi& cuttedIndexes)
+{
+	ordIdx orderByIdx;
+    ordWeight orderByWeight;
+
+	//1. Ordenar el mapa de pesos.
+	std::sort(weights.begin(), weights.end(), orderByWeight);
+
+	//2. Buscar punto de corte.
+	float negSum = 0;
+	float posSum = 0;
+	int thresholdCount = 0;
+	vector<ordWeight>::iterator thIt;
+	for(thIt = weights.end(); thIt != weights.begin();)
+	{
+		thIt--;
+		float w = thIt->weight;
+		if(w < 0)
+		{
+			negSum += w;
+			thresholdCount++;
+		}
+		else
+		{
+			posSum += w;
+			thresholdCount++;
+			if(posSum > -negSum) break;
+		}
+	}
+
+	if(weights.begin() == thIt)
+	{
+		// Deberiamos cortar todo... es un poco animal
+	}
+	else
+	{
+		//3. Ordenar el mapa de pesos.
+		std::sort(weights.begin(), thIt, orderByIdx);
+	}
+
+	// 5. Construccion de los vectores resultado
+	int newSize = weights.size() - thresholdCount;
+	cuttedWeights.resize(newSize);
+	cuttedIndexes.resize(newSize);
+	vector<ordWeight>::iterator it = weights.begin();
+	for(int i = 0; i< newSize; i++, it++)
+	{
+		cuttedWeights[i] = it->weight;
+		cuttedIndexes[i] = it->idx;
+	}
+	
+	return newSize;
 }
 
 void doubleArrangeElements_wS_fast(vector<double>& weights, vector<int>& orderedIndirection, double& threshold)
@@ -165,7 +221,6 @@ double PrecomputeDistancesSingular_sorted(vector<double>& weights, vector<int>& 
 
 		res += sum*weights[indirection[j]];
 	}
-
 	return res;
 }
 
@@ -174,50 +229,96 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 	clock_t ini = clock();
 	binding* bd = model.bind;
 
+	long long mvcTime = 0;
+	long long arrangementTime = 0;
+	long long precompTime = 0;
+
+	int defCount = 0;
+
+	FILE* fout = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\modelo001.txt", "w");
+
 	// Updating deformer's info
 	for(unsigned int defId = 0; defId< graph.deformers.size(); defId++)
     {
 		// Only the dirty deformers
 		if(graph.deformers[defId]->dirtyFlag)
 		{
+			clock_t ini1 = clock();
 			// Mean value coordinates computation.
 			mvcAllBindings(graph.deformers[defId]->pos, 
 						   graph.deformers[defId]->MVCWeights,
 						   model);
-			
+			clock_t fin1 = clock();
+
+			mvcTime += fin1-ini1;
 			
 			// TOREMOVE: it's only for select adaptative threshold
 			graph.deformers[defId]->cuttingThreshold = 1;
 
-			// TOOPTIMIZE: Weights sort, now with bubble approach
+			clock_t ini2 = clock();
+			// TO_OPTIMIZE: Weights sort, now with bubble approach
 			doubleArrangeElements_wS_fast(graph.deformers[defId]->MVCWeights, 
 										  graph.deformers[defId]->weightsSort, 
 										  graph.deformers[defId]->cuttingThreshold);
+			
+			clock_t fin2 = clock();
+			arrangementTime += fin2-ini2;
 
 			//TODEBUG: BihDistances as a matrix
 			// By now just one embedding
+			clock_t ini3 = clock();
 			graph.deformers[defId]->precomputedDistances = PrecomputeDistancesSingular_sorted(graph.deformers[defId]->MVCWeights, 
 																							  graph.deformers[defId]->weightsSort, 
 																							  bd->BihDistances[0], 
 																							  graph.deformers[defId]->cuttingThreshold);
+
+			clock_t fin3 = clock();
+			precompTime += fin3-ini3;
+
 			graph.deformers[defId]->dirtyFlag = false;
 			graph.deformers[defId]->segmentationDirtyFlag = true;
+
+			defCount++;
+
+			fprintf(fout, "[%d] -> %f\n", defId, graph.deformers[defId]->precomputedDistances);
 		}
 	}
+
+	fclose(fout);
+	
+	printf("Media en MVC: %f\n", (double)mvcTime/CLOCKS_PER_SEC/defCount);
+	printf("Media en sorting: %f\n", (double)arrangementTime/CLOCKS_PER_SEC/defCount);
+	printf("Media en precomputing: %f\n", (double)precompTime/CLOCKS_PER_SEC/defCount);
 
 	// By now we are reducing the process to just one binding.
 
 	// Updating Segmentation
+	clock_t ini4 = clock();
 	segmentModelFromDeformers(model, model.bind, graph);
+	clock_t fin4 = clock();
+
+	FILE* fout3 = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\segmentations\\model_segmentation.txt", "w");
+	for(int j = 0; j< model.bind->pointData.size(); j++)
+	{
+		fprintf(fout3, "%d %d\n", j, model.bind->pointData[j].segmentId);
+	}
+	fclose(fout3);
 
 	// Update Smooth propagation
-	propagateHierarchicalSkinning(model, model.bind, graph);
+	clock_t ini5 = clock();
+	propagateHierarchicalSkinningOpt(model, model.bind, graph);
+	clock_t fin5 = clock();
 
+	clock_t ini6 = clock();
 	// Compute Secondary weights ... by now compute all the sec. weights
 	computeSecondaryWeights(model, model.bind, graph);
-
+	clock_t fin6 = clock();
 	clock_t fin = clock();
-	printf("Calculo de pesos total: %f ms\n", timelapse(fin,ini)*1000); fflush(0);
+
+	printf("\n\nA. Segmentar modelo: %f\n", timelapse(ini4,fin4));
+	printf("B. Propagar pesos: %f\n", timelapse(ini5,fin5));
+	printf("C. Calculo de pesos secundarios: %f\n", timelapse(ini6,fin6));
+	printf("D. Calculo de pesos total: %f ms\n\n\n", timelapse(ini,fin)); fflush(0);
 	
 }
 
@@ -271,6 +372,7 @@ void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
 	//----------------
 
 	Modelo* m = &model; 
+	
 	vector<cudaModel> models(1);
 
 	getCompactRepresentationSegm(models[0], *m);
@@ -336,6 +438,25 @@ void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
 	
 }
 
+void createTraductionTableOpt(DefGroup* group, vector<int>& traductionTable, int idNode, bool onlyRoot)
+{
+	// Los nodos correspondientes al hueso jt
+	for(unsigned int i = 0; i< group->deformers.size(); i++)
+    {
+		int node = group->deformers[i].nodeId % CROP_NODE_ID;
+        traductionTable[node] = idNode;
+    }
+
+	// Si solo queremos anadir la base nos quedamos aqui.
+	if(onlyRoot) return;
+
+    // Descendemos por la jerarquía marcando los nodos de los huesos hijos.
+    for(unsigned int jtChild = 0; jtChild < group->relatedGroups.size(); jtChild++)
+    {
+		createTraductionTableOpt(group->relatedGroups[jtChild], traductionTable, idNode);
+    }
+}
+
 void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int idNode, bool onlyRoot)
 {
 	    // Los nodos correspondientes al hueso jt
@@ -353,6 +474,76 @@ void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int 
     {
 		createTraductionTable(group->relatedGroups[jtChild], traductionTable, idNode);
     }
+}
+
+void initSurfaceWeightsSmoothingOpt(Modelo& m, 
+									binding* bd, 
+									int nodeId, 
+									vector<float>& weights,
+									vector<float>& weightsAux,
+									vector<unsigned int>& indicesToCompute,
+									int& lastIndex)
+{
+	lastIndex = 0;
+	int precindibleElems = 0;
+
+	int length = bd->pointData.size();
+	// recorrer todo el modelo e inicializar los datos para la transmision
+	//int numThreads = omp_get_max_threads();
+	//int range = (length/numThreads)+1;
+
+	int idx = 0;
+	//#pragma omp parallel shared(bd, weightsAux, weights, range) private(idx)
+	{
+		//#pragma omp for schedule(dynamic,1)
+		for(idx = 0; idx < length; idx++ )
+		{	
+			PointData& pd = bd->pointData[idx];
+			pd.node->visited = false;
+			if(pd.ownerLabel != nodeId)
+			{
+				weightsAux[idx] = weights[idx] = 0.0;
+			}
+			else
+			{
+				weightsAux[idx] = weights[idx] = 1.0;
+			}
+		}
+	}
+
+	//#pragma omp parallel shared(bd, weightsAux, weights, range) private(idx)
+	{
+		// Seleccionamos para procesar solo lo necesario.
+		//#pragma omp for schedule(dynamic,1) nowait
+		for(idx = 0; idx < length; idx++ )
+		{
+			float value = weights[idx]; 
+			PointData& pd = bd->pointData[idx];
+
+			bool difValues = false;
+			for(int n = 0; n< pd.node->connections.size() && !difValues; n++)
+			{
+				int neighId = pd.node->connections[n]->id;
+				difValues |= (value != weights[neighId]);
+			}
+
+			if(difValues)
+			{
+				
+				pd.node->visited = true;
+				//#pragma omp critical
+				{
+				indicesToCompute[lastIndex] = idx;
+				lastIndex++;
+				}
+			}
+		}
+	}
+
+	//printf("[initSurfaceWeightsSmoothingOpt] \
+			Hay %d elementos prescindibles de %d elemems, y podemos reorganizar este trozo \n", 
+	//		precindibleElems, 
+	//		lastIndex);
 }
 
 void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, int nodeId)
@@ -411,6 +602,54 @@ void SmoothFromSegment(Modelo& m, binding* bd, DefGroup* group, int frontId)
 	//weightsNoSmooting(m, bd, front, frontId);
 }
 
+/* [ SmoothFromSegmentOpt ] (no header)
+
+DESCRIPTION:
+	Expands the weights of a branch of the skeleton, this is a part of the hierarchical
+	smoothing of weights after a proper segmentation.
+
+PARAMS:
+	m: model
+	bd: binding for this model
+	group: deformation group to expand
+	frontId: the node id of the root of this branch of the skeleton
+	weightsT1: temporal data structure for compute smooth weights eficiently.
+	weightsT2: temporal data structure for compute smooth weights eficiently.
+	indicesToCompute: temporal data structure for compute smooth weights eficiently.
+*/
+void SmoothFromSegmentOpt(Modelo& m, binding* bd, DefGroup* group, int frontId, 
+						  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute)
+{
+	int lastIndex = 0;
+
+    // Init model for weights smoothing
+	//if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n");fflush(0);
+	//clock_t ini00 = clock();
+    initSurfaceWeightsSmoothingOpt(m, bd, frontId, weightsT1, weightsT2, indicesToCompute, lastIndex);
+	//clock_t fin00 = clock();
+
+    // Smoothing (sin corte jerárquico)
+	//if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
+
+	// get the global or local smoothing value
+	int smoothingPasses = group->smoothingPasses;
+	float realSmooth = group->smoothPropagationRatio;
+
+	//clock_t ini02 = clock();
+    weightsSmoothing_opt(m, bd, realSmooth, 
+						frontId, smoothingPasses, weightsT1, 
+						weightsT2, indicesToCompute, lastIndex);
+	//weightsNoSmooting(m, bd, front, frontId);
+
+	//clock_t fin02 = clock();
+
+	//printf("Valores de tiempo: preinit->%f  computo->%f\n", 
+	//		((double)fin00-ini00)/CLOCKS_PER_SEC, 
+	//		((double)fin02-ini02)/CLOCKS_PER_SEC); 
+	//fflush(0);
+
+}
+
 float computeWeightProportional(float partDistance,
                                 float baseDistance,
                                 bool invert,
@@ -437,6 +676,142 @@ float computeWeightProportional(float partDistance,
     return weight;
 }
 
+void initData(Modelo& m, binding* bd,
+                      vector< int >& front,
+                      float smoothPropagationRatio,
+                      int idFront,
+					  int smoothingPasses,
+					  vector<float>& weightsT1,
+					  vector<float>& weightsT2,
+					  vector<bool>& visited,
+					  vector< vector<int> >& neighbours,
+					  vector<unsigned int>& indicesToCompute,
+					  int& lastIndex)
+{
+
+	int numOfPoints = bd->pointData.size();	
+
+	// Temporal data to process
+	lastIndex = 0;
+
+	vector<float>* ptWT1 = &weightsT2;
+	vector<float>* ptWT2 = &weightsT1;
+
+	// Inicializamos los pesos necesarios.
+	for(unsigned int ptIdx = 0; ptIdx < numOfPoints; ptIdx++)
+    {
+		PointData& pd = bd->pointData[ptIdx];
+		visited[ptIdx] = true;
+		neighbours[ptIdx].resize(pd.node->connections.size());
+
+		for(int ni = 0; ni < neighbours[ptIdx].size(); ni++)
+			neighbours[ptIdx][ni] = pd.node->connections[ni]->id;
+
+		if(pd.node->visited)
+		{
+			indicesToCompute[lastIndex] = ptIdx;
+			(*ptWT2)[ptIdx] = pd.ownerWeight;
+
+			for(int n = 0; n< pd.node->connections.size(); n++)
+			{
+				if(!pd.node->connections[n]->visited)
+				{
+					pd.node->connections[n]->visited = true;
+					lastIndex++;
+				}
+			}
+		}
+	}
+}
+
+
+// Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
+void weightsSmoothing_opt(Modelo& m, binding* bd,
+						  float smoothPropagationRatio,
+						  int idFront,
+						  int smoothingPasses,
+						  vector<float>& ptWT1_ini,
+						  vector<float>& ptWT2_ini,
+						  vector<unsigned int>& indicesToCompute,
+						  int& lastIndex)
+
+{
+    int iter = 0;
+	int distance = 1;
+
+	//FixedValue only for test... seems that there is no effects while the value is enough big.
+	// I think that this is because it scales all the values, maybe I can use the biggest one
+	// for preserving the precision. I can do it at the beginning with the biggest edge length.
+	// By now, only for test i will use a big value;
+
+	vector<float>* ptWT1 = &ptWT1_ini;
+	vector<float>* ptWT2 = &ptWT2_ini;
+
+	smoothPropagationRatio = 100;
+	
+	int threads = omp_get_max_threads();
+
+	while(iter < smoothingPasses)
+    {		
+		int tempLastIndex = lastIndex;
+
+		int numElemems = (tempLastIndex/threads);
+		#pragma omp for schedule(static, numElemems)
+		for(int ptIdx = 0; ptIdx < tempLastIndex; ptIdx++)
+        {
+			int ownIdx = indicesToCompute[ptIdx];
+			PointData& pd = bd->pointData[ownIdx];
+			float value = 0;
+
+			// Get the sum of values
+			int cn = pd.node->connections.size();
+			// Para cada elemento del frente realizamos la expansión.
+			for(unsigned int neighboursIdx = 0; neighboursIdx < cn; neighboursIdx++)
+			{
+				int neighbourId = pd.node->connections[neighboursIdx]->id;
+				value += (*ptWT1)[neighbourId];
+
+				if(!pd.node->connections[neighboursIdx]->visited)
+				{
+					pd.node->connections[neighboursIdx]->visited = true;
+					#pragma omp critical
+					{
+						indicesToCompute[lastIndex] = neighbourId;
+						lastIndex++;
+					}
+				}
+			}
+
+			// Do the mean
+			if(cn > 0) value /= cn;
+
+			(*ptWT2)[ownIdx] = value;
+        }
+
+		// Change of array to compute weights
+		vector<float>* tempVectPtr = ptWT1;
+		ptWT1 = ptWT2;
+		ptWT2 = tempVectPtr;
+        iter++;
+    }
+
+	int numElemems2 = (bd->pointData.size()/threads);
+	#pragma omp for schedule(static, numElemems2)
+	for(int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
+    {
+		PointData& pd = bd->pointData[ptIdx];
+
+		if((*ptWT1)[ptIdx] > 0)
+		{
+			int i = findWeight(pd.auxInfluences, idFront);
+			if(i < 0)
+				pd.auxInfluences.push_back(weight(idFront, (*ptWT1)[ptIdx]));
+			else
+				pd.auxInfluences[i] = weight(idFront, (*ptWT1)[ptIdx]);
+		}
+	}
+}
+
 // Propaga el peso a lo largo de la superficie, teniendo en cuenta una segmentación.
 void weightsSmoothing(Modelo& m, binding* bd,
                       vector< int >& front,
@@ -454,7 +829,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 
 	smoothPropagationRatio = 100;
 
-	double weightsSum = 0;
+	float weightsSum = 0;
 	float weightsCount = 0;
     if(VERBOSE)printf("Front size: %d\n", front.size());
 	int frontSize = 0;
@@ -548,7 +923,7 @@ void weightsSmoothing(Modelo& m, binding* bd,
 					weightsSum = weightsSum / weightsCount;
 				else
 				{
-					printf("Como puede ser que no haya ningun peso?.\n");
+					printf("[weightsSmoothing] Como puede ser que no haya ningun peso?.\n");
 					weightsSum = 0;
 				}
 				pd.tempOwnerWeight = weightsSum;
@@ -600,6 +975,83 @@ void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductio
 			fflush(0);
         }
     }
+}
+
+void traducePartialSegmentationOpt(Modelo& m, binding* bd, vector<int>& traductionTable)
+{
+    // Recorrer cada vertice de la maya con un iterador y clasificar los vertices.
+	for(int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
+	{
+        // Assegurar que los indices guardados en los vertices de la maya estan bien.
+        assert(VertIdx >= 0 && VertIdx < m.vn());
+        PointData& pd = bd->pointData[VertIdx];
+
+        if(pd.segmentId>=0)
+        {
+			int nodeId = pd.segmentId % CROP_NODE_ID;
+            pd.ownerLabel = traductionTable[nodeId];
+        }
+    }
+}
+
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group, int& times, 
+									  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute)
+{
+	times++;
+	// The process goes down from every root joint and triggers a family fight for the influence.  
+	//clock_t begin, end;
+
+	if (group.relatedGroups.size() == 0) return;
+
+	// 1. Domain initzialization for this process step
+	//if(VERBOSE)printf("1. Domain initzialization: ");fflush(0);
+
+	initDomainOpt(model, bd, group.nodeId);
+
+	// 2. Establish every joint influence region
+	//if(VERBOSE)printf("2. Volume segmentation");
+	map<int, int> traductionTable;
+	vector<int> segmentationIds;
+
+	for(unsigned int id = 0; id < graph.deformers.size(); id++)
+		traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
+
+	// Adding the father to the fight
+	//createTraductionTable(&group, traductionTable, group.nodeId, true);
+	//segmentationIds.push_back(group.nodeId);
+
+	// Adding the childs to the fight
+	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
+	{
+		// Preparamos la traduccion para el grid.
+		createTraductionTable(group.relatedGroups[i], traductionTable, group.relatedGroups[i]->nodeId);
+        segmentationIds.push_back(group.relatedGroups[i]->nodeId);
+	}
+
+	// 2.b. Add also the father for fighting (TODEBUG IN TEST-TIME)
+	createTraductionTable(&group, traductionTable, group.nodeId, true);
+
+	// 2.c. We translate all the cells according to its node influencer.
+	//if(VERBOSE)printf("2.c Translation\n");fflush(0);
+	traducePartialSegmentation(model, bd, traductionTable);
+	traductionTable.clear();
+
+	for(unsigned int i = 0; i< segmentationIds.size(); i++)
+	{
+		//SmoothFromSegment(model, bd, graph.defGroupsRef[segmentationIds[i]], segmentationIds[i]);
+		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], segmentationIds[i], weightsT1, weightsT2, indicesToCompute);
+	}
+
+	// 5. Normalización de pesos basados en el dominio
+	// Se basa en los vectores auxInfluences.
+	//if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
+    normalizeWeightsByDomain(bd);
+
+	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
+	{
+		//propagateHierarchicalSkinning(model,  bd, graph, *group.relatedGroups[i]);
+		propagateHierarchicalSkinningOpt(model,  bd, graph, *group.relatedGroups[i], times, weightsT1, weightsT2, indicesToCompute);
+	}
 }
 
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group)
@@ -731,6 +1183,56 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
     }
 }
 
+void initDomainOpt(Modelo& m, binding* bd, int domainId_init)
+{
+    // Assegurar que los indices guardados en los vertices de la maya estan bien.
+	int length = bd->pointData.size();
+	//int numThreads = omp_get_max_threads();
+	//int range = (length/numThreads)+1;
+
+	int VertIdx = 0;
+	//#pragma omp parallel shared(bd, domainId_init) private(VertIdx)
+	{
+		//#pragma omp for schedule(static,range) nowait
+		for(VertIdx = 0; VertIdx < length; VertIdx++ )
+		{
+			PointData& pd = bd->pointData[VertIdx];
+
+			// These are the temporary data structures for this iteration.
+			pd.auxInfluences.clear();
+			pd.ownerLabel = -1;
+
+			// We set the domain parameters for this iteration
+			if(domainId_init < 0)
+			{
+				// This is the base case, there is no domain restriction.
+				pd.domain = 1;
+				pd.domainId = domainId_init;
+			}
+			else
+			{
+				int idx = findWeight(pd.influences, domainId_init);
+				if(idx >= 0)
+				{
+					// In this case there is influence over this cell from domainId node.
+					pd.domain = pd.influences[idx].weightValue;
+					pd.domainId = domainId_init;
+				}
+				else
+				{
+					// In this case there is NO influence over this cell from domainId node
+					// and it is not battled by the childs
+					pd.domain = 0;
+					pd.domainId = domainId_init;
+				}
+			}
+
+			//pd.itPass = 0;
+			//pd.auxInfluences.clear();
+		}
+	}
+}
+
 bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 {
 	binding* bds = model.bind;
@@ -804,6 +1306,122 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 	return true;
 }
 
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph)
+{
+	//clock_t ini00 = clock();
+	clearOlderComputations(model);
+
+	// 1. Establecemos el dominio
+	//if(VERBOSE) printf("1. Domain initzialization\n");fflush(0);
+
+	initDomainOpt(model, model.bind, FIRST_ITERATION);
+
+	// 2. Segmentamos para todos los esqueletos en la escena
+	//if(VERBOSE)printf("2. Volume segmentation\n");fflush(0);
+
+	int idsSize = graph.deformers.size();
+
+	vector<int> segmentationIds;
+	map<int, int> traductionTable;
+	//vector<int> traductionTable(idsSize);
+	//printf("Def Size:%d y %d nodos usados\n", graph.deformers.size(), scene::defNodeIds);
+	
+	for(unsigned int id = 0; id < idsSize; id++)
+	{
+		int tempId = graph.deformers[id]->nodeId;//%CROP_NODE_ID;
+		traductionTable[tempId] = graph.deformers[id]->boneId;
+	}
+
+	//map<int, int> traductionTable;
+	//for(unsigned int id = 0; id < graph.deformers.size(); id++)
+	//	traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
+
+	for(unsigned int i = 0; i< graph.roots.size(); i++)
+	{
+		// Preparamos la traduccion para el grid.
+		createTraductionTable(graph.roots[i], traductionTable, graph.roots[i]->nodeId);
+        segmentationIds.push_back(graph.roots[i]->nodeId);
+	}
+	//clock_t fin03 = clock();
+
+	//clock_t ini04 = clock();
+	traducePartialSegmentation(model, bd, traductionTable);
+    traductionTable.clear();
+	//clock_t fin04 = clock();
+
+	// 3. Smooth entre hijos cortando según el dominio
+	//if(VERBOSE){printf("3. Segments smoothing\n");fflush(0);}
+
+	vector<float> weightsT1;
+	vector<float> weightsT2;
+	vector<unsigned int> indicesToCompute;
+	
+	int numOfPoints = model.vn();
+
+	// Inicialización de datos.
+	weightsT1.resize(numOfPoints,0);
+	weightsT2.resize(numOfPoints,0);
+	indicesToCompute.resize(numOfPoints, -1);
+
+	//clock_t ini05 = clock();
+	for(unsigned int i = 0; i< segmentationIds.size(); i++)
+	{
+		//printf("Segmentation %d of %d\n", i, segmentationIds.size());
+		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], 
+							segmentationIds[i], weightsT1, weightsT2, indicesToCompute);
+	}
+	//clock_t fin05 = clock();
+
+	// 5. Normalización de pesos basados en el dominio
+	// Se basa en los vectores auxInfluences.
+	/*
+	if(VERBOSE)
+	{
+		printf("5. Weights Normalization By Domain\n");
+		fflush(0);
+	}
+	*/
+
+	//clock_t ini06 = clock();
+    normalizeWeightsByDomain(bd);
+	//clock_t fin06 = clock();
+
+	/*
+	if(VERBOSE)
+	{
+		printf("6. Clean zero influences\n");
+		fflush(0);
+	}
+	*/
+
+	//clock_t ini07 = clock();
+	cleanZeroInfluences(bd);
+	//clock_t fin07 = clock();
+
+	int times = 1;
+
+	//clock_t ini08 = clock();
+	for(unsigned int i = 0; i< graph.roots.size(); i++)
+	{
+        propagateHierarchicalSkinningOpt( model,  bd, graph, *graph.roots[i], times, weightsT1, weightsT2, indicesToCompute);
+	}
+	//clock_t fin08 = clock();
+
+	weightsT1.clear();
+	weightsT2.clear();
+	indicesToCompute.clear();
+
+	//printf("\n\n\nA. Tiempos de propagate hierarchicaly\n");
+	//printf("B. Calculo de inicializacion %f\n", ((double)(fin03-ini00))/CLOCKS_PER_SEC);
+	//printf("C. Traduce segmentation %f\n", ((double)(fin04-ini04))/CLOCKS_PER_SEC);
+	//printf("D. Smooth from segment %f\n", ((double)(fin05-ini05))/CLOCKS_PER_SEC);
+	//printf("E. normalize by domain %f\n", ((double)(fin06-ini06))/CLOCKS_PER_SEC);
+	//printf("F. clean zero influences %f\n", ((double)(fin07-ini07))/CLOCKS_PER_SEC);
+	//printf("G. propagateHierarchicalSkinning %f\n", ((double)(fin08-ini08))/CLOCKS_PER_SEC);
+	//printf("H. Veces: %d, en media: %f\n\n\n", times, ((double)(fin08-ini08))/CLOCKS_PER_SEC/times);
+
+}
+
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
 {
 	clearOlderComputations(model);
@@ -850,8 +1468,89 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
 	{
         propagateHierarchicalSkinning( model,  bd, graph, *graph.roots[i]);
 	}
+}
 
- 
+// TODEBUG: ensure the process of disconect deformers from the process.
+void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, MatrixXf& subDistances)
+{
+    // m, bb->intPoints, bb->embeddedPoints
+	vector< DefNode* >& deformers = graph.deformers;
+	map<int, bool> dirtyDeformers;
+
+	// Ensure data consistency
+	assert(bd->pointData.size() == model.vn());
+
+	// Get wich deformers needs to be updated
+	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
+	{
+		dirtyDeformers[deformers[deformerId]->nodeId] = deformers[deformerId]->segmentationDirtyFlag;
+	}
+
+	int time1  = 0; int time2 = 0; int times = 0;
+
+	VectorXf precomputedDistances(deformers.size());
+	VectorXf defExpansion(deformers.size());
+	
+	for(int i = 0; i< deformers.size(); i++)
+	{
+		precomputedDistances[i] = deformers[i]->precomputedDistances;
+		defExpansion[i] = deformers[i]->expansion;
+	}
+
+	// Updates all the points that were linked to a dirty deformer
+	// Evaluacion de filas
+	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
+    {
+		PointData& pd = bd->pointData[pointId];
+		int deformerId = dirtyDeformers[pd.segmentId];
+		if(dirtyDeformers[deformerId])
+		{
+			DefNode* def = deformers[deformerId];
+			// El punto debe ser debatido entre todos los deformadores.
+			float distance = 99999999999;
+			int newSegmentId = -1;
+			float preCompDistance = def->precomputedDistances;
+
+			VectorXf tempDistance = ((subDistances.row(pd.segmentId)*-2)+precomputedDistances).cwiseQuotient(defExpansion);
+			distance = tempDistance.minCoeff(&newSegmentId);
+
+			if(newSegmentId > 0)
+			{
+				pd.segmentId = newSegmentId;
+				pd.segmentDistance = distance;
+			}
+		}
+	}
+
+	
+	// Updates all the points comparing with all the dirty deformers
+	// Evaluacion de columnas... hay calculos que no se han guardado y podrian valer
+	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
+	{
+		DefNode* def = deformers[deformerId];
+		if(dirtyDeformers[deformers[deformerId]->nodeId])
+		{
+			float expansion = def->expansion;
+			float precompDist = def->precomputedDistances;
+
+			VectorXf newDistances = ((subDistances.col(deformerId)*-2)+precomputedDistances)/expansion;
+
+			// este nodo tiene que pelear por todos los puntos.
+			for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
+			{
+				PointData& pd = bd->pointData[pointId];
+				float nd = newDistances[pointId];								
+														 
+				if(pd.segmentId < 0 || nd < pd.segmentDistance)
+				{
+					pd.segmentDistance = nd;
+					pd.segmentId = def->nodeId;
+				}
+			}
+		}
+
+		def->segmentationDirtyFlag = false;
+	}
 }
 
 
@@ -871,6 +1570,8 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 		dirtyDeformers[deformers[deformerId]->nodeId] = deformers[deformerId]->segmentationDirtyFlag;
 	}
 
+	//int time1  = 0; int time2 = 0; int times = 0;
+
 	// Updates all the points that were linked to a dirty deformer
 	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
     {
@@ -883,12 +1584,22 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 			for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 			{
 				DefNode* def = deformers[deformerId];
+				
 				float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
 														 def->weightsSort, 
 														 pointId, bd, 
 														 def->expansion, 
 														 def->precomputedDistances, 
 														 def->cuttingThreshold);
+				/*
+				float newDistance = -BiharmonicDistanceP2P_sorted_analisis(def->MVCWeights, 
+														 def->weightsSort, 
+														 pointId, bd, 
+														 def->expansion, 
+														 def->precomputedDistances,
+														 time1, time2, times,
+														 def->cuttingThreshold);
+														 */
 				if(newSegmentId < 0 || distance > newDistance)
 				{
 					distance = newDistance;
@@ -917,12 +1628,23 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 			{
 				PointData& pd = bd->pointData[pointId];
 
+				
 				float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
 														 def->weightsSort, 
 														 pointId, bd, 
 														 def->expansion, 
 														 def->precomputedDistances, 
 														 def->cuttingThreshold);
+				/*
+				float newDistance = -BiharmonicDistanceP2P_sorted_analisis(def->MVCWeights, 
+														 def->weightsSort, 
+														 pointId, bd, 
+														 def->expansion, 
+														 def->precomputedDistances, 
+														 time1, time2, times,
+														 def->cuttingThreshold);
+														 */
+														 
 				if(pd.segmentId < 0 || newDistance < pd.segmentDistance)
 				{
 					pd.segmentDistance = newDistance;
@@ -933,6 +1655,10 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 
 		def->segmentationDirtyFlag = false;
 	}
+
+	//printf("\nTime for matrix multiplication: per node:%f, global:%f \n ", ((double)time1)/times/CLOCKS_PER_SEC, ((double)time1)/CLOCKS_PER_SEC);
+
+	//printf("Time for scalar multiplication: per node:%f, global:%f \n ", ((double)time2)/times/CLOCKS_PER_SEC, ((double)time2)/CLOCKS_PER_SEC);
 }
 
 int indexOfNode(int nodeId, vector<DefNode>& nodes)

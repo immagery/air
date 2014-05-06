@@ -9,6 +9,8 @@
 #include <fstream>
 #include <queue>
 
+#define FP_METHOD false
+
 riggingMode AirRig::mode = MODE_RIG;
 
 // Serialization
@@ -297,7 +299,7 @@ bool DefGraph::loadFromFile(ifstream& in, airRigSerialization* sData)
 	defGroups.resize(defGroupsSize);
 	for(int groupIdx = 0; groupIdx < defGroups.size(); groupIdx++)
 	{
-		defGroups[groupIdx] = new DefGroup(scene::getNewId());
+		defGroups[groupIdx] = new DefGroup(scene::getNewId(T_DEFGROUP));
 		if(!defGroups[groupIdx]->loadFromFile(in, sData)) return false;
 	}
 
@@ -908,7 +910,7 @@ bool DefGroup::loadFromFile(ifstream& in, airRigSerialization* sData)
 	deformers.resize(deformersSize);
 	for(int i = 0; i< deformers.size(); i++)
 	{
-		deformers[i].nodeId = scene::getNewId();
+		deformers[i].nodeId = scene::getNewId(T_DEFNODE);
 
 		if(!deformers[i].loadFromFile(in)) return false;
 		
@@ -1006,7 +1008,7 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions)
 	for(int jointIdx = 0; jointIdx < skt->joints.size(); jointIdx++)
 	{
 		int currentDefgroup = defRig.defGroups.size();
-		defRig.defGroups.push_back(new DefGroup(scene::getNewId(), skt->joints[jointIdx]));
+		defRig.defGroups.push_back(new DefGroup(scene::getNewId(T_DEFGROUP), skt->joints[jointIdx]));
 		defRig.defGroups.back()->sName = string("DGrp_") + skt->joints[jointIdx]->sName;
 		defRig.defGroups.back()->subdivisionRatio = subdivisions;
 		
@@ -1050,7 +1052,7 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 
 	group.deformers.push_back(DefNode(jt->translation, group.nodeId));
 	group.deformers.back().relPos = group.deformers.back().pos-jt->translation;
-	group.deformers.back().nodeId = scene::getNewId();
+	group.deformers.back().nodeId = scene::getNewId(T_DEFNODE);
 	group.deformers.back().ratio = 0.0;
 	group.deformers.back().expansion = group.expansion;
 	group.deformers.back().enableWeightsComputation = jt->enableWeightsComputation;
@@ -1059,9 +1061,21 @@ bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups )
 	for(int i = 0; i < jt->getChildCount(); i++)
 	{
 		int numDivisions;
-		numDivisions = subdivideStick(jt->getWorldPosition(), jt->childs[i]->getWorldPosition(), 
-									  group.nodeId, relatedGroups[i]->nodeId,
-									  group.deformers, group.subdivisionRatio);
+
+		
+		if(FP_METHOD)
+		{
+			numDivisions = subdivideStick_FPMethod(jt->getWorldPosition(), jt->childs[i]->getWorldPosition(), 
+										  group.nodeId, relatedGroups[i]->nodeId,
+										  group.deformers, group.subdivisionRatio);
+		}
+		else
+		{
+		
+			numDivisions = subdivideStick(jt->getWorldPosition(), jt->childs[i]->getWorldPosition(), 
+										  group.nodeId, relatedGroups[i]->nodeId,
+										  group.deformers, group.subdivisionRatio);
+		}
 
 		propagateExpansion(group, group.expansion, relatedGroups[i]->nodeId, relatedGroups[i]->expansion);
 	}
@@ -1149,6 +1163,57 @@ bool propagateExpansion(DefGroup& gr, float parentValue, int childId, float chil
 	return true;
 }
 
+int subdivideStick_FPMethod(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
+							vector< DefNode >& nodePoints, float subdivisionRatio)
+{
+	//float subdivisionRatio = subdivisionRatio_DEF;
+	//Vector3d origen =  parent->getWorldPosition();
+	//Vector3d fin = child->getWorldPosition();
+	int boneId = defGorupIdx;
+
+	double longitud= (float)((fin-origen).norm());
+	double endChop = longitud*endChop_DEF;
+
+	if(longitud == 0)
+		return 0;
+
+	Vector3d dir = (fin-origen)/longitud;
+	longitud = longitud - endChop;
+	int numDivisions = (int)floor(longitud/subdivisionRatio);
+
+	double newSubdivLength = longitud;
+	if(numDivisions > 0)
+		newSubdivLength = longitud/ double(numDivisions);
+
+	Vector3d newOrigen = origen;
+	Vector3d newFin = fin-dir*endChop;
+
+	// Añadimos los nodos
+
+	nodePoints.push_back(DefNode(newOrigen+(dir*longitud*0.20),boneId));
+	nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
+	nodePoints.back().ratio = 0.20;
+	nodePoints.back().childBoneId = childDefGorupIdx;
+
+	nodePoints.push_back(DefNode(newOrigen+(dir*longitud*0.50),boneId));
+	nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
+	nodePoints.back().ratio = 0.50;
+	nodePoints.back().childBoneId = childDefGorupIdx;
+
+	nodePoints.push_back(DefNode(newOrigen+(dir*longitud*0.8),boneId));
+	nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
+	nodePoints.back().ratio = 0.8;
+	nodePoints.back().childBoneId = childDefGorupIdx;
+
+	nodePoints.push_back(DefNode(newOrigen+(dir*longitud),boneId));
+	nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
+	nodePoints.back().ratio = 1.0;
+	nodePoints.back().childBoneId = childDefGorupIdx;
+
+	return 5;
+}
+
+
 int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio)
 {
@@ -1180,7 +1245,7 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 	{
 		//int globalNodeId = nodePoints.size();
 		nodePoints.push_back(DefNode(newOrigen+(dir*newSubdivLength*i),boneId));
-		nodePoints.back().nodeId = scene::getNewId();
+		nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
 		nodePoints.back().ratio = (float)i/(float)numDivisions;
 
 		nodePoints.back().childBoneId = childDefGorupIdx;

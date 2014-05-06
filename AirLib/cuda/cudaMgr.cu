@@ -1,5 +1,6 @@
 #include "cudaMgr.cuh"
 #include "cudaMVC.cuh"
+#include <texture_fetch_functions.h>
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
@@ -621,4 +622,374 @@ Error:
     cudaFree(dev_b);
     
     return cudaStatus;
+}
+
+
+// Operacion de multimplicacion con indireccion para los puntos interiores
+// Hay que optimizar con texturas
+__global__ void multMatrixBDTex(cudaTextureObject_t weights, 
+							    cudaTextureObject_t indirection, 
+							    cudaTextureObject_t BHDist, 
+							    int weightsTh, int width, 
+							    int* lock, float* result)
+{
+	__shared__ float multiplication[threadsPerBlock];
+
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+	float sum = 0.0;
+
+	while(tid<width)
+	{
+		float sumParcial = 0.0;
+		// Calculamos cada suma
+		//int filaInd = tex1Dfetch<int>(indirection,tid);
+		for(int i = 0; i< weightsTh; i++)
+		{
+			//int ind = tex1Dfetch<int>(indirection,i);
+			//sumParcial += tex1Dfetch<float>(weights,i) * tex1Dfetch<float>(BHDist,filaInd*width + ind);
+			sumParcial += tex1Dfetch<float>(weights,i) * tex1Dfetch<float>(BHDist, tid*width + i);
+		}
+
+		sum += sumParcial*tex1Dfetch<float>(weights, tid);
+		tid += blockDim.x*gridDim.x;
+	}
+
+	// Guardamos el resultado de cada thread
+	int cacheIndex = threadIdx.x;
+	multiplication[cacheIndex] = sum;
+
+	// Sumatorio dentro del bloque.
+	__syncthreads();
+
+	int i = blockDim.x/2;
+	while(i!=0)
+	{
+		if(cacheIndex < i)
+			multiplication[cacheIndex] += multiplication[cacheIndex+i];
+
+		__syncthreads();
+		i/=2;
+	}
+
+	// Sumatorio por bloques
+	if(cacheIndex == 0)
+	{
+		//Bloquear la escritura si hay conflicto
+		int ret = __iAtomicCAS(lock, 0, 1);
+		while( ret > 0 )
+		{
+			ret = __iAtomicCAS(lock, 0, 1);
+		}
+		
+		*result += (float)multiplication[0];
+		
+		atomicExch(lock,0);
+	}
+}
+
+// Operacion de multimplicacion con indireccion para los puntos interiores
+// Hay que optimizar con texturas
+__global__ void multMatrixBD(float* weights, int* indirection, float* BHDist, int weightsTh, int width, int* lock, float* result)
+{
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+	float sum = 0.0;
+
+	while(tid<width)
+	{
+		float sumParcial = 0.0;
+		// Calculamos cada suma
+		int filaInd = indirection[tid];
+		for(int i = 0; i< weightsTh; i++)
+		{
+			int ind = indirection[i];
+			sumParcial += weights[ind]*BHDist[filaInd*width + ind];
+		}
+
+		// Vienen todos los threads bloqueados y solo tenemos que desbloquar para seguir luego.
+		tid += blockDim.x*gridDim.x;
+
+		sum += sumParcial*weights[filaInd];
+	}
+
+	// Guardamos el resultado de cada thread
+	int cacheIndex = threadIdx.x;
+	__shared__ float multiplication[threadsPerBlock];
+	multiplication[cacheIndex] = sum;
+
+	// Sumatorio dentro del bloque.
+	__syncthreads();
+
+	int i = blockDim.x/2;
+	while(i!=0)
+	{
+		if(cacheIndex < i)
+			multiplication[cacheIndex] += multiplication[cacheIndex+i];
+
+		__syncthreads();
+		i/=2;
+	}
+
+	// Sumatorio por bloques
+	if(cacheIndex == 0)
+	{
+		//Bloquear la escritura si hay conflicto
+		int ret = __iAtomicCAS(lock, 0, 1);
+		while( ret > 0 )
+		{
+			ret = __iAtomicCAS(lock, 0, 1);
+		}
+		
+		*result += (float)multiplication[0];
+		
+		atomicExch(lock,0);
+		
+	}
+
+
+}
+
+// Operacion de multimplicacion con indireccion para los puntos interiores
+// Hay que optimizar con texturas
+__global__ void multMatrixCol(float* weights, int* indirection, float* BHDist, int weightsTh, int vertexId, int width, int* lock, float* result)
+{
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+	__shared__ float multiplication[threadsPerBlock];
+	int cacheIndex = threadIdx.x;
+
+	int indireccionNodo = indirection[vertexId];
+
+	float sumParcial = 0.0;
+	while(tid<width)
+	{
+		int ind = indirection[tid];
+		sumParcial += weights[ind]*BHDist[indireccionNodo*width + ind];
+
+		// Vienen todos los threads bloqueados y solo tenemos que desbloquar para seguir luego.
+		tid += blockDim.x*gridDim.x;
+	}
+
+	// Guardamos el resultado de cada thread
+	multiplication[cacheIndex] = sumParcial;
+
+	// Sumatorio dentro del bloque.
+	__syncthreads();
+
+	int i = blockDim.x/2;
+	while(i!=0)
+	{
+		if(cacheIndex < i)
+			multiplication[cacheIndex] += multiplication[cacheIndex+i];
+
+		__syncthreads();
+		i/=2;
+	}
+
+	// Sumatorio por bloques
+	if(cacheIndex == 0)
+	{
+		//Bloquear la escritura si hay conflicto
+		int ret = __iAtomicCAS(lock, 0, 1);
+		while( ret > 0 )
+		{
+			ret = __iAtomicCAS(lock, 0, 1);
+		}
+		
+		*result += (float)multiplication[0];
+		
+		atomicExch(lock,0);
+	}
+}
+
+
+void getPrecomputedDistance(int node)
+{
+	srand((unsigned)time(0)); 
+    const int arraySize = 10000;
+
+	// Create vector and fill it with values
+	std::vector<float> a(arraySize);
+	std::vector<int> ind(arraySize);
+	for (int i = 0; i < arraySize; ++i) {
+		a[i] = 0.6-((float)rand()/RAND_MAX );
+		ind[arraySize-i-1] = i;
+	}
+
+	float* bd = (float*)malloc(sizeof(float)*arraySize*arraySize);
+	for(int i = 0; i< arraySize; i++)
+	{
+		for(int j = 0; j< arraySize; j++)
+		{
+			bd[j*arraySize+i] = ((float)rand()/RAND_MAX );
+		}
+	}
+	
+	float* weights;
+	cudaError_t cudaStatus = cudaMalloc((void**)&weights, arraySize * sizeof(float));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+    }
+	cudaStatus = cudaMemcpy(weights, a.data(), arraySize * sizeof(float), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	int* indirection;
+	 cudaStatus = cudaMalloc((void**)&indirection, arraySize * sizeof(int));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+    }
+	cudaStatus = cudaMemcpy(indirection, ind.data(), arraySize * sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	float* BHDist;
+	 cudaStatus = cudaMalloc((void**)&BHDist, arraySize * arraySize * sizeof(float));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+    }
+	cudaStatus = cudaMemcpy(BHDist, bd, arraySize * arraySize * sizeof(float), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	// Specify texture object parameters
+    struct cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+	texDesc.readMode = cudaReadModeElementType;
+
+	// Specify texture
+	struct cudaResourceDesc resDesc;
+	memset(&resDesc, 0, sizeof(resDesc));
+	resDesc.resType = cudaResourceTypeLinear;
+	resDesc.res.linear.devPtr = weights;
+	resDesc.res.linear.desc.f = cudaChannelFormatKindFloat;
+	resDesc.res.linear.desc.x = 32; // bits per channel
+	resDesc.res.linear.sizeInBytes = arraySize*sizeof(float);
+
+	// create texture object: we only have to do this once!
+	cudaTextureObject_t cudaWeightsTex;
+	cudaCreateTextureObject(&cudaWeightsTex, &resDesc, &texDesc, NULL);
+
+	// Specify texture
+	struct cudaResourceDesc resDesc2;
+	memset(&resDesc2, 0, sizeof(resDesc2));
+	resDesc2.resType = cudaResourceTypeLinear;
+	resDesc2.res.linear.devPtr = indirection;
+	resDesc2.res.linear.desc.f = cudaChannelFormatKindSigned;
+	resDesc2.res.linear.desc.x = 32; // bits per channel
+	resDesc2.res.linear.sizeInBytes = arraySize*sizeof(int);
+
+	// create texture object: we only have to do this once!
+	cudaTextureObject_t cudaIndirectionTex;
+	cudaCreateTextureObject(&cudaIndirectionTex, &resDesc2, &texDesc, NULL);
+
+	// Specify texture
+	struct cudaResourceDesc resDesc3;
+	memset(&resDesc3, 0, sizeof(resDesc3));
+	resDesc3.resType = cudaResourceTypeLinear;
+	resDesc3.res.linear.devPtr = BHDist;
+	resDesc3.res.linear.desc.f = cudaChannelFormatKindFloat;
+	resDesc3.res.linear.desc.x = 32; // bits per channel
+	resDesc3.res.linear.sizeInBytes = arraySize*arraySize*sizeof(float);
+
+	// create texture object: we only have to do this once!
+	cudaTextureObject_t cudaBHTex;
+	cudaCreateTextureObject(&cudaBHTex, &resDesc3, &texDesc, NULL);
+
+
+
+	int weightsTh = arraySize-1;
+	int width = arraySize;
+
+	int* lock;
+	int lockHost = 0;
+	 cudaStatus = cudaMalloc((void**)&lock, sizeof(int));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+    }
+	cudaStatus = cudaMemcpy(lock, &lockHost, sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	float* result;
+	float resultHost = 0;
+	 cudaStatus = cudaMalloc((void**)&result, sizeof(float));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+    }
+	cudaStatus = cudaMemcpy(result, &resultHost, sizeof(float), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	int blocksPerGridPoints = (arraySize+threadsPerBlock-1)/threadsPerBlock;
+	if(blocksPerGridPoints > 32) blocksPerGridPoints = 32;
+
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+
+	// Obtener multiplicacion por ambos lados en CUDA y en CPU
+	//multMatrixBD<<<blocksPerGridPoints,threadsPerBlock>>>(weights, indirection, BHDist, weightsTh,width,lock, result);
+	
+	clock_t ini1 = clock();
+	multMatrixBDTex<<<blocksPerGridPoints,threadsPerBlock>>>(cudaWeightsTex, cudaIndirectionTex, 
+															 cudaBHTex, weightsTh,width,lock, result);
+
+
+	cudaStatus = cudaDeviceSynchronize();
+	clock_t fin1 = clock();
+
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	float time = 0;
+	cudaEventElapsedTime(&time, start, stop);
+
+    if (cudaStatus != cudaSuccess) {
+        printf("cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+        printf("getBalancedThreshold failed: %s\n", cudaGetErrorString(cudaStatus));fflush(0);
+    }
+	else
+		printf("multMatrixBD correcta!\n");
+
+	cudaStatus = cudaMemcpy(&resultHost, result, sizeof(float), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+	printf("Resultado en CUDA: %f, en %f ms\n", resultHost, time);
+	printf("Resultado en %fms recomputed\n", (((double)fin1-ini1) / CLOCKS_PER_SEC)*1000);
+
+	int timeResolution = 1;
+
+	clock_t ini = clock();
+	// Calculo en CPU
+	float resultCPU = 0.0;
+	for(int times = 0; times < timeResolution; times++)
+	{
+		resultCPU = 0.0;
+		for(int i = 0; i< weightsTh; i++)
+		{
+			float tempRes = 0.0;
+			int indI = ind[i];
+			for(int j = 0; j< weightsTh; j++)
+			{
+				int indJ = ind[j];
+				tempRes += bd[indI*arraySize+indJ] * a[indJ];
+			}
+
+			resultCPU += tempRes * a[indI];
+		}
+	}
+
+	clock_t fin = clock();
+	printf("Resultado en CPU: %f, en %fms\n", resultCPU, (((double)fin-ini) / (((double)CLOCKS_PER_SEC)*timeResolution))*1000);
+}
+
+void getDistances(int node,int vert)
+{
+
 }

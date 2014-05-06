@@ -268,4 +268,7 @@ void mvcAllBindings(PRECISION3 point, PRECISION* weights, cudaModel* modelo);
 
 int mainCuda();
 
+void getPrecomputedDistance(int node);
+void getDistances(int node,int vert);
+
 #endif

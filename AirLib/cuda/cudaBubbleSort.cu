@@ -10,6 +10,12 @@
 
 #include <Windows.h>
 
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/sort.h>
+
+#include <iostream>
+
 __host__ int64 GetTimeMs64()
 {
 	 /* Windows */
@@ -323,9 +329,9 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 	int cacheSecondInd;
 	int cacheThirdInd ;
 
-	for (int j = 0; j < size/2+1; j++) 
+	for (int j = 0; j < size/2+1 ; j++) 
 	{
-		int i = (threadIdx.x + blockDim.x*blockIdx.x)*2;
+		int i = (threadIdx.x + blockDim.x * blockIdx.x)*2;
 		
 		while(i+1 < size)
 		{
@@ -382,8 +388,7 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 	__syncthreads();
 
 	__shared__ int thatPoint;
-	__shared__ float cachePos[1024];
-	__shared__ float cacheNeg[1024];
+	__shared__ float cacheNeg[threadsPerOnlyOneBlock];
 	__shared__ float sumNegShared;
     
 	sumNegShared = 0.0;
@@ -399,13 +404,10 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 		float aCopyTemp = aCopy[tid];
 		if(aCopyTemp < 0.0)
 			tempNeg += aCopyTemp;
-		//else
-		//	tempPos += aCopyTemp;
 
 		tid += blockDim.x*gridDim.x;
 	}
 
-	//cachePos[cacheIndex] = tempPos;
     cacheNeg[cacheIndex] = tempNeg;
 
 	__syncthreads();
@@ -415,7 +417,6 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 	{
 		if(cacheIndex < NewI)
 		{
-			//cachePos[cacheIndex] += cachePos[cacheIndex+NewI];
 			cacheNeg[cacheIndex] += cacheNeg[cacheIndex+NewI];
 		}
 
@@ -425,7 +426,6 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 
 	if(cacheIndex == 0)
 	{
-		//*posSum = (float)cachePos[0];
 		*negSum = cacheNeg[0];
 		sumNegShared = cacheNeg[0];
 	}
@@ -452,7 +452,7 @@ __global__ void sort(float *a, float *aCopy, int* ind, float* negSum, int* lock,
 }
 __global__ void getBalancedThreshold(float *a, int* ind, float* negSum, int size, int* cuttingIdx, float *posSum)
 {
-	__shared__ float cachePos[1024];
+	__shared__ float cachePos[threadsPerOnlyOneBlock];
 	__shared__ float sumNegShared;
 	__shared__ bool breakFlux;
 	breakFlux = false;
@@ -857,56 +857,126 @@ Error:
     return cudaStatus;
 }
 
-int doSorting()
+int thrust_sort(void)
+{
+    // H has storage for 4 integers
+    thrust::host_vector<int> H(4);
+
+    // initialize individual elements
+    H[0] = 14;
+    H[1] = 20;
+    H[2] = 38;
+    H[3] = 46;
+    
+    // H.size() returns the size of vector H
+    std::cout << "H has size " << H.size() << std::endl;
+
+    // print contents of H
+    for(int i = 0; i < H.size(); i++)
+        std::cout << "H[" << i << "] = " << H[i] << std::endl;
+
+    // resize H
+    H.resize(2);
+    
+    std::cout << "H now has size " << H.size() << std::endl;
+
+    // Copy host_vector H to device_vector D
+    thrust::device_vector<int> D = H;
+    
+    // elements of D can be modified
+    D[0] = 99;
+    D[1] = 88;
+    
+    // print contents of D
+    for(int i = 0; i < D.size(); i++)
+        std::cout << "D[" << i << "] = " << D[i] << std::endl;
+
+    // H and D are automatically deleted when the function returns
+    return 0;
+}
+
+int doSorting(int number)
 {
 	srand((unsigned)time(0)); 
-    const int arraySize = 15000;
+
+	int arraySize;
+
+	if(number > 10) arraySize = number;
+	else arraySize = 10;
 
 	// Create vector and fill it with values
+	thrust::host_vector<float> Ahost(arraySize);
+	thrust::host_vector<int> indhost(arraySize);
 	std::vector<float> a(arraySize);
-	for (int i = 0; i < arraySize; ++i) {
-		a[i] = 0.6-((float)rand()/RAND_MAX );//
+	for (int i = 0; i < arraySize; i++) 
+	{
+		a[i] = 0.6-((float)rand()/RAND_MAX );
+		Ahost[i] = a[i];
+		indhost[i] = i;
 	}
 	std::vector<float> b(a);
 
-	std::vector<int> ind(arraySize);
-	
+	thrust::device_vector<float> A = Ahost;
+	thrust::device_vector<int> ind = indhost;
+
+	int64 stlSortStart1 = GetTimeMs64();
+	thrust::sort_by_key(A.begin(), A.end(), ind.begin(), thrust::greater<float>());
+	int64 stlSortFinish1 = GetTimeMs64();
+
+	thrust::copy(ind.begin(), ind.end(), indhost.begin());
+
 	float time = 0.0;
     // Swap elements in parallel.
-    cudaError_t cudaStatus = sortWithCuda(&a[0], &ind[0], a.size(), &time);
+    //cudaError_t cudaStatus = sortWithCuda(&a[0], &ind[0], a.size(), &time);
 
-	if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "sortWithCuda failed!");
-        return 1;
-    }
-
-	bool sortingSuccessful = true;
-	for (int i = 0; i < a.size()-1; i++) {
-		if (a[ind[i]] < a[ind[i+1]]) 
-		{
-			sortingSuccessful = false;
-			printf("posicion %d---> %f %f\n ", i, a[ind[i]], a[ind[i+1]]);
-			break;
-		}
-		 //printf("%d, ", a[i]);
-	}
-	if(!sortingSuccessful) {
-		printf("Sorting failed.\n");
-	}
-	printf("\n");
-
-	printf ("Time for the GPU: %f ms\n", time);
+	//if (cudaStatus != cudaSuccess) {
+    //    fprintf(stderr, "sortWithCuda failed!");
+    //    return 1;
+    //}
 
 	int64 stlSortStart = GetTimeMs64();
 	bubbleSort(&b[0], b.size());
 	int64 stlSortFinish = GetTimeMs64();
-	printf ("Time for the CPU: %d ms\n", 
-		(stlSortFinish - stlSortStart));
+	FILE* fout;
+	fout = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\vel.txt", "a");
 
+	fprintf (fout, " %d, %d, ", arraySize, stlSortFinish1 - stlSortStart1);
+	fprintf (fout, "%d, ", (stlSortFinish - stlSortStart));
+
+	bool sortingSuccessful = true;
+	for (int i = 0; i < Ahost.size()-1  /*&& sortingSuccessful*/; i++) 
+	{
+		//printf("Valores: posicion %d---> %d %f %f\n ", i, indhost[i], Ahost[indhost[i]], b[Ahost.size()-1-i]);
+		if (Ahost[indhost[i]] < Ahost[indhost[i+1]]) 
+		{
+			sortingSuccessful = false;
+			printf("esta desordenado: posicion %d---> %f %f\n ", i, Ahost[indhost[i]], Ahost[indhost[i+1]]);
+		}
+		if(Ahost[indhost[i]] != b[Ahost.size()-1-i])
+		{
+			sortingSuccessful = false;
+			printf("No es igual: posicion %d---> %f %f\n ", i, Ahost[indhost[i]], b[Ahost.size()-1-i]);
+		}
+	}
+	if(!sortingSuccessful) {
+		printf("Sorting failed.\n");
+	}
+
+	fprintf(fout, " %f\n", ((double)(stlSortFinish - stlSortStart))/(double)(stlSortFinish1 - stlSortStart1));
+	fclose(fout);
+
+	Ahost.clear();
+	A.clear();
+	Ahost.shrink_to_fit();
+	A.shrink_to_fit();
+	ind.clear();
+	ind.shrink_to_fit();
+	indhost.clear();
+	indhost.shrink_to_fit();
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Parallel Nsight and Visual Profiler to show complete traces.
-    cudaStatus = cudaDeviceReset();
+    cudaError_t cudaStatus = cudaDeviceReset();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaDeviceReset failed!");
         return 1;
@@ -961,7 +1031,7 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
 
     // Launch a kernel on the GPU with one thread for each element.
 	
-	int maxThreads = 1024;
+	int maxThreads = threadsPerOnlyOneBlock;
 
 	int computingThreads = size/2;
 	if(computingThreads > maxThreads)
@@ -1007,11 +1077,9 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
-
 	cudaEventRecord(start, 0);
-
 	
-	sort<<<1, computingThreads>>>(dev_a, dev_aCopy, dev_ind,negSum, lock, size, cutting_idx , posSum);
+	sort<<<1, computingThreads>>>(dev_a, dev_aCopy, dev_ind, negSum, lock, size, cutting_idx , posSum);
 
 	cudaStatus = cudaDeviceSynchronize();
 	if (cudaStatus != cudaSuccess) {
@@ -1027,10 +1095,7 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
 		goto Error;
 	}
 
-	getBalancedThreshold<<<1, computingThreads>>>(dev_a, dev_ind, negSum, size, cutting_idx , posSum);
-	
-
-	//sumAndGetThreshold<<<1, computingThreads>>>(dev_a, dev_aCopy, dev_ind,negSum, lock, size, cutting_idx , posSum);
+	getBalancedThreshold<<<1, computingThreads>>>(dev_a, dev_ind, negSum, size, cutting_idx, posSum);
 
     cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
@@ -1053,7 +1118,6 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
         goto Error;
     }
 
-	
 	// Copy output vector from GPU buffer to host memory.
     cudaStatus = cudaMemcpy(a2, dev_aCopy, size * sizeof(float), cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
@@ -1074,9 +1138,8 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
         goto Error;
     }
 
-
 	printf("\n\nCUDA RESULTS...\n");
-//	printf("Cuda corte pos->neg: %d\n", cuttingIdxHost);
+	printf("pos->neg :%d\n", cuttingIdxHost);
 	printf("Hemos cortado en :%d\n", cuttingIdxHost2);
 	float sumNegHost = 0;
 	float sumPosHost = 0;
@@ -1111,7 +1174,7 @@ __host__ cudaError_t sortWithCuda(float *a, int *ind, size_t size, float* time)
 		float value = a[ind[i]];
 
 		if(a2[i] != value)
-			printf("PROBLEMA!!! -> La indireccion no esta bien, o hay una incongruencia con los vectores ordenados: %d -> [%f][%f]\n", i, a2[i], value);
+			printf("PROBLEMA!!! -> La indireccion no esta bien o algo: %d -> [%f][%f]\n", i, a2[i], value);
 
 		if(value < 0 && ordenado >= 0)
 			printf("pos->neg: %d\n", i);
