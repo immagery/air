@@ -476,6 +476,9 @@ void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int 
     }
 }
 
+#include <chrono>
+using namespace std::chrono;
+
 void initSurfaceWeightsSmoothingOpt(Modelo& m, 
 									binding* bd, 
 									int nodeId, 
@@ -484,66 +487,65 @@ void initSurfaceWeightsSmoothingOpt(Modelo& m,
 									vector<unsigned int>& indicesToCompute,
 									int& lastIndex)
 {
+
+	//auto ini00 = high_resolution_clock::now();
 	lastIndex = 0;
-	int precindibleElems = 0;
+	int totalElems = 0;
+	int totalPosElems = 0;
 
 	int length = bd->pointData.size();
 	// recorrer todo el modelo e inicializar los datos para la transmision
-	//int numThreads = omp_get_max_threads();
-	//int range = (length/numThreads)+1;
-
-	int idx = 0;
-	//#pragma omp parallel shared(bd, weightsAux, weights, range) private(idx)
-	{
-		//#pragma omp for schedule(dynamic,1)
-		for(idx = 0; idx < length; idx++ )
-		{	
-			PointData& pd = bd->pointData[idx];
-			pd.node->visited = false;
-			if(pd.ownerLabel != nodeId)
-			{
-				weightsAux[idx] = weights[idx] = 0.0;
-			}
-			else
-			{
-				weightsAux[idx] = weights[idx] = 1.0;
-			}
-		}
-	}
-
-	//#pragma omp parallel shared(bd, weightsAux, weights, range) private(idx)
-	{
-		// Seleccionamos para procesar solo lo necesario.
-		//#pragma omp for schedule(dynamic,1) nowait
-		for(idx = 0; idx < length; idx++ )
+	std::fill(weights.begin(), weights.end(), 0.0);
+	std::fill(weightsAux.begin(), weightsAux.end(), 0.0);
+	for(int idx = 0; idx < length; idx++ )
+	{	
+		PointData& pd = bd->pointData[idx];
+		pd.node->visited = false;
+		if(pd.ownerLabel == nodeId)
 		{
-			float value = weights[idx]; 
-			PointData& pd = bd->pointData[idx];
-
-			bool difValues = false;
-			for(int n = 0; n< pd.node->connections.size() && !difValues; n++)
-			{
-				int neighId = pd.node->connections[n]->id;
-				difValues |= (value != weights[neighId]);
-			}
-
-			if(difValues)
-			{
-				
-				pd.node->visited = true;
-				//#pragma omp critical
-				{
-				indicesToCompute[lastIndex] = idx;
-				lastIndex++;
-				}
-			}
+			weights[idx] = 1.0;
+			weightsAux[idx] = 1.0;
 		}
 	}
+	//auto fin00 = high_resolution_clock::now();
 
-	//printf("[initSurfaceWeightsSmoothingOpt] \
-			Hay %d elementos prescindibles de %d elemems, y podemos reorganizar este trozo \n", 
-	//		precindibleElems, 
-	//		lastIndex);
+	
+
+	//auto ini01 = high_resolution_clock::now();
+	// Seleccionamos para procesar solo lo necesario.
+	for(int idx = 0; idx < length; idx++ )
+	{
+		float value = weights[idx]; 
+		PointData& pd = bd->pointData[idx];
+
+		bool difValues = false;
+		for(int n=0; !difValues && n<pd.node->connections.size(); n++)
+		{
+			int neighId = pd.node->connections[n]->id;
+			difValues |= (value != weights[neighId]);
+		}
+
+		if(difValues)
+		{
+			pd.node->visited = true;
+			indicesToCompute[lastIndex] = idx;
+			lastIndex++;
+		}
+	}
+	//auto fin01 = high_resolution_clock::now();
+
+	/*printf("[init] Hay %d elementos seleccionados de [%d,%d] elemems \n", 
+			lastIndex,
+			totalElems, 
+			totalPosElems);*/
+
+	//auto ticks00 = duration_cast<microseconds>(fin00-ini00) ;
+	//auto ticks01 = duration_cast<microseconds>(fin01-ini01) ;
+
+	//printf("Computo de inicializacion: bulce01->%f  bucle02->%f\n", 
+	//		(((double)ticks00.count())), 
+	//		(((double)ticks01.count()))); 
+	//fflush(0);
 }
 
 void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, int nodeId)
@@ -617,6 +619,7 @@ PARAMS:
 	weightsT2: temporal data structure for compute smooth weights eficiently.
 	indicesToCompute: temporal data structure for compute smooth weights eficiently.
 */
+
 void SmoothFromSegmentOpt(Modelo& m, binding* bd, DefGroup* group, int frontId, 
 						  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute)
 {
@@ -624,9 +627,9 @@ void SmoothFromSegmentOpt(Modelo& m, binding* bd, DefGroup* group, int frontId,
 
     // Init model for weights smoothing
 	//if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n");fflush(0);
-	//clock_t ini00 = clock();
+	//auto ini00 = high_resolution_clock::now();
     initSurfaceWeightsSmoothingOpt(m, bd, frontId, weightsT1, weightsT2, indicesToCompute, lastIndex);
-	//clock_t fin00 = clock();
+	//auto fin00 = high_resolution_clock::now();
 
     // Smoothing (sin corte jerárquico)
 	//if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
@@ -635,17 +638,20 @@ void SmoothFromSegmentOpt(Modelo& m, binding* bd, DefGroup* group, int frontId,
 	int smoothingPasses = group->smoothingPasses;
 	float realSmooth = group->smoothPropagationRatio;
 
-	//clock_t ini02 = clock();
+	//auto ini02 = high_resolution_clock::now();
     weightsSmoothing_opt(m, bd, realSmooth, 
 						frontId, smoothingPasses, weightsT1, 
 						weightsT2, indicesToCompute, lastIndex);
 	//weightsNoSmooting(m, bd, front, frontId);
 
-	//clock_t fin02 = clock();
+	//auto fin02 = high_resolution_clock::now();
+
+	//auto ticks00 = duration_cast<microseconds>(fin00-ini00) ;
+	//auto ticks02 = duration_cast<microseconds>(fin02-ini02) ;
 
 	//printf("Valores de tiempo: preinit->%f  computo->%f\n", 
-	//		((double)fin00-ini00)/CLOCKS_PER_SEC, 
-	//		((double)fin02-ini02)/CLOCKS_PER_SEC); 
+	//		(((double)ticks00.count())/1000.0), 
+	//		(((double)ticks02.count())/1000.0)); 
 	//fflush(0);
 
 }
@@ -1255,6 +1261,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		fflush(0);
 
 		//TODEBUG: BihDistances with matrix approach... uggh!
+		assert(false); // Add the new A structure
 		bindingBD( model, bds, indices, bds->BihDistances[surf], withPatches);
 	}
 
@@ -1279,6 +1286,8 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 		return false;
 
 	m.bind->BihDistances.resize(m.bind->surfaces.size());
+	m.bind->A.resize(m.bind->surfaces.size());
+	
 	for(int bind = 0; bind < m.bind->surfaces.size(); bind++)
 	{
 		int pointsSize = 0;
@@ -1289,13 +1298,18 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 			return false;
 
 		m.bind->BihDistances[bind].resize(pointsSize);
-		for(int row = 0; row < m.bind->BihDistances[bind].size; row++)
+		m.bind->A[bind].resize(pointsSize,pointsSize);
+
+		for(int row = 0; row < pointsSize; row++)
 		{
-			for(int col = row; col < m.bind->BihDistances[bind].size; col++)
+			for(int col = row; col < pointsSize; col++)
 			{
 				double value = 0;
 				finbin.read( (char*) &value,  sizeof(double) );
+
 				m.bind->BihDistances[bind].set(row,col,value);
+				m.bind->A[bind](row,col) = value;
+				m.bind->A[bind](col,row) = value;
 			}
 		}
 	}
@@ -1499,11 +1513,12 @@ void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, M
 
 	// Updates all the points that were linked to a dirty deformer
 	// Evaluacion de filas
+	#pragma omp parallel for
 	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
     {
 		PointData& pd = bd->pointData[pointId];
-		int deformerId = dirtyDeformers[pd.segmentId];
-		if(dirtyDeformers[deformerId])
+		int deformerId = dirtyDeformers[pd.segmentId] % CROP_NODE_ID;
+		if(pd.segmentId > 0 && dirtyDeformers[deformerId])
 		{
 			DefNode* def = deformers[deformerId];
 			// El punto debe ser debatido entre todos los deformadores.
@@ -1511,12 +1526,18 @@ void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, M
 			int newSegmentId = -1;
 			float preCompDistance = def->precomputedDistances;
 
-			VectorXf tempDistance = ((subDistances.row(pd.segmentId)*-2)+precomputedDistances).cwiseQuotient(defExpansion);
+			int realSegmentId = pd.segmentId & CROP_NODE_ID;
+
+			VectorXf subDistRow = subDistances.row(realSegmentId);
+			subDistRow *= -2;
+			subDistRow += precomputedDistances;
+
+			VectorXf tempDistance = subDistRow.cwiseQuotient(defExpansion);
 			distance = tempDistance.minCoeff(&newSegmentId);
 
 			if(newSegmentId > 0)
 			{
-				pd.segmentId = newSegmentId;
+				pd.segmentId = newSegmentId + FIRST_DEFNODE_ID;
 				pd.segmentDistance = distance;
 			}
 		}
@@ -1525,6 +1546,7 @@ void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, M
 	
 	// Updates all the points comparing with all the dirty deformers
 	// Evaluacion de columnas... hay calculos que no se han guardado y podrian valer
+	#pragma omp parallel for
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
 		DefNode* def = deformers[deformerId];
@@ -1533,7 +1555,12 @@ void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, M
 			float expansion = def->expansion;
 			float precompDist = def->precomputedDistances;
 
-			VectorXf newDistances = ((subDistances.col(deformerId)*-2)+precomputedDistances)/expansion;
+			int realDefId = deformerId % CROP_NODE_ID;
+
+			VectorXf tempValues(model.vn());
+			tempValues.fill(precomputedDistances[realDefId]);
+
+			VectorXf newDistances = (((subDistances.col(realDefId)*-2)+tempValues)/expansion)*-1;
 
 			// este nodo tiene que pelear por todos los puntos.
 			for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
