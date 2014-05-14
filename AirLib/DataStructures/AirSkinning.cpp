@@ -311,6 +311,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		// loop through all bindings
 		binding * b = bind;
 
+		#pragma omp parallel for
 		for (int k = 0; k < b->pointData.size(); ++k) 
 		{ 
 			// and for each binding, loop over all its points

@@ -31,7 +31,9 @@ void updateAirSkinning(DefGraph& graph, Modelo& model);
 
 // Segment the model using the air deformers.
 void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph);
-void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, MatrixXf& subDistances);
+void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, 
+									MatrixXf& subDistances, 
+									map<int, int>& matrixDefReference);
 
 // Compute the hierarchical skinning using computed segmentation
 void propagateHierarchicalSkinning(Modelo& model, binding* bd);
@@ -49,6 +51,8 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, 
 
 // Compute secondary weights - now is not updating data, it computes what ever it needs.
 void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph);
+
+void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph);
 
 int indexOfNode(int nodeId, vector<DefNode>& nodes);
 
@@ -109,5 +113,9 @@ void initData(Modelo& m, binding* bd,
 					  vector< vector<int> >& neighbours,
 					  vector<unsigned int>& indicesToCompute,
 					  int& lastIndex);
+
+
+// Compute the skinning only with dirty nodes.
+void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeights, MatrixXf& distancesTemp, map<int, int>& defNodeRef);
 
 #endif // AIR_SEGMENTATION_H

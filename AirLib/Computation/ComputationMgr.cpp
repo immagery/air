@@ -17,6 +17,7 @@ void ComputationMgr::setModelForComputations(Modelo* m)
 
 void ComputationMgr::preprocessNodeCPU(DefNode* node)
 {
+/*
 	// Mean value coordinates computation.
 	mvcAllBindings(node->pos, 
 				   node->MVCWeights,
@@ -38,23 +39,62 @@ void ComputationMgr::preprocessNodeCPU(DefNode* node)
 																	node->cuttingThreshold);
 	node->dirtyFlag = false;
 	node->segmentationDirtyFlag = true;
+*/
 }
 
-void ComputationMgr::updateAllComputations(AirRig* rig)
+void ComputationMgr::updateAllComputations()
 {
-	// By now we are reducing the process to just one binding.
-	for(unsigned int defId = 0; defId< rig->defRig.deformers.size(); defId++)
-    {
-		if(rig->defRig.deformers[defId]->dirtyFlag)
-			preprocessNodeCPU(rig->defRig.deformers[defId]);
+	clock_t ini = clock();
+
+	int defNodesSize = rig->defRig.deformers.size();
+	int firstPosToAdd = MatrixWeights.cols();
+
+	// Preparar memoria para actualizar nodos.
+	int addedToComputationsCount = 0;
+	for(int ii = 0; ii < defNodesSize; ii++)
+	{
+		DefNode* dn = rig->defRig.deformers[ii];
+				
+		if(!dn->addedToComputations)
+		{
+			defNodeComputationReference[dn->nodeId] = firstPosToAdd+ii;
+			dn->addedToComputations = true;
+			addedToComputationsCount++;
+		}
 	}
 
-	// Updating Segmentation
-	segmentModelFromDeformers(*model, bd, rig->defRig);
+	int newSize = MatrixWeights.cols() + addedToComputationsCount;
+	assert(newSize == defNodesSize);
 
-	// Update Smooth propagation
-	propagateHierarchicalSkinning(*model, bd, rig->defRig);
+	if(MatrixWeights.cols() != defNodesSize)
+	{
+		// Matrix weights for comutations
+		MatrixWeights.resize(model->vn(), newSize);
 
-	// Compute Secondary weights ... by now compute all the sec. weights
-	computeSecondaryWeights(*model, bd, rig->defRig);
+		// Init subDistances
+		distancesTemp.resize(model->vn(), newSize);
+	}
+
+	//printf("Anadir al calculo %d nodos\n", addedToComputationsCount);
+	computeNodesOptimized(rig->defRig, *model, MatrixWeights, distancesTemp, defNodeComputationReference);
+
+	clock_t fin = clock();
+
+	printf("\nProceso en: %fms\n", ((double)(fin-ini)));
+
+	/*
+	if(state == ST_CREATED)
+	{
+		// Do computations
+		computeNodesOptimized(rig->defRig, *model, MatrixWeights, distancesTemp);
+
+		state = ST_INIT;
+	}
+	else if(state == ST_INIT || state == ST_UPDATED)
+	{
+		state == ST_NOTVALID;
+
+		computeNodesOptimized(rig->defRig, *model, MatrixWeights, distancesTemp);
+	}
+	*/
 }
