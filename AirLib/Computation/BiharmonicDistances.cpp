@@ -284,7 +284,7 @@ int computeBDBinding(Modelo& modelo, binding* bd, vector<int>& indices, MatrixXf
 int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixLight& dists, bool withPatches)
 {
 
-	FILE* fout2 = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\tempValues\\ADistances_old_revisited.txt", "w");
+	//FILE* fout2 = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\tempValues\\ADistances_old_revisited.txt", "w");
 	
 	
 	printf("Computing Biharmonic distances.\n"); fflush(0);
@@ -599,7 +599,8 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 	end = clock();
 	printf("Guardar valores(podriamos considerarla simetrica): %f segs.\n", timelapse(end,begin)); fflush(0);
 	begin = clock();
-	
+
+	/*
 	for(int i = 0; i< nopts; i++)
 	{
 		for(int j = 0; j< nopts; j++)
@@ -610,7 +611,7 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 
 
 	fclose(fout2);
-
+	*/
 	return 0;
 }
 

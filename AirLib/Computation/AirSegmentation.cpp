@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-#define LOCAL_COMP_DEBUG false
+#define LOCAL_COMP_DEBUG true
 
 // Esta función debería actualizar los datos y relanzar los cálculos necesarios.
 bool AirRig::updateDefGroups()
@@ -1263,13 +1263,41 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		fflush(0);
 
 		//TODEBUG: BihDistances with matrix approach... uggh!
-		computeBDBinding( model, bds, indices, bds->A[surf], withPatches);
+		//computeBDBinding( model, bds, indices, bds->A[surf], withPatches);
 		
 		printf("\n\nComputado\n", bds->surfaces[surf].nodes.size());
 		// Old computations
-		//bindingBD( model, bds, indices, bds->BihDistances[surf], withPatches);
+		
+		printf("antes de nada\n");
+		symMatrixLight dists;
+		bindingBD( model, bds, indices, dists, withPatches);
+		double maxValue = 0;
+		for(int i = 0; i < dists.size; i++)
+		{
+			for(int j = i; j< dists.size; j++)
+			{
+				maxValue = max(maxValue, dists.get(i,j));
+			}
+		}
+
+		printf("MaxValue:%f\n", maxValue);
+		double scaleFactor = pow(10,6)/ maxValue;
+		printf("ScaleFactor:%f\n", scaleFactor);
+
+		bds->A[surf].resize(dists.size,dists.size);
+		for(int i = 0; i < dists.size; i++)
+		{
+			for(int j = i; j< dists.size; j++)
+			{
+				float tempValue = dists.get(i,j)*scaleFactor;
+				bds->A[surf](i,j) = tempValue;
+				bds->A[surf](j,i) = tempValue;
+			}
+		}
 
 	}
+
+	printf("Fin computacion\n");
 
 	return true;
 }
@@ -1512,13 +1540,15 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 
 	int time1  = 0; int time2 = 0; int times = 0;
 
-	VectorXf precomputedDistances(deformers.size());
-	VectorXf defExpansion(deformers.size());
+	VectorXf precomputedDistances(matrixDefReference.size());
+	VectorXf defExpansion(matrixDefReference.size());
 	
-	for(int i = 0; i< deformers.size(); i++)
+	for(int i = 0; i< matrixDefReference.size(); i++)
 	{
-		precomputedDistances[i] = deformers[i]->precomputedDistances;
-		defExpansion[i] = deformers[i]->expansion;
+		int nodeId = deformers[i]->nodeId;
+		int matrixCol = matrixDefReference[nodeId];
+		precomputedDistances[matrixCol] = deformers[i]->precomputedDistances;
+		defExpansion[matrixCol] = deformers[i]->expansion;
 	}
 
 	// Updates all the points that were linked to a dirty deformer
@@ -1834,8 +1864,19 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 	// Dos estrategias de calculo dependiendo de si vale la pena uno u otro
 	if(minValue > 0)//defNodesToUpdate.size() < defNodesSize/2 || defNodesSize < (float)model.vn()/50.0)
 	{
-			distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
-			A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
+		// Es mas rapida la multiplicacion por bloques... que hacerlo a mano con omp
+		distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
+		A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
+			
+		/*
+		#pragma omp parallel for
+		for(int i = 0; i< defNodesToUpdate.size(); i++)
+		{
+			int nodeId = defNodesToUpdate[i];
+			int matrixCol = defNodeRef[nodeId];
+			distancesTemp.col(matrixCol) = MatrixWeights.col(matrixCol).transpose()*A;
+		}
+		*/
 	}
 	else
 	{	
