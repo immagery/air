@@ -147,6 +147,26 @@ void AirSkinning::loadBindingForModel(Modelo *m, AirRig* rig)
 	*/
 }
 
+void AirSkinning::resetDeformations()
+{
+	// It's a bad way to ensure that we are deforming the right mdoel.
+	if (!deformedModel->shading->visible) return;
+
+	Geometry *m = deformedModel;
+	Geometry *mOrig = originalModel;
+
+	for (int k = 0; k < bind->pointData.size(); ++k) 
+	{ 
+			// and for each binding, loop over all its points
+			PointData& data = bind->pointData[k];
+			GraphNode* node = data.node;
+			int vertexID = node->id;
+			m->nodes[vertexID]->position = originalModel->nodes[vertexID]->position;
+	}
+
+	m->computeNormals();
+}
+
 void AirSkinning::computeDeformations(AirRig* rig)
 {
 	// Flags por si acaso

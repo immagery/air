@@ -500,6 +500,9 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 		// we can assign it directly.
 		transformation->pos = Vector3d(tx, ty, tz);
 
+		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+				transformation->restPos = transformation->pos;
+
 	    // parent and all the childs
 		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 			dirtyByTransformation(false);
@@ -513,6 +516,9 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			// We need to do transformation to bring it to local coords.
 			transformation->pos = Vector3d(tx, ty, tz);
 
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+				transformation->restPos = transformation->pos;
+
 			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 				dirtyByTransformation(true);
 		}
@@ -523,6 +529,9 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			Vector3d despl = Vector3d(tx, ty, tz)-dependentGroups[0]->getTranslation(false);
 			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
 			transformation->pos = despl;
+
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+				transformation->restPos = transformation->pos;
 
 			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 				dirtyByTransformation(false);
@@ -552,6 +561,9 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 		// The defgraph is in this rig
 		transformation->setRotation(q);
 
+		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+			transformation->restRot = transformation->qrot;
+
 		 // not parent but all the childs
 		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 			dirtyByTransformation(true);
@@ -567,6 +579,9 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 			// The defgraph is in this rig
 			transformation->setRotation(transformation->qOrient.inverse()*q);
 
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+				transformation->restRot = transformation->qrot;
+
 			// not parent but all the childs
 			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 				dirtyByTransformation(true);
@@ -576,6 +591,9 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 			Quaterniond newq = dependentGroups[0]->getRotation(false).inverse()*transformation->qOrient.inverse()*q;
 			newq.normalize();
 			transformation->setRotation(newq);
+
+			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+				transformation->restRot = transformation->qrot;
 
 			// not parent but all the childs
 			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)

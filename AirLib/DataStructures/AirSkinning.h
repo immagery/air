@@ -25,6 +25,8 @@ public:
 	virtual void computeDeformations(AirRig* rig);
 	virtual void computeDeformationsWithSW(AirRig* rig);
 
+	virtual void resetDeformations();
+
 	// Reference to rigg deformers
 	map< int, joint* > deformersRestPosition;
 	map< int, joint* > deformersPosition;

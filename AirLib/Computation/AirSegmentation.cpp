@@ -756,6 +756,8 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 	vector<float>* ptWT2 = &ptWT2_ini;
 
 	smoothPropagationRatio = 100;
+
+	smoothingPasses = 1;
 	
 	int threads = omp_get_max_threads();
 
@@ -1861,29 +1863,34 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 		printf("Computamos %d nodos\n", defNodesToUpdate.size());
 
 	auto ini2 = high_resolution_clock::now();
-	// Dos estrategias de calculo dependiendo de si vale la pena uno u otro
-	if(minValue > 0)//defNodesToUpdate.size() < defNodesSize/2 || defNodesSize < (float)model.vn()/50.0)
+
+	if(defNodesToUpdate.size() > 0)
 	{
-		// Es mas rapida la multiplicacion por bloques... que hacerlo a mano con omp
-		distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
-		A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
-			
-		/*
-		#pragma omp parallel for
-		for(int i = 0; i< defNodesToUpdate.size(); i++)
+		// Dos estrategias de calculo dependiendo de si vale la pena uno u otro
+		if(minValue > 0 && minValue< distancesTemp.cols())
+		//defNodesToUpdate.size() < defNodesSize/2 || defNodesSize < (float)model.vn()/50.0)
 		{
-			int nodeId = defNodesToUpdate[i];
-			int matrixCol = defNodeRef[nodeId];
-			distancesTemp.col(matrixCol) = MatrixWeights.col(matrixCol).transpose()*A;
+			// Es mas rapida la multiplicacion por bloques... que hacerlo a mano con omp
+			distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
+			A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
+			
+			/*
+			#pragma omp parallel for
+			for(int i = 0; i< defNodesToUpdate.size(); i++)
+			{
+				int nodeId = defNodesToUpdate[i];
+				int matrixCol = defNodeRef[nodeId];
+				distancesTemp.col(matrixCol) = MatrixWeights.col(matrixCol).transpose()*A;
+			}
+			*/
 		}
-		*/
-	}
-	else
-	{	
-		printf("Computacion a full\n");
-		////distancesTemp =  MatrixWeights.transpose()*A; (normal)
-		distancesTemp =  A*MatrixWeights; // At*Bt = (B*A)t
-		////distancesTemp.transposeInPlace(); 
+		else
+		{	
+			printf("Computacion a full\n");
+			////distancesTemp =  MatrixWeights.transpose()*A; (normal)
+			distancesTemp =  A*MatrixWeights; // At*Bt = (B*A)t
+			////distancesTemp.transposeInPlace(); 
+		}
 	}
 	auto fin2 = high_resolution_clock::now();
 	
