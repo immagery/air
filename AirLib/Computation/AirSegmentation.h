@@ -7,6 +7,8 @@
 
 #define useMVC true
 
+#define VERBOSE_PROCESS true
+
 #include <DataStructures\AirRig.h>
 
 class ordWeight 
@@ -31,9 +33,12 @@ void updateAirSkinning(DefGraph& graph, Modelo& model);
 
 // Segment the model using the air deformers.
 void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph);
-void segmentModelFromDeformersOpt(Modelo& model, binding* bd, DefGraph& graph, 
+
+void segmentModelFromDeformersOpt(  Modelo& model, binding* bd, DefGraph& graph, 
 									MatrixXf& subDistances, 
-									map<int, int>& matrixDefReference);
+									map<int, int>& matrixDefReference,
+                                    MatrixXf& computedDistances,
+									int computationSize);
 
 // Compute the hierarchical skinning using computed segmentation
 void propagateHierarchicalSkinning(Modelo& model, binding* bd);
@@ -52,7 +57,11 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, 
 // Compute secondary weights - now is not updating data, it computes what ever it needs.
 void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph);
 
-void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph);
+void computeSecondaryWeightsOpt(Modelo& model, binding* bd, 
+                                DefGraph& graph, MatrixXf& subdistances, 
+                                map<int, int>& idxOrder,
+                                MatrixXf& computedDistances,
+								bool wideValueComputation);
 
 int indexOfNode(int nodeId, vector<DefNode>& nodes);
 

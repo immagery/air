@@ -756,8 +756,6 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 	vector<float>* ptWT2 = &ptWT2_ini;
 
 	smoothPropagationRatio = 100;
-
-	smoothingPasses = 1;
 	
 	int threads = omp_get_max_threads();
 
@@ -1525,7 +1523,9 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 									binding* bd, 
 									DefGraph& graph, 
 									MatrixXf& subDistances, 
-									map<int, int>& matrixDefReference )
+									map<int, int>& matrixDefReference,
+									MatrixXf& computedDistances,
+									int computationSize)
 {
     // m, bb->intPoints, bb->embeddedPoints
 	vector< DefNode* >& deformers = graph.deformers;
@@ -1537,20 +1537,24 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	// Get wich deformers needs to be updated
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
-		dirtyDeformers[deformers[deformerId]->nodeId] = deformers[deformerId]->segmentationDirtyFlag;
+		dirtyDeformers[deformers[deformerId]->nodeId] =  deformers[deformerId]->segmentationDirtyFlag && 
+														!deformers[deformerId]->freeNode;
 	}
 
 	int time1  = 0; int time2 = 0; int times = 0;
-
+	
 	VectorXf precomputedDistances(matrixDefReference.size());
 	VectorXf defExpansion(matrixDefReference.size());
-	
-	for(int i = 0; i< matrixDefReference.size(); i++)
+
+	for(int i = 0; i< deformers.size(); i++)
 	{
-		int nodeId = deformers[i]->nodeId;
-		int matrixCol = matrixDefReference[nodeId];
-		precomputedDistances[matrixCol] = deformers[i]->precomputedDistances;
-		defExpansion[matrixCol] = deformers[i]->expansion;
+		if(!deformers[i]->freeNode)
+		{
+			int nodeId = deformers[i]->nodeId;
+			int matrixCol = matrixDefReference[nodeId];
+			precomputedDistances[matrixCol] = deformers[i]->precomputedDistances;
+			defExpansion[matrixCol] = deformers[i]->expansion;
+		}
 	}
 
 	// Updates all the points that were linked to a dirty deformer
@@ -1560,7 +1564,7 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
     {
 		PointData& pd = bd->pointData[pointId];
-		if(pd.segmentId > 0 && dirtyDeformers[pd.segmentId])
+		if(pd.segmentId > 0 && (dirtyDeformers[pd.segmentId] || graph.defNodesRef[pd.segmentId]->freeNode))
 		{
 			DefNode* def = graph.defNodesRef[pd.segmentId];
 			// El punto debe ser debatido entre todos los deformadores.
@@ -1568,11 +1572,15 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			int newSegmentId = -1;
 			float preCompDistance = def->precomputedDistances;
 
-			VectorXf subDistRow = subDistances.row(pointId);
+			VectorXf subDistRow = subDistances.row(pointId).segment(0, computationSize);
 			subDistRow *= -2;
-			subDistRow += precomputedDistances;
+			subDistRow += precomputedDistances.segment(0, computationSize);
 
-			VectorXf tempDistance = subDistRow.cwiseQuotient(defExpansion)*-1;
+			VectorXf tempDistance = subDistRow.cwiseQuotient(defExpansion.segment(0, computationSize))*-1;
+
+			//TODEBUG... podemos compactarlo.
+			//computedDistances.col(pointId) = tempDistance;
+
 			distance = tempDistance.minCoeff(&newSegmentId);
 
 			if(newSegmentId >= 0)
@@ -1596,7 +1604,7 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	
 	// Updates all the points comparing with all the dirty deformers
 	// Evaluacion de columnas... hay calculos que no se han guardado y podrian valer
-	#pragma omp parallel for
+	//#pragma omp parallel for
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
 		DefNode* def = deformers[deformerId];
@@ -1611,6 +1619,8 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			tempValues.fill(precomputedDistances[realDefId]);
 
 			VectorXf newDistances = (((subDistances.col(realDefId)*-2)+tempValues)/expansion)*-1;
+
+			//computedDistances.row(realDefId) = newDistances;
 
 			// este nodo tiene que pelear por todos los puntos.
 			for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
@@ -1774,12 +1784,16 @@ bool getDefomersfromBranch( DefGroup* defGroup, vector<DefNode*>& deformers)
 }
 
 
-// Engloba el calculo para un nodo, paralelizable... aunque mejor empaquetar trabajos.
-void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeights, MatrixXf& distancesTemp, map<int, int>& defNodeRef)
+// The comptation of a node, paralellized by OMP...
+void computeNodesOptimized( DefGraph& graph, 
+							Modelo& model, 
+							MatrixXf& MatrixWeights, 
+							MatrixXf& distancesTemp, 
+							map<int, int>& defNodeRef)
 {
 	auto total_ini = high_resolution_clock::now();
 
-	// Inicializacion
+	// Inicialization
 	auto ini0 = high_resolution_clock::now();
 	int defNodesSize = graph.deformers.size();
 	MatrixXf& A = model.bind->A[0];
@@ -1798,12 +1812,25 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 		it++;
 	}
 
+	/*
+	printf("Antes la primera secuencia\n");
+	for(int i = 0; i < lastPostions.size(); i++)
+	{
+		printf("%d - [%d, %d]\n", 
+				graph.defNodesRef[lastPostions[i]]->nodeId,
+				graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag, 
+				graph.defNodesRef[lastPostions[i]]->freeNode);
+	}
+	printf("\n\n");
+	*/
+
 	// Swap the elements, no matter the sort, just dirty in one hand and computed in the other
+	// 1. We allocate all the dirty anf free nodes in the right hand, and computed ones in the left
 	int idx1 = 0;
 	int idx2 = lastPostions.size()-1;
 	while(idx2 > idx1)
 	{
-		// Movemos los indices
+		// We move the indexes
 		while(idx1 < lastPostions.size() && !graph.defNodesRef[lastPostions[idx1]]->segmentationDirtyFlag) idx1++;
 		while(idx2 >= 0 && graph.defNodesRef[lastPostions[idx2]]->segmentationDirtyFlag) idx2--;
 		
@@ -1813,27 +1840,126 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 		int defNodeId001 = graph.defNodesRef[lastPostions[idx1]]->nodeId;
 		int defNodeId002 = graph.defNodesRef[lastPostions[idx2]]->nodeId;
 
-		// Matriz de pesos
+		// Matrix of weights
 		MatrixWeights.col(idx1).swap(MatrixWeights.col(idx2));
 
-		// Matriz de subdistancias
+		// Matrix of subdistances
 		distancesTemp.col(idx1).swap(distancesTemp.col(idx2));
 
-		// Referencias
+		// References
 		defNodeRef[defNodeId002] = idx1;
 		defNodeRef[defNodeId001] = idx2;
 
+		// Indexes
 		int temp = lastPostions[idx1];
 		lastPostions[idx1] = lastPostions[idx2];
 		lastPostions[idx2] = temp;
 	}
 	
+	printf("Despues la primera secuencia\n");
+	for(int i = 0; i < lastPostions.size(); i++)
+	{
+		printf("%d - [%d, %d]\n", 
+				graph.defNodesRef[lastPostions[i]]->nodeId,
+				graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag, 
+				graph.defNodesRef[lastPostions[i]]->freeNode);
+	}
+	printf("\n\n");
+
+
+	// 2. Just working over the right hand group, We allocate all the dirty nodes in the left hand and free ones in the right
+	// With this we only compute the dirty nodes and do all the computations over this submatrix
+	idx1 = -1;
+	for(int i = 0; i < lastPostions.size(); i++)
+	{
+		if(graph.defNodesRef[lastPostions[i]]->freeNode)
+		{
+			idx1 = i;
+		}
+
+		/*
+		if(idx1 >= 0)
+		{
+			if(!graph.defNodesRef[lastPostions[idx1]]->segmentationDirtyFlag)
+			{
+				printf("Tenemos un problema, no esta bien ordenado\n");
+				assert(false);
+			}
+			break;
+		}
+		*/
+	}
+	idx2 = lastPostions.size()-1;
+
+	if(idx1 < 0) idx1 = idx2;
+
+	while(idx2 > idx1)
+	{
+		// We move the indexes
+		while(idx1 < lastPostions.size() && !graph.defNodesRef[lastPostions[idx1]]->freeNode) idx1++;
+		while(idx2 >= 0 && graph.defNodesRef[lastPostions[idx2]]->freeNode) idx2--;
+		
+		if(idx1 == lastPostions.size() || idx2< 0 || idx2 < idx1) break;
+
+		// SWAP
+		int defNodeId001 = graph.defNodesRef[lastPostions[idx1]]->nodeId;
+		int defNodeId002 = graph.defNodesRef[lastPostions[idx2]]->nodeId;
+
+		// Matrix of weights
+		MatrixWeights.col(idx1).swap(MatrixWeights.col(idx2));
+
+		// Matrix of subdistances
+		distancesTemp.col(idx1).swap(distancesTemp.col(idx2));
+
+		// References
+		defNodeRef[defNodeId002] = idx1;
+		defNodeRef[defNodeId001] = idx2;
+
+		// Indexes
+		int temp = lastPostions[idx1];
+		lastPostions[idx1] = lastPostions[idx2];
+		lastPostions[idx2] = temp;
+	}
+
+	printf("Despues de la segunda secuencia\n");
+	for(int i = 0; i < lastPostions.size(); i++)
+	{
+		printf("%d - [%d, %d] ->", 
+				graph.defNodesRef[lastPostions[i]]->nodeId,
+				graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag, 
+				graph.defNodesRef[lastPostions[i]]->freeNode);
+
+		printf("%d\n", graph.defNodesRef[lastPostions[i]]->boneId);
+	}
+
+	idx1 = -1; // first index: change from computed to not computed
+	idx2 = -1; // second index: change from not free to free ones.
+	for(int i = 0; i < lastPostions.size(); i++)
+	{
+		if(idx2 < 0 && graph.defNodesRef[lastPostions[i]]->freeNode)
+		{
+			idx2 = i;
+		}
+
+		if(idx1 < 0 && graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag)
+		{
+			idx1 = i;
+		}
+	}
+	if(idx2 < 0) idx2 = lastPostions.size();
+	if(idx1 < 0) idx1 = 0;
+
+	printf("Computar desde %d a %d\n", idx1, idx2);
+	if(idx1 - idx2 <= 0)
+		printf("Parce que no tenemos que procesar nada\n");
+
 	it = defNodeRef.begin();
 	vector<int> defNodesToUpdate;
 	int minValue = 999999999;
 	for(; it != defNodeRef.end(); it++ )
 	{
-		if(graph.defNodesRef[it->first]->segmentationDirtyFlag) 
+		if(!graph.defNodesRef[it->first]->freeNode && 
+		    graph.defNodesRef[it->first]->segmentationDirtyFlag) 
 		{
 			defNodesToUpdate.push_back(it->first);
 			minValue = min(minValue, it->second);
@@ -1864,16 +1990,23 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 
 	auto ini2 = high_resolution_clock::now();
 
-	if(defNodesToUpdate.size() > 0)
+	int blockSize = idx2-idx1;
+
+	if(defNodesToUpdate.size() > 0 )
 	{
 		// Dos estrategias de calculo dependiendo de si vale la pena uno u otro
-		if(minValue > 0 && minValue< distancesTemp.cols())
+		//if(minValue > 0 && minValue< distancesTemp.cols())
 		//defNodesToUpdate.size() < defNodesSize/2 || defNodesSize < (float)model.vn()/50.0)
+		if(true) // He bloqueado a hacer un calculo así porque casi siempre sera un bloque, quizas todo.
 		{
 			// Es mas rapida la multiplicacion por bloques... que hacerlo a mano con omp
-			distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
+			/*distancesTemp.block(0, minValue, model.vn(), defNodesToUpdate.size()) =  
 			A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
-			
+			*/
+
+			distancesTemp.block(0, idx1, model.vn(), blockSize) =  
+			A*MatrixWeights.block(0, idx1, model.vn(), blockSize);
+
 			/*
 			#pragma omp parallel for
 			for(int i = 0; i< defNodesToUpdate.size(); i++)
@@ -1905,8 +2038,16 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 	}
 	auto fin3 = high_resolution_clock::now();
 
+	// This will be removed or solved... by now...rest in peace.
+	MatrixXf computedDistances;
+	//MatrixXf computedDistances(defNodeRef.size(), model.vn());
+
+	int computationSize = idx2;
+	if(computationSize < 0)
+		computationSize = defNodeRef.size();
+
 	auto ini4 = high_resolution_clock::now();
-	segmentModelFromDeformersOpt(model, model.bind, graph, distancesTemp, defNodeRef);
+	segmentModelFromDeformersOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, computationSize);
 	auto fin4 = high_resolution_clock::now();
 	
 	auto ini5 = high_resolution_clock::now();
@@ -1916,7 +2057,7 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 		
 	auto ini6 = high_resolution_clock::now();
 	// Compute Secondary weights ... by now compute all the sec. weights
-	computeSecondaryWeights(model, model.bind, graph);
+	computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, false);
 
 	if(LOCAL_COMP_DEBUG)
 	{
@@ -1956,12 +2097,15 @@ void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeigh
 
 }
 
-void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph)
+void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph, MatrixXf& subdistances, 
+								map<int, int>& idxOrder, MatrixXf& computedDistances, bool wideValueComputation)
 {
     // No hay ningun binding
     if(!bd ) return;
 
 	vector< DefNode >& points = bd->intPoints;
+
+	#pragma omp parallel for
 	for(int pt = 0; pt < bd->pointData.size(); pt++)
 	{
 		PointData& dp = bd->pointData[pt];
@@ -1974,6 +2118,21 @@ void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph)
 
 			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
 			{
+				// Vamos a hacer una proyección tal cual
+				Vector3d fin = group->relatedGroups[childIdx]->transformation->translation;
+				Vector3d ini = group->transformation->translation;
+				Vector3d dir = fin-ini;
+				float norm  = dir.norm();
+				Vector3d posDir = dp.node->position-ini;
+
+				float projectionValue = ((dir/norm).dot(posDir))/norm ;
+
+				if(projectionValue < 0 ) projectionValue = 0;
+				else if (projectionValue > 1) projectionValue = 1;
+
+				dp.secondInfluences[infl][childIdx].alongBone = projectionValue;
+
+				/*
 				float dist = 9999999;
 				int nodeIdChildSegment = -1;
 				for(int defNodeIdx = 0; defNodeIdx < group->deformers.size(); defNodeIdx++)
@@ -2006,230 +2165,13 @@ void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph)
 				{
 					dp.secondInfluences[infl][childIdx].alongBone = 0.0;
 				}
+				*/
 			}
 		}
 	}
 
-	
-	if(false)
-	{
-
-	for(int pt = 0; pt < bd->pointData.size(); pt++)
-	{
-		if(pt%300 == 0)
-		{
-			printf("%fp.\n", (float)pt/(float)bd->pointData.size());
-			fflush(0);
-		}
-
-		PointData& dp = bd->pointData[pt];
-		dp.secondInfluences.resize(dp.influences.size());
-		for(int infl = 0; infl< dp.influences.size(); infl++)
-		{
-			int idInfl = dp.influences[infl].label;
-			DefGroup* group = graph.defGroupsRef[idInfl];
-
-			dp.secondInfluences[infl].resize(group->relatedGroups.size());
-			vector<bool> assigned;
-			assigned.resize(group->relatedGroups.size(), false);
-
-			// Si tiene hijos o realmente encuentra el deformador.... hay que ver segmentId, que tal.
-			int idxNodeAsignedAux = indexOfNode(dp.segmentId,group->deformers);
-
-			if(idxNodeAsignedAux<0)
-			{
-				for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
-				{
-					if(isInTheBrach(group->relatedGroups[childIdx], dp.segmentId))
-					{
-						/*
-						vector<DefNode*> deformersFromBranch;
-						getDefomersfromBranch(group->relatedGroups[childIdx], deformersFromBranch);
-
-						float distance = 999999;
-						int assignedIdx = -1;
-						for(int defbranchIdx = 0; defbranchIdx< deformersFromBranch.size(); defbranchIdx++)
-						{
-							DefNode* def = deformersFromBranch[defbranchIdx];
-							float newDistance = -BiharmonicDistanceP2P_sorted(
-												def->MVCWeights, 
-												def->weightsSort, 
-												pt, bd, 
-												def->expansion, 
-												def->precomputedDistances, 
-												def->cuttingThreshold);
-
-							if(assignedIdx < 0 || distance > newDistance)
-							{
-								assignedIdx = defbranchIdx;
-								distance = newDistance;
-							}
-						}
-
-						if(assignedIdx >= 0)
-						*/
-						{
-							// The point is asociated with some child, we can try to do a proyection over this bone
-							// and get this value, the other points takes a 0.
-							dp.secondInfluences[infl][childIdx].alongBone = 1.0;
-							assigned[childIdx] = true;
-						}
-
-						break;
-					}
-				}
-				continue;
-			}
-			
-			// El Hijo que ya esta asignado
-			DefNode* asignedNode = &group->deformers[idxNodeAsignedAux];
-			for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
-			{
-				if(group->relatedGroups[childIdx]->nodeId == asignedNode->childBoneId)
-				{
-					dp.secondInfluences[infl][childIdx].alongBone = asignedNode->ratio;
-					assigned[childIdx] = true;
-				}
-			}
-
-			// Discretizamos el resto segun el hijo
-			vector<DefNode*> defs;
-			for(int idxNode = 0; idxNode < group->deformers.size(); idxNode++)
-			{
-				DefNode& node = group->deformers[idxNode];
-
-				if(node.boneId != group->nodeId)
-				{
-					// En principio ninguno entrara por aqui
-					continue;
-				}
-
-				if(node.childBoneId != asignedNode->childBoneId)
-				{
-					defs.push_back(&node);
-				}
-			}
-
-			//Evaluaremos para cada hijo, cual es el mejor defNode y asigmanos su ratio
-			if(group->relatedGroups.size()>1)
-			{
-				for(int childIdx = 0; childIdx < group->relatedGroups.size(); childIdx++)
-				{
-					if(assigned[childIdx])continue;
-
-					float dist = 9999999;
-					int nodeIdChildSegment = -1;
-				
-					for(int idxNode = 0; idxNode < defs.size(); idxNode++)
-					{
-						// Solo comparamos entre si los nodos que van al mismo hijo.
-						if(defs[idxNode]->childBoneId != group->relatedGroups[childIdx]->nodeId )
-							continue;
-
-						DefNode* def = defs[idxNode];
-						float newDistance = -BiharmonicDistanceP2P_sorted(def->MVCWeights, 
-											def->weightsSort, 
-											pt, bd, 
-											def->expansion, 
-											def->precomputedDistances, 
-											def->cuttingThreshold);
-
-						if(nodeIdChildSegment < 0)
-						{
-							nodeIdChildSegment = idxNode;
-							dist = newDistance;
-						}
-						else if(newDistance < dist)
-						{
-							nodeIdChildSegment = idxNode;
-							dist = newDistance;
-						}
-					}
-
-					// Tenemos un elementos fuera, o no parece que no se acerca a nadie
-					if(nodeIdChildSegment >= 0)
-					{
-						dp.secondInfluences[infl][childIdx].alongBone = defs[nodeIdChildSegment]->ratio;
-					}
-					else
-					{
-						printf("Tenemos un nodo que analizar\n"); fflush(0);
-					}
-
-				}
-			}
-
-			/*
-				if(group)
-					// Recogemos los nodos relevantes.
-					vector<DefNode*> relevantNodes;
-					for(int candidateNodes = 0; candidateNodes < jt->nodes.size(); candidateNodes++)
-					{
-						if(jt->nodes[candidateNodes]->childBoneId < 0)
-						{
-							relevantNodes.push_back(jt->nodes[candidateNodes]);
-							continue;
-						}
-						else if(jt->nodes[candidateNodes]->childBoneId == jt->childs[childIdx]->nodeId)
-						{
-							relevantNodes.push_back(jt->nodes[candidateNodes]);
-						}
-					}
-					// Debería haber al menos 1 nodo.
-					// Lo empilamos para evaluar todo el segmento.
-					//relevantNodes.push_back(jt->childs[childIdx]->nodes[0]);
-
-					double thresh = -10;// bd->weightsCutThreshold;
-				
-					float bestDistance = 9999999;
-					int bestNode = -1;
-
-					float secondDistance = 99999099;
-					int secondNode = -1;
-
-					// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
-
-					for(int node = 0; node < relevantNodes.size(); node++)
-					{
-						int idxNode = indexOfNode(relevantNodes[node]->nodeId, bd->intPoints);
-
-						assert(idxNode >= 0);
-
-						float distance = 0;
-						if(useMVC)
-						{
-							distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
-						}
-						else
-						{
-							//distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
-							distance = -BiharmonicDistanceP2P_HC(weightsClean[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances);
-						}
-						if(bestNode == -1 || bestDistance > distance)
-						{
-							secondNode = bestNode;
-							secondDistance = bestDistance;
-
-							bestNode = node;
-							bestDistance = distance;
-						}
-						else if(secondNode == -1 || secondDistance > distance)
-						{
-							secondNode = node;
-							secondDistance = distance;
-						}
-					}
-
-					dp.secondInfluences[infl][childIdx] = 1-((float)bestNode/((float)relevantNodes.size()-1));
-					continue;
-
-				}
-			}
-			*/
-		}
-	}
-
-	}
+	// Just the first part of the computation
+	if(!wideValueComputation) return; 
 
 	map<int, int> fromThisGroup;
 	for(int defIdx = 0; defIdx < graph.deformers.size(); defIdx++)
@@ -2269,7 +2211,7 @@ void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph)
 			{
 					pd.auxInfluences.clear();
 					pd.ownerLabel = -1;
-					pointsFromThisGroup.push_back(&pd);
+					//pointsFromThisGroup.push_back(&pd);
 			}
 		}
 
@@ -2378,7 +2320,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 		}
 	}
 
-	
+	/*
 	if(false)
 	{
 
@@ -2410,32 +2352,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 				{
 					if(isInTheBrach(group->relatedGroups[childIdx], dp.segmentId))
 					{
-						/*
-						vector<DefNode*> deformersFromBranch;
-						getDefomersfromBranch(group->relatedGroups[childIdx], deformersFromBranch);
-
-						float distance = 999999;
-						int assignedIdx = -1;
-						for(int defbranchIdx = 0; defbranchIdx< deformersFromBranch.size(); defbranchIdx++)
-						{
-							DefNode* def = deformersFromBranch[defbranchIdx];
-							float newDistance = -BiharmonicDistanceP2P_sorted(
-												def->MVCWeights, 
-												def->weightsSort, 
-												pt, bd, 
-												def->expansion, 
-												def->precomputedDistances, 
-												def->cuttingThreshold);
-
-							if(assignedIdx < 0 || distance > newDistance)
-							{
-								assignedIdx = defbranchIdx;
-								distance = newDistance;
-							}
-						}
-
-						if(assignedIdx >= 0)
-						*/
+						
 						{
 							// The point is asociated with some child, we can try to do a proyection over this bone
 							// and get this value, the other points takes a 0.
@@ -2527,77 +2444,12 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 				}
 			}
 
-			/*
-				if(group)
-					// Recogemos los nodos relevantes.
-					vector<DefNode*> relevantNodes;
-					for(int candidateNodes = 0; candidateNodes < jt->nodes.size(); candidateNodes++)
-					{
-						if(jt->nodes[candidateNodes]->childBoneId < 0)
-						{
-							relevantNodes.push_back(jt->nodes[candidateNodes]);
-							continue;
-						}
-						else if(jt->nodes[candidateNodes]->childBoneId == jt->childs[childIdx]->nodeId)
-						{
-							relevantNodes.push_back(jt->nodes[candidateNodes]);
-						}
-					}
-					// Debería haber al menos 1 nodo.
-					// Lo empilamos para evaluar todo el segmento.
-					//relevantNodes.push_back(jt->childs[childIdx]->nodes[0]);
-
-					double thresh = -10;// bd->weightsCutThreshold;
-				
-					float bestDistance = 9999999;
-					int bestNode = -1;
-
-					float secondDistance = 99999099;
-					int secondNode = -1;
-
-					// Tengo que obtener la información correspondiente a este punto, para ir más rápido.
-
-					for(int node = 0; node < relevantNodes.size(); node++)
-					{
-						int idxNode = indexOfNode(relevantNodes[node]->nodeId, bd->intPoints);
-
-						assert(idxNode >= 0);
-
-						float distance = 0;
-						if(useMVC)
-						{
-							distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
-						}
-						else
-						{
-							//distance = -BiharmonicDistanceP2P_sorted(weights[idxNode], sortedWeights[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances, thresh);
-							distance = -BiharmonicDistanceP2P_HC(weightsClean[idxNode], dp.node->id, bd, relevantNodes[node]->expansion, relevantNodes[node]->precomputedDistances);
-						}
-						if(bestNode == -1 || bestDistance > distance)
-						{
-							secondNode = bestNode;
-							secondDistance = bestDistance;
-
-							bestNode = node;
-							bestDistance = distance;
-						}
-						else if(secondNode == -1 || secondDistance > distance)
-						{
-							secondNode = node;
-							secondDistance = distance;
-						}
-					}
-
-					dp.secondInfluences[infl][childIdx] = 1-((float)bestNode/((float)relevantNodes.size()-1));
-					continue;
-
-				}
-			}
-			*/
+			
 		}
 	}
 
 	}
+	*/
 
 	map<int, int> fromThisGroup;
 	for(int defIdx = 0; defIdx < graph.deformers.size(); defIdx++)
@@ -2637,7 +2489,7 @@ void computeSecondaryWeights(Modelo& model, binding* bd, DefGraph& graph)
 			{
 					pd.auxInfluences.clear();
 					pd.ownerLabel = -1;
-					pointsFromThisGroup.push_back(&pd);
+					//pointsFromThisGroup.push_back(&pd);
 			}
 		}
 

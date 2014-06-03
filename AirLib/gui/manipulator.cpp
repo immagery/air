@@ -35,6 +35,19 @@ void airFrame::getMatrix(Matrix4d& mtx)
 	*/
 }
 
+manipulator::manipulator()
+{
+	bModifierMode = false;
+	size = 1.0;
+	type = MANIP_NONE;
+	axis = AXIS_X;
+	bEnable = false;
+
+	projectedPoint = Vector3d(0,0,0);
+
+	mode = TM_HIERARCHY;
+}
+
 
 void manipulator::drawNamesWithProjectingPlane()
 {
@@ -125,10 +138,24 @@ void manipulator::drawNamesWithProjectingPlane()
 	*/
 }
 
-void manipulator::applyTransformation(object* obj, transformMode mode)
+void manipulator::applyTransformation(object* obj, manipulatorType type, transformMode mode)
 {
-	obj->setTranslation(currentframe.position.x(),currentframe.position.y(),currentframe.position.z(), false);
-	obj->setRotation(currentframe.rotation, false);
+	if(mode == TM_HIERARCHY)
+	{
+		if(type == MANIP_MOVE)
+			obj->setTranslation(currentframe.position.x(),currentframe.position.y(),currentframe.position.z(), false);
+
+		if(type == MANIP_ROT)
+			obj->setRotation(currentframe.rotation, false);
+	}
+	else if(mode == TM_SINGLE)
+	{
+		if(type == MANIP_MOVE)
+			obj->setTranslation(currentframe.position.x(),currentframe.position.y(),currentframe.position.z(), true);
+		
+		if(type == MANIP_ROT)
+			obj->setRotation(currentframe.rotation, true);	
+	}
 
 	if(obj->shading)
 		obj->shading->dirtyFlag = true;
@@ -138,7 +165,91 @@ void manipulator::applyTransformation(object* obj, transformMode mode)
 	obj->update();
 }
 
-void manipulator::setManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
+void manipulator::startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool withOffset)
+{
+	orig = rayOrigin;
+	dir = rayDir;
+	previousframe = currentframe;
+
+	if(type == MANIP_MOVE)
+	{
+		Vector3d u,v;
+		Vector3d v1,v2;
+
+		// Get directions
+		if(axis == AXIS_X)
+		{
+			u = Vector3d(1,0,0);
+		}
+		else if(axis == AXIS_Y)
+		{
+			u = Vector3d(0,1,0);
+		}
+		else if(axis == AXIS_Z)
+		{
+			u = Vector3d(0,0,1);
+		}
+		
+		u = currentframe.rotation._transformVector(u);
+		v = u.cross(rayDir);
+		v.normalize();
+
+		Vector3d I; 
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position,  v, u, I);
+		if(intersecFlag != 1) 
+			return; 
+
+		// Whe save the offset for better user interaction.
+		previousframe.posOffset = (I-previousframe.position).dot(u)*u;
+		
+		selectedPoint = previousframe.posOffset + previousframe.position;
+
+	}
+	else if(type == MANIP_ROT)
+	{
+		Vector3d u(0,0,0),v(0,0,0);
+
+		// Get directions
+		if(axis == AXIS_X)
+		{
+			u = Vector3d(0,1,0);
+			v = Vector3d(0,0,1);
+		}
+		else if(axis == AXIS_Y)
+		{
+			u = Vector3d(0,0,1);
+			v = Vector3d(1,0,0);
+		}
+		else if(axis == AXIS_Z)
+		{
+			u = Vector3d(1,0,0);
+			v = Vector3d(0,1,0);
+		}
+		
+		u = previousframe.rotation._transformVector(u);
+		v = previousframe.rotation._transformVector(v);
+
+		u.normalize();
+		v.normalize();
+
+		Vector3d I; 
+		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position,v,u, I);
+
+		if(intersecFlag != 1) 
+		{
+			//printf("No intersecciona!\n");
+			return;
+		}
+
+		selectedPoint = I;
+
+		// Whe save the offset for better user interaction.
+		previousframe.rotOffset.setFromTwoVectors(u, (previousframe.position-I).normalized());
+		//printf("Setting transformation->selectedPoint: %f %f %f\n",selectedPoint.x(), selectedPoint.y(),selectedPoint.z());
+	}
+}
+
+void manipulator::setManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool withOffset)
 {
 	orig = rayOrigin;
 	dir = rayDir;
@@ -247,9 +358,12 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 		if(intersecFlag != 1) 
 			return;
 
-		Vector3d applyIncrement = applyIncrement.dot(u.normalized())*u;
-		currentframe.position = previousframe.position + applyIncrement;
+		Vector3d applyIncrement = I - previousframe.position;
+		applyIncrement = applyIncrement.dot(u.normalized())*u;
 
+		currentframe.position = previousframe.position + applyIncrement - previousframe.posOffset;
+
+		projectedPoint2 = previousframe.position + applyIncrement;
 		projectedPoint = I;
 	}
 	else if(type == MANIP_ROT)
@@ -322,13 +436,15 @@ void manipulator::drawFuncNames()
 	glPushMatrix();
 
 	Matrix4d transformMatrix;
-	currentframe.getMatrix(transformMatrix);
-
-	GLdouble multiplyingMatrix[16] = {transformMatrix(0,0), transformMatrix(0,1), transformMatrix(0,2), transformMatrix(0,3),
-									transformMatrix(1,0), transformMatrix(1,1), transformMatrix(1,2), transformMatrix(1,3),
-									transformMatrix(2,0), transformMatrix(2,1), transformMatrix(2,2), transformMatrix(2,3),
-									transformMatrix(3,0), transformMatrix(3,1), transformMatrix(3,2), transformMatrix(3,3)
-								};
+	previousframe.getMatrix(transformMatrix);
+	GLdouble multiplyingMatrix[16] = {transformMatrix(0,0), transformMatrix(0,1), 
+											transformMatrix(0,2), transformMatrix(0,3),
+										transformMatrix(1,0), transformMatrix(1,1), 
+											transformMatrix(1,2), transformMatrix(1,3),
+										transformMatrix(2,0), transformMatrix(2,1), 
+											transformMatrix(2,2), transformMatrix(2,3),
+										transformMatrix(3,0), transformMatrix(3,1), 
+											transformMatrix(3,2), transformMatrix(3,3)};
 
 	glMultMatrixd(multiplyingMatrix);
 
@@ -340,36 +456,36 @@ void manipulator::drawFuncNames()
 	{
 		glDisable(GL_LIGHTING);
 
-		glLineWidth(size*2);
-		glPushName(0.0);
-		glPointSize(size*size);
+		glLineWidth(6);
+		//glPushName(0);
+		glPointSize(15);
 		glBegin(GL_POINT);
 		glColor3f(1.0,1.0,1.0);
 		glVertex3d(0,0,0);
 		glEnd();
 		glPopName();
 
-		glPushName(1.0);
+		glPushName(1);
 		glBegin(GL_LINES);
 		glColor3f(1.0,0,0);
 		glVertex3d(0,0,0);
-		glVertex3d(size,0,0);
+		glVertex3d(size*3,0,0);
 		glEnd();
 		glPopName();
 
-		glPushName(2.0);
+		glPushName(2);
 		glBegin(GL_LINES);
 		glColor3f(0,1.0,0);
 		glVertex3d(0,0,0);
-		glVertex3d(0,size,0);
+		glVertex3d(0,size*3,0);
 		glEnd();
 		glPopName();
 
-		glPushName(3.0);
+		glPushName(3);
 		glBegin(GL_LINES);
 		glColor3f(0,0,1.0);
 		glVertex3d(0,0,0);
-		glVertex3d(0,0,size);
+		glVertex3d(0,0,size*3);
 		glEnd();
 		glPopName();
 
@@ -379,6 +495,7 @@ void manipulator::drawFuncNames()
 	}
 	else if(type == MANIP_ROT)
 	{
+		glLineWidth(8);
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
 		//glColor3f(1.0,0,0);
@@ -443,15 +560,21 @@ void manipulator::drawFunc()
 
 		Matrix4d transformMatrix;
 		previousframe.getMatrix(transformMatrix);
-		GLdouble multiplyingMatrix[16] = {transformMatrix(0,0), transformMatrix(0,1), transformMatrix(0,2), transformMatrix(0,3),
-										  transformMatrix(1,0), transformMatrix(1,1), transformMatrix(1,2), transformMatrix(1,3),
-										  transformMatrix(2,0), transformMatrix(2,1), transformMatrix(2,2), transformMatrix(2,3),
-										  transformMatrix(3,0), transformMatrix(3,1), transformMatrix(3,2), transformMatrix(3,3)
+		GLdouble multiplyingMatrix[16] = {transformMatrix(0,0), transformMatrix(0,1), 
+												transformMatrix(0,2), transformMatrix(0,3),
+										  transformMatrix(1,0), transformMatrix(1,1), 
+												transformMatrix(1,2), transformMatrix(1,3),
+										  transformMatrix(2,0), transformMatrix(2,1), 
+												transformMatrix(2,2), transformMatrix(2,3),
+										  transformMatrix(3,0), transformMatrix(3,1), 
+												transformMatrix(3,2), transformMatrix(3,3)
 									};
 
 		glMultMatrixd(multiplyingMatrix);
 
-		glPointSize(size*1.5);
+		int tempSize = (int)ceil(size);
+
+		glPointSize(tempSize*1.5);
 		glBegin(GL_POINTS);
 		glColor3f(0.5,0.5,0.5);
 		glVertex3d(0,0,0);
@@ -461,11 +584,22 @@ void manipulator::drawFunc()
 
 		if(type == MANIP_MOVE)
 		{
-			glPointSize(size*1.5);
-			glBegin(GL_LINE);
+			glPointSize(1);
+			glLineWidth(1);
+			glBegin(GL_LINES);
 			glColor3f(0.5,0.5,0.5);
-			glVertex3d(previousframe.position.x(),previousframe.position.y(),previousframe.position.z());
+			glVertex3d(projectedPoint2.x(),projectedPoint2.y(),projectedPoint2.z());
 			glVertex3d(selectedPoint.x(),selectedPoint.y(),selectedPoint.z());
+			glEnd();
+
+			glPointSize(tempSize*8);
+			glBegin(GL_POINTS);
+			glColor3f(0.9,0.5,0.5);
+			glVertex3d(projectedPoint2.x(),projectedPoint2.y(),projectedPoint2.z());
+			glColor3f(0.9,0.5,0.9);
+			glVertex3d(selectedPoint.x(),selectedPoint.y(),selectedPoint.z());
+			//glColor3f(0.5,0.5,0.9);
+			//glVertex3d(projectedPoint.x(),projectedPoint.y(),projectedPoint.z());
 			glEnd();
 		}
 		else if(type == MANIP_ROT)
@@ -482,7 +616,7 @@ void manipulator::drawFunc()
 				int parar = 0;
 
 
-			glPointSize(size*1.5);
+			glPointSize(tempSize*2);
 			glDisable(GL_LIGHTING);
 			glBegin(GL_LINES);
 			glColor3f(0.7,0.7,0.7);
@@ -517,6 +651,8 @@ void manipulator::drawFunc()
 
 	glMultMatrixd(multiplyingMatrix);
 
+	int tempSize = (int) ceil(4 * size);
+
 	if(type == MANIP_NONE)
 	{
 		// no manipulator visible
@@ -524,47 +660,47 @@ void manipulator::drawFunc()
 	else if(type == MANIP_MOVE)
 	{
 		glDisable(GL_LIGHTING);
-		glLineWidth(size);
+		glLineWidth(tempSize);
 		
 		if(axis== AXIS_X)
-			glLineWidth(size*1.2);
+			glLineWidth(5);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(3);
 
 		glBegin(GL_LINES);
 		glColor3f(1.0,0,0);
 		glVertex3d(0,0,0);
-		glVertex3d(size,0,0);
+		glVertex3d(size*3,0,0);
 		glEnd();
 
 		if(axis== AXIS_Y)
-			glLineWidth(size*1.2);
+			glLineWidth(5);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(3);
 
 		glBegin(GL_LINES);
 		glColor3f(0,1.0,0);
 		glVertex3d(0,0,0);
-		glVertex3d(0,size,0);
+		glVertex3d(0,size*3,0);
 		glEnd();
 
 		if(axis== AXIS_Z)
-			glLineWidth(size*1.2);
+			glLineWidth(5);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(3);
 
 		glBegin(GL_LINES);
 		glColor3f(0,0,1.0);
 		glVertex3d(0,0,0);
-		glVertex3d(0,0,size);
+		glVertex3d(0,0,size*3);
 		glEnd();
 
 		if(axis== AXIS_VIEW)
-			glLineWidth(size*1.2);
+			glLineWidth(5);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(3);
 
-		glPointSize(size*size);
+		glPointSize(8);
 		glBegin(GL_POINTS);
 		glColor3f(1,1,0);
 		glVertex3d(0,0,0);
@@ -572,13 +708,15 @@ void manipulator::drawFunc()
 
 		glLineWidth(1.0);
 
-		glPointSize(size*size);
+		/*
+		glPointSize(3);
 		glBegin(GL_POINTS);
 		glColor3f(1,1,1);
 		glVertex3d(selectedPoint.x(),selectedPoint.y(),selectedPoint.z());
 		glColor3f(0,1,0);
 		glVertex3d(projectedPoint.x(),projectedPoint.y(),projectedPoint.z());
 		glEnd();
+		*/
 
 		glEnable(GL_LIGHTING);
 	}
@@ -586,9 +724,9 @@ void manipulator::drawFunc()
 	{
 
 		if(axis== AXIS_X)
-			glLineWidth(size*1.2);
+			glLineWidth(tempSize);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(tempSize*2);
 
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
@@ -596,9 +734,9 @@ void manipulator::drawFunc()
 		drawCircle(CURVE_RES, size);
 
 		if(axis== AXIS_Z)
-			glLineWidth(size*1.2);
+			glLineWidth(tempSize);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(tempSize*2);
 
 		glRotatef(90, 0,1,0); // rotar en y
 		glColor3f(0,0.0,1.0);
@@ -606,9 +744,9 @@ void manipulator::drawFunc()
 		glPopMatrix();
 
 		if(axis== AXIS_Y)
-			glLineWidth(size*1.2);
+			glLineWidth(tempSize);
 		else
-			glLineWidth(size*0.8);
+			glLineWidth(tempSize*2);
 
 		glPushMatrix();
 		glColor3f(0,1.0,0.0); // rotar en x

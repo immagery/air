@@ -20,6 +20,7 @@ public:
 		model = NULL;
 		bd = NULL;
 		state = ST_CREATED;
+		defNodeComputationReference.clear();
 	}
 
 	// Init data for computations

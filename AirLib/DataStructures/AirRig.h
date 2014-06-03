@@ -13,19 +13,12 @@
 #include <DataStructures/rig.h>
 #include <DataStructures/AirSkinning.h>
 
+#include <DataStructures\DefGroup.h>
+#include <DataStructures\DefGraph.h>
+#include <DataStructures\AirConstraint.h>
+
 #include <Eigen/Dense>
 
-#define endChop_DEF 0.001
-#define ratioExpansion_DEF 1.0
-
-#define default_SMOOTHING_PASES 3
-#define default_SMOOTHING_RATIO 0.25
-
-#define default_SUBDIVISION_RATIO 0.25
-#define default_EXPANSION 1
-
-#define default_INI_TWIST 0.0
-#define default_END_TWIST 1.0
 
 using namespace std;
 using namespace Eigen;
@@ -39,160 +32,7 @@ public:
 	ControlGroup() {}
 };
 
-enum DefGroupType { DEF_NONE = 0, DEF_POINT, DEF_STICK, DEF_SURFACE, DEF_VOLUME};
 
-class airRigSerialization
-{
-public:
-	string sModelName;
-	vector<string> sSkeletonName;
-
-	map<int, int> defNodesRelation;
-	map<int, int> defGroupsRelation;
-};
-
-class defGroupSerialization
-{
-public:
-	defGroupSerialization(){}
-
-	string sJointName;
-};
-
-class DefGroup : public object
-{
-public:
-	DefGroup(int nodeId);
-	DefGroup(int nodeId, joint* jt);
-
-	vector<DefNode> deformers;
-	joint* transformation;
-
-	joint* rigTransform;
-
-	float subdivisionRatio;
-
-	float expansion;
-	int smoothingPasses;
-	float smoothPropagationRatio;
-	bool localSmooth; 
-
-	float iniTwist;
-	float finTwist;
-	bool enableTwist;
-	bool smoothTwist;
-
-	int parentType;
-
-	bool bulgeEffect;
-
-	bool dirtyCreation;
-	bool dirtyTransformation;
-	bool dirtySegmentation;
-
-	DefGroupType type; 
-
-	// For computational pourposes.
-	vector<DefGroup*> dependentGroups;
-	vector<DefGroup*> relatedGroups;
-
-	defGroupSerialization* serializedData;
-
-	bool saveToFile(FILE* fout);
-	bool loadFromFile(ifstream& in, airRigSerialization* sData);
-
-	virtual void setRotation(double rx, double ry, double rz, bool radians);
-	
-	void addTranslation(double tx, double ty, double tz);
-	void setTranslation(double tx, double ty, double tz, bool local);
-	void addRotation(double rx, double ry, double rz);
-	void addRotation(Eigen::Quaternion<double> q, bool local = true);
-	void setRotation(Eigen::Quaternion<double> q, bool local = true);
-
-	Quaterniond getRotation(bool local = true);
-	Vector3d getTranslation(bool local = true);
-
-	Vector3d getRestTranslation(bool local = true);
-	Quaterniond getRestRotation(bool local = true);
-
-	bool dirtyByTransformation(bool alsoFather, bool hierarchically = true);
-	bool dirtyBySegmentation();
-	bool dirtyBySmoothing();
-
-	void computeRestPos(DefGroup* dg, DefGroup* father = NULL);
-	void computeWorldPos(DefGroup* dg, DefGroup* father = NULL);
-
-	void restorePoses(DefGroup* dg, DefGroup* father = NULL);
-
-	virtual bool propagateDirtyness()
-    {
-        dirtyFlag = true;
-
-		for(int i = 0; i< relatedGroups.size(); i++)
-			relatedGroups[i]->propagateDirtyness();
-
-        return true;
-    }
-
-    virtual bool update()
-    {
-        if(!dirtyFlag)
-            return true;
-        else
-		{
-			// Se supone que el padre esta bien
-			// Transmitimos el update a los hijos a
-			// partir de aqui.
-
-			if(dependentGroups.size() > 0)
-				computeWorldPosRec(this, dependentGroups[0]);
-			else
-				computeWorldPosRec(this, NULL);
-
-			/*for(int i = 0; i< relatedGroups.size(); i++)
-			{
-				relatedGroups[i]->update();
-			}
-			*/
-			dirtyFlag = false;
-            return true;
-		}
-    }
-
-	virtual bool select(bool bToogle, unsigned int id);
-	virtual bool selectRec(bool bToogle);
-
-	void computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg);
-};
-
-class constraintSerialization
-{
-public:
-	int parentId;
-	int childId;
-};
-
-class Constraint : public node
-{
-public:
-	Constraint()
-	{
-		weight = 1.0;
-	}
-
-	DefGroup* parent;
-	DefGroup* child;
-	int weight;
-
-	constraintSerialization* sConstraint;
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout);
-
-	// How can a I load the references.
-	virtual bool loadFromFile(ifstream& in);
-
-};
 
 class ControlGraph : public node
 {
@@ -209,47 +49,6 @@ public:
 	{
 		return true;
 	}
-
-};
-
-
-class DefGraph : public node
-{
-public:
-	DefGraph()
-	{
-		roots.clear();
-
-		joints.clear();
-		defGroups.clear();
-
-		deformers.clear();
-		relations.clear();
-
-		defGroupsRef.clear();
-
-		smoothingPasses = 3;
-		smoothPropagationRatio = 0.25;
-
-		iam = DEFGRAPH_NODE;
-	}
-
-	vector<DefGroup*> roots;
-
-	vector<joint*> joints;
-	vector<DefGroup*> defGroups;
-
-	vector<DefNode*> deformers;
-	vector<Constraint* > relations;
-
-	map<unsigned int, DefGroup*> defGroupsRef;
-	map<unsigned int, DefNode*> defNodesRef;
-
-	int smoothingPasses;
-	float smoothPropagationRatio;
-
-	bool saveToFile(FILE* fout);
-	bool loadFromFile(ifstream& in, airRigSerialization* sData);
 
 };
 
@@ -338,155 +137,22 @@ public:
 
 	void highlight(int _nodeId, bool hl);
 
-	virtual bool propagateDirtyness()
-    {
-        dirtyFlag = true;
+	virtual bool propagateDirtyness();
 
-		for(int i = 0; i< defRig.roots.size(); i++)
-			defRig.roots[i]->propagateDirtyness();
-
-        return true;
-    }
-
-    virtual bool update()
-    {
-        if(!dirtyFlag)
-            return true;
-        else
-		{
-			for(int i = 0; i< defRig.roots.size(); i++)
-			{
-				defRig.roots[i]->transformation->computeWorldPos();
-				defRig.roots[i]->update();
-			}
-
-			dirtyFlag = false;
-            return true;
-		}
-    }
+    virtual bool update();
+	virtual void getNodeData(int nodeId, string& sName);
 
 	//bool changeTwistValues(float ini, float fin, bool enable);
+	virtual void getDataFromDefGroup(int element, float& expansion, bool& twistEnabled,
+									 bool& bulgeEnabled,int& localSmoothPases,
+									 float& twistIni,float& twistFin);
+
+	virtual bool isSelectable(int element);
+
 
 };
 
 void BuildGroupTree(DefGraph& graph);
-
-class PointConstraint : public Constraint
-{
-public:
-	Vector3d offset;
-	Vector3d value;
-
-	PointConstraint() : Constraint()
-	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout)
-	{ 
-		fout = fout; // for delete warning
-		return true;
-	}
-	virtual bool loadFromFile(ifstream& in)
-	{ 
-		return true;
-	}
-
-};
-
-class OrientConstraint : public Constraint
-{
-public:
-	Vector3d offset;
-	Vector3d value;
-
-	OrientConstraint() : Constraint()
-	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout)	
-	{ 
-		fout = fout; // for delete warning
-		return true;
-	}
-
-	virtual bool loadFromFile(ifstream& in)	
-	{ 
-		return true;
-	}
-};
-
-class ScaleConstraint : public Constraint
-{
-public:
-	Vector3d offset;
-	Vector3d value;
-
-	ScaleConstraint() : Constraint()
-	{
-		offset = Vector3d(0,0,0);
-		value = Vector3d(0,0,0);
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout)	
-	{ 
-		fout = fout; // for delete warning
-		return true;
-	}
-	virtual bool loadFromFile(ifstream& in)	
-	{ 
-		return true;
-	}
-};
-
-class ParentConstraint : public Constraint
-{
-public:
-	OrientConstraint or;
-	PointConstraint pos;
-
-	ParentConstraint() : Constraint()
-	{
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout)	
-	{ 
-		fout = fout; // for delete warning
-		return true;
-	}
-	virtual bool loadFromFile(ifstream& in)	
-	{ 
-		return true;
-	}
-};
-
-class HierarchyConstraint : public ParentConstraint
-{
-public:
-	ScaleConstraint slc;
-
-	HierarchyConstraint() : ParentConstraint()
-	{
-	}
-
-	// Serialization
-	virtual bool saveToFile(FILE* fout)	
-	{ 
-		fout = fout; // for delete warning
-		return true;
-	}
-	virtual bool loadFromFile(ifstream& in)	
-	{ 
-		return true;
-	}
-};
 
 //FUNCTIONS FOR PROCESSING DATA STRUCTURES
 
@@ -499,12 +165,15 @@ bool propagateExpansion(DefGroup& gr);
 // Process just one skeleton adding the info to last loaded skeletons
 bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions);
 
+// Update nodes created inside the stick
+bool updateDefNodesFromStick(DefGroup* group);
+
 // Propose deformation nodes depending on the joint linked
 bool proposeDefNodesFromStick(DefGroup& group, vector<DefGroup*> relatedGroups );
 
 // Propose a division in deformers from a given stick
 int subdivideStick(Vector3d origen, Vector3d fin, int defGroupIdx, int childDefGroupIdx,
-				   vector< DefNode >& nodePoints, float subdivisionRatio);
+				   vector< DefNode >& nodePoints, float subdivisionRatio, bool noNewId = false);
 
 // Propose a division in deformers from a given stick
 int subdivideStick_FPMethod(Vector3d origen, Vector3d fin, int defGroupIdx, int childDefGroupIdx,

@@ -10,7 +10,7 @@
 
 enum manipulatorType {MANIP_NONE = 0, MANIP_MOVE, MANIP_ROT, MANIP_SCL};
 enum manipulatorAxis {AXIS_X = 0, AXIS_Y, AXIS_Z, AXIS_VIEW};
-enum transformMode {TM_WORLD = 0, TM_OBJECT};
+enum transformMode {TM_WORLD = 0, TM_OBJECT, TM_SINGLE, TM_HIERARCHY};
 
 using namespace Eigen;
 
@@ -21,6 +21,9 @@ public:
 	Quaterniond rotation;
 	Vector3d scale;
 
+	Vector3d posOffset;
+	Quaterniond rotOffset;
+
 	void getMatrix(Matrix4d& mtx);
 };
 
@@ -28,16 +31,7 @@ class manipulator : public node
 {
 public:
 
-	manipulator()
-	{
-		bModifierMode = false;
-		size = 1.0;
-		type = MANIP_NONE;
-		axis = AXIS_X;
-		bEnable = false;
-
-		projectedPoint = Vector3d(0,0,0);
-	}
+	manipulator();
 
 	airFrame currentframe;
 	airFrame previousframe;
@@ -48,22 +42,27 @@ public:
 	manipulatorType type;
 	manipulatorAxis axis;
 
+	// this vatiable configures how to move, 
+	//depending on the hierarchy, or just the selected object.
+	transformMode mode;
+
 	bool bModifierMode;
 	bool bEnable;
 
 	Vector2i pressMouse;
 
-	Vector3d orig, dir, selectedPoint, projectedPoint;
+	Vector3d orig, dir, selectedPoint, projectedPoint, projectedPoint2;
 
 	float size;
 	virtual void drawFunc();
 	virtual void drawFuncNames();
 	virtual void drawNamesWithProjectingPlane();
 
-	void setManipulator(Vector3d& rayOrigin, Vector3d& rayDir);
+	void startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool withOffset = false);
+	void setManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool withOffset = false);
 	void moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir);
 
-	void applyTransformation(object* obj, transformMode mode = TM_WORLD);
+	void applyTransformation(object* obj, manipulatorType type, transformMode mode = TM_WORLD);
 };
 
 

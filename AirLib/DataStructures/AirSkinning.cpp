@@ -150,7 +150,7 @@ void AirSkinning::loadBindingForModel(Modelo *m, AirRig* rig)
 void AirSkinning::resetDeformations()
 {
 	// It's a bad way to ensure that we are deforming the right mdoel.
-	if (!deformedModel->shading->visible) return;
+	if (!deformedModel) return;
 
 	Geometry *m = deformedModel;
 	Geometry *mOrig = originalModel;
