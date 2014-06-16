@@ -98,8 +98,11 @@ public:
 	bool dirtyBySegmentation();
 	bool dirtyBySmoothing();
 
+	void saveRestPos(DefGroup* dg, DefGroup* father = NULL);
 	void computeRestPos(DefGroup* dg, DefGroup* father = NULL);
+	
 	void computeWorldPos(DefGroup* dg, DefGroup* father = NULL);
+	void computeWorldPosNonRoll(DefGroup* dg, DefGroup* father = NULL);
 
 	void restorePoses(DefGroup* dg, DefGroup* father = NULL);
 
@@ -110,7 +113,7 @@ public:
 	virtual bool select(bool bToogle, unsigned int id);
 	virtual bool selectRec(bool bToogle);
 
-	void computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg);
+	//void computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg);
 
 };
 

@@ -501,13 +501,13 @@ void manipulator::drawFuncNames()
 		//glColor3f(1.0,0,0);
 
 		glPushName(1.0);
-		drawCircle(CURVE_RES, size);
+		drawOpaqueCircle(CURVE_RES, size);
 		glPopName();
 
 		glRotatef(90, 0,1,0); // rotar en y
 		//glColor3f(0,1.0,0);
 		glPushName(3.0);
-		drawCircle(CURVE_RES,size);
+		drawOpaqueCircle(CURVE_RES,size);
 		glPopName();
 		glPopMatrix();
 
@@ -515,7 +515,7 @@ void manipulator::drawFuncNames()
 		//glColor3f(0,0,1.0); // rotar en x
 		glRotatef(90, 0,0,1);
 		glPushName(2.0);
-		drawCircle(CURVE_RES, size);
+		drawOpaqueCircle(CURVE_RES, size);
 		glPopName();
 		glPopMatrix();
 		glEnable(GL_LIGHTING);
@@ -574,7 +574,7 @@ void manipulator::drawFunc()
 
 		int tempSize = (int)ceil(size);
 
-		glPointSize(tempSize*1.5);
+		glPointSize(tempSize);
 		glBegin(GL_POINTS);
 		glColor3f(0.5,0.5,0.5);
 		glVertex3d(0,0,0);
@@ -651,7 +651,7 @@ void manipulator::drawFunc()
 
 	glMultMatrixd(multiplyingMatrix);
 
-	int tempSize = (int) ceil(4 * size);
+	int tempSize = (int) ceil(size);
 
 	if(type == MANIP_NONE)
 	{

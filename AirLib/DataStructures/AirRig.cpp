@@ -212,10 +212,10 @@ bool AirRig::update()
         return true;
     else
 	{
-		for(int i = 0; i< defRig.roots.size(); i++)
+		for(int i = 0; i< defRig.defGroups.size(); i++)
 		{
-			defRig.roots[i]->transformation->computeWorldPos();
-			defRig.roots[i]->update();
+			//defRig.roots[i]->transformation->computeWorldPos();
+			defRig.defGroups[i]->update();
 		}
 
 		//Reconstruimos la lista de nodos.
@@ -337,11 +337,10 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions)
 
 bool updateDefNodesFromStick(DefGroup* group )
 {
-	 vector<DefGroup*>& relatedGroups = group->relatedGroups;
+	vector<DefGroup*>& relatedGroups = group->relatedGroups;
 
 	joint* jt = group->transformation;
-	if(jt->dirtyFlag)
-		jt->update();
+	if(jt->dirtyFlag) jt->update();
 
 	// Limpiamos los deformadores que pudieran existir antes
 	int deformersPoolSize = group->deformers.size();
@@ -350,12 +349,25 @@ bool updateDefNodesFromStick(DefGroup* group )
 
 	// We get the deleted deformer memory position to ensure memory coherence.
 	vector<int> cleanDeformers;
-	if(group->deformers.size() > 0)
+
+	// Si no hay elementos ponemos el primero.
+	if(group->deformers.size() == 0)
 	{
-		group->deformers[0].freeNode = false; // Este nunca se libera
-		group->deformers[0].segmentationDirtyFlag = true; // si que lo marcamos como sucio
+		group->deformers.push_back(DefNode(jt->translation, group->nodeId));
+		group->deformers.back().nodeId = scene::getNewId(T_DEFNODE);
 	}
 
+	DefNode& def = group->deformers[0];
+	def.boneId = group->nodeId;
+	def.pos = jt->translation;
+	def.relPos = def.pos - jt->translation;
+	def.ratio = 0.0;
+	def.expansion = group->expansion;
+	def.enableWeightsComputation = jt->enableWeightsComputation;
+	def.freeNode = false;
+	def.segmentationDirtyFlag = true;
+
+	// We set as clean the other nodes.
 	for(int i = 1; i< deformersPoolSize; i++)
 	{
 		group->deformers[i].freeNode = true;
@@ -365,23 +377,12 @@ bool updateDefNodesFromStick(DefGroup* group )
 
 	// We propose new defNodes for each branch
 	vector<DefNode> deformersProposal;
-	for(int i = 0; i < jt->getChildCount(); i++)
+	for(int i = 0; i < group->relatedGroups.size(); i++)
 	{
-		int numDivisions;
-
-		/*if(FP_METHOD)
-		//{
-		//	numDivisions = subdivideStick_FPMethod(jt->getWorldPosition(), jt->childs[i]->getWorldPosition(), 
-		//								  group->nodeId, relatedGroups[i]->nodeId,
-		//								  deformersProposal, group->subdivisionRatio);
-		//}
-		//else
-		//{
-		*/
-			numDivisions = subdivideStick(jt->getWorldPosition(), jt->childs[i]->getWorldPosition(), 
-										  group->nodeId, relatedGroups[i]->nodeId,
-										  deformersProposal, group->subdivisionRatio, true);
-		//}
+		subdivideStick( group->transformation->translation, 
+						group->relatedGroups[i]->transformation->translation, 
+						group->nodeId, relatedGroups[i]->nodeId,
+						deformersProposal, group->subdivisionRatio, true);
 	}
 
 	// We copy the data form proposed nodes to free node spaces.
@@ -628,7 +629,6 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 		if(!noNewId) nodePoints.back().nodeId = scene::getNewId(T_DEFNODE);
 		nodePoints.back().ratio = (float)i/(float)numDivisions;
 		nodePoints.back().freeNode = false;
-
 		nodePoints.back().childBoneId = childDefGorupIdx;
 	}
 
@@ -798,7 +798,8 @@ bool AirRig::saveRestPoses()
 {
 	for(int j = 0; j < defRig.roots.size(); j++) 
 	{
-		defRig.roots[j]->computeRestPos(defRig.roots[j]);
+		defRig.roots[j]->saveRestPos(defRig.roots[j]);
+		//defRig.roots[j]->computeRestPos(defRig.roots[j]);
 	}
 	return true;
 }

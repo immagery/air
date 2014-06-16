@@ -7,7 +7,7 @@
 
 #define useMVC true
 
-#define VERBOSE_PROCESS true
+#define VERBOSE_PROCESS false
 
 #include <DataStructures\AirRig.h>
 
@@ -37,6 +37,7 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph);
 void segmentModelFromDeformersOpt(  Modelo& model, binding* bd, DefGraph& graph, 
 									MatrixXf& subDistances, 
 									map<int, int>& matrixDefReference,
+									vector<int>& lastPostions,
                                     MatrixXf& computedDistances,
 									int computationSize);
 

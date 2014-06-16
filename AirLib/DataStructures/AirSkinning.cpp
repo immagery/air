@@ -181,6 +181,8 @@ void AirSkinning::computeDeformations(AirRig* rig)
 		{
 			oneDirtySkeleton = true;
 			rig->defRig.roots[i]->computeWorldPos(rig->defRig.roots[i]);
+			//rig->defRig.roots[i]->computeWorldPosNonRoll(rig->defRig.roots[i]);
+			
 		}
 	}
 	if (!oneDirtySkeleton) return;
@@ -314,6 +316,7 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 		{
 			oneDirtySkeleton = true;
 			rig->defRig.roots[i]->computeWorldPos(rig->defRig.roots[i]);
+			//rig->defRig.roots[i]->computeWorldPosNonRoll(rig->defRig.roots[i]);
 		}
 	}
 	if (!oneDirtySkeleton) return;
@@ -391,13 +394,15 @@ void AirSkinning::computeDeformationsWithSW(AirRig* rig)
 					{
 						if(jt->father)
 						{
-							//apliedRotation = jt->father->rotation*jt->qOrient*jt->qrot*inducedTwists[it];
-							apliedRotation = jt->rotation*inducedTwists[it];
+							apliedRotation = jt->father->rotation*inducedTwists[it]*jt->qOrient*jt->qrot;
+							
+							//apliedRotation = jt->rotation*inducedTwists[it];
 						}
 						else
-							apliedRotation = jt->qOrient*jt->qrot*inducedTwists[it];
+							apliedRotation = inducedTwists[it]*jt->qOrient*jt->qrot;
 
-						inducedPoints[it] = apliedRotation._transformVector(jt->rRotation.inverse()._transformVector(restPosition-jt->rTranslation)) + jt->translation;
+						Vector3d tempPosValue = jt->rRotation.inverse()._transformVector(restPosition-jt->rTranslation);
+						inducedPoints[it] = apliedRotation._transformVector(tempPosValue) + jt->translation;
 					}
 
 					double weight = 0;

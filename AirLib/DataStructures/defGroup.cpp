@@ -17,7 +17,7 @@ DefGroup::DefGroup(int nodeId) : object(nodeId)
 
 	iniTwist = default_INI_TWIST;
 	finTwist = default_END_TWIST;
-	enableTwist = true;
+	enableTwist = false;
 	smoothTwist = false;
 
 	localSmooth = false;
@@ -47,7 +47,7 @@ DefGroup::DefGroup(int nodeId, joint* jt) : object(nodeId)
 
 	iniTwist = default_INI_TWIST;
 	finTwist = default_END_TWIST;
-	enableTwist = true;
+	enableTwist = false;
 
 	localSmooth = false;
 
@@ -78,7 +78,18 @@ bool DefGroup::update()
         return true;
     else
 	{
+		if(dependentGroups.size() > 0)
+		{
+			//computeWorldPosNonRoll(this, dependentGroups[0]);
+			computeWorldPos(this, dependentGroups[0]);
+		}
+		else
+		{
+			//computeWorldPosNonRoll(this, NULL);
+			computeWorldPos(this, NULL);
+		}
 
+		/*
 		if(dirtyTransformation)
 		{
 			// En este caso tengo que actualizar tambien el padre.
@@ -87,11 +98,7 @@ bool DefGroup::update()
 				updateDefNodesFromStick(dependentGroups[i]);
 			}
 		}
-
-		if(dependentGroups.size() > 0)
-			computeWorldPosRec(this, dependentGroups[0]);
-		else
-			computeWorldPosRec(this, NULL);
+		*/
 
 		// Reconstruir el esquema de deformadores.
 		if(type == DEF_STICK)
@@ -102,7 +109,14 @@ bool DefGroup::update()
 		// El defGroup queda limpio, pero los defNodes
 		// quedan sucios hasta que alguien los recompute.
 		dirtyFlag = false;
-        return true;
+        
+		for(int i = 0; i< relatedGroups.size(); i++)
+		{
+			relatedGroups[i]->dirtyFlag = true;
+			relatedGroups[i]->update();
+		}
+		
+		return true;
 	}
 }
 
@@ -116,94 +130,6 @@ bool DefGroup::select(bool bToogle, unsigned int id)
 
 	return true;
 }
-
-void DefGroup::computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg)
-{
-	Eigen::Matrix3d rotationMatrix;
-
-	joint* jt = dg->transformation;
-	joint* father = NULL;
-
-	if(fatherDg != NULL) 
-		father = fatherDg->transformation;
-
-	if(!fatherDg)
-	{
-		jt->translation = jt->pos;
-		jt->rotation =  jt->qOrient * jt->qrot;
-
-		rotationMatrix = jt->rotation.toRotationMatrix();
-
-		jt->twist = Quaterniond::Identity();
-		jt->parentRot = Eigen::Quaterniond::Identity();
-	}
-	else
-	{
-		jt->translation = father->translation + 
-						  father->rotation._transformVector(jt->pos);
-		
-		jt->rotation =  father->rotation * jt->qOrient * jt->qrot;
-
-		rotationMatrix = ( jt->qOrient * jt->qrot).toRotationMatrix();
-
-		// TwistComputation:
-		Vector3d axis = jt->rTranslation - father->rTranslation;
-		axis.normalize();
-
-		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
-		Quaterniond localRotationChildRest =  jt->restRot;
-
-		Vector3d tempRestRot = father->rRotation.inverse()._transformVector(axis);
-
-		Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
-		Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
-
-		Quaterniond nonRollrotation;
-		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
-		
-		// Ejes Locales
-		jt->twist = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
-
-		Vector3d quatAxis(jt->twist.x(),jt->twist.y(),jt->twist.z());
-		quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
-		//quatAxis = father->qOrient._transformVector(quatAxis);
-		//quatAxis = (father->qOrient * father->qrot).inverse()._transformVector(quatAxis);
-	
-		jt->twist.x() = quatAxis.x();
-		jt->twist.y() = quatAxis.y();
-		jt->twist.z() = quatAxis.z();
-
-		Vector3d referencePoint = father->rotation.inverse()._transformVector(jt->translation - father->translation);
-		Quaterniond redir;
-		jt->parentRot = father->rotation * redir.setFromTwoVectors(Vector3d(1,0,0),referencePoint);	
-
-	}
-	
-	//Eigen::Matrix3d rotationMatrix;
-	//rotationMatrix = jt->rRotation.toRotationMatrix();
-
-	Eigen::Matrix4f transformMatrix2;
-	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
-					    rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
-					    rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
-						0.0,				0.0,				0.0,			1.0;
-
-	transformMatrix2.transposeInPlace();
-	jt->world = transformMatrix2;
-
-	jt->worldPosition = jt->translation;
-	jt->W = transformMatrix2.transpose();
-	
-
-	for(unsigned int i = 0; i< dg->relatedGroups.size(); i++)
-    {
-        computeWorldPosRec(dg->relatedGroups[i], dg);
-    }
-
-	return;
-
-}
-
 
 void DefGroup::addTranslation(double tx, double ty, double tz)
 {
@@ -448,52 +374,76 @@ void DefGroup::computeRestPos(DefGroup* dg, DefGroup* father)
 	 
 	if(!father)
 	{
+		// NonRollRot
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
+		Vector3d referenceRest = localRotationChildRest._transformVector(Vector3d(1,0,0));
+		Vector3d referenceCurr = localRotationChild._transformVector(Vector3d(1,0,0));
+
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+
+		//jt->nonRollRot = nonRollrotation;
+
 		jt->rTranslation = jt->pos;
 		jt->rRotation = jt->qOrient * jt->qrot;
-
 		rotationMatrix = jt->rRotation.toRotationMatrix();
+
+		// Test of nonrolling
+		//jt->rRotation = jt->nonRollRot;
+		//rotationMatrix = jt->nonRollRot.toRotationMatrix();
 
 		jt->rTwist = Quaterniond::Identity();
 	}
 	else
 	{
 		joint* fatherJt = father->transformation;
+		// Set Transformations
 		jt->rTranslation = fatherJt->rTranslation + 
 						   fatherJt->rRotation._transformVector(jt->pos);
-		
-		jt->rRotation =  fatherJt->rRotation * jt->qOrient * jt->qrot;
 
-		rotationMatrix = ( jt->qOrient * jt->qrot ).toRotationMatrix();
 		//rotationMatrix = jt->rRotation.toRotationMatrix();
 
-		// TwistComputation:
-		Vector3d axis = jt->translation - fatherJt->translation;
-		axis.normalize();
-
+		// NonRollComputation
+		Vector3d axis = (jt->translation - fatherJt->translation).normalized();
 		Vector3d tempRestRot = fatherJt->rRotation._transformVector(axis);
 
-		///if(parentType > 0)
-		//	tempRestRot = axis;
-
 		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
-		Quaterniond localRotationChildRest =  jt->restRot;
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
 		Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
 		Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
 
 		Quaterniond nonRollrotation;
 		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+
+		//jt->nonRollRot = nonRollrotation;
+
+		// Set rotation
+		//jt->rRotation =  fatherJt->rRotation * jt->qOrient * jt->qrot;
 		
+		jt->rRotation =  fatherJt->rRotation * jt->qOrient * jt->qrot;
+		rotationMatrix = ( jt->qOrient * jt->qrot ).toRotationMatrix();
+		
+		// NonRoll_test
+		//jt->rRotation = fatherJt->rRotation * jt->nonRollRot;
+		//rotationMatrix = jt->nonRollRot.toRotationMatrix();
+	
+		// TwistComputation:
 		// Ejes Locales
 		jt->rTwist = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
+
+		Vector3d quatAxis(jt->rTwist.x(),jt->rTwist.y(),jt->rTwist.z());
+		quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
+	
+		jt->rTwist.x() = quatAxis.x();
+		jt->rTwist.y() = quatAxis.y();
+		jt->rTwist.z() = quatAxis.z();
+
 	}
 
 	jt->restPos = jt->pos;
-	//jt->restRot = jt->qOrient * jt->qrot;
-	jt->restRot = jt->qrot;
+	jt->restRot = jt->qrot; //jt->restRot = jt->qOrient * jt->qrot;
 	jt->restOrient = jt->qOrient;
-
-	//Eigen::Matrix3d rotationMatrix;
-	//rotationMatrix = jt->rRotation.toRotationMatrix();
 
 	Eigen::Matrix4f transformMatrix2;
 	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
@@ -523,10 +473,24 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 
 	if(!father)
 	{
-		jt->translation = jt->pos;
-		jt->rotation =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
+		Vector3d referenceRest = localRotationChildRest._transformVector(Vector3d(1,0,0));
+		Vector3d referenceCurr = localRotationChild._transformVector(Vector3d(1,0,0));
 
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+
+		jt->nonRollRot = nonRollrotation;
+		jt->translation = jt->pos;
+
+		// sistema normal
+		jt->rotation =  jt->qOrient * jt->qrot;
 		rotationMatrix = jt->rotation.toRotationMatrix();
+
+		// NonRolling tests
+		//jt->rotation = jt->nonRollRot;
+		//rotationMatrix = jt->nonRollRot.toRotationMatrix();
 
 		jt->twist = Quaterniond::Identity();
 		jt->parentRot = Eigen::Quaterniond::Identity();
@@ -537,62 +501,25 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 		jt->translation = fatherJt->translation + 
 						  fatherJt->rotation._transformVector(jt->pos);
 		
-		if(parentType == 0)
-			jt->rotation =  fatherJt->rotation * jt->qOrient * jt->qrot;
-		else
-			jt->rotation =  fatherJt->rRotation * jt->qOrient * jt->qrot;
-
-		rotationMatrix = (jt->qOrient * jt->qrot).toRotationMatrix();
-
-		// TwistComputation:
-		Vector3d axis = jt->rTranslation - fatherJt->rTranslation;
-		axis.normalize();
+		// NonRollComputation
+		Vector3d axis = (jt->translation - fatherJt->translation).normalized();
+		Vector3d tempRestRot = fatherJt->rRotation._transformVector(axis);
 
 		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
-		Quaterniond localRotationChildRest =  jt->restRot;
-
-		if(parentType > 0)
-		{
-			//Quaterniond noFather = fatherJt->rotation*fatherJt->rRotation.inverse();
-			//localRotationChild = noFather*jt->qOrient * jt->qrot;
-		}
-
-		Vector3d tempRestRot = fatherJt->rRotation.inverse()._transformVector(axis);
-
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
 		Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
 		Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
 
-		Quaterniond nonRollrotation;
-		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+		jt->nonRollRot.setFromTwoVectors(referenceRest, referenceCurr);
+
+		//jt->rotation = fatherJt->rotation * jt->nonRollRot;
+		//rotationMatrix = (jt->nonRollRot).toRotationMatrix();
+
+		jt->rotation =  fatherJt->rotation * jt->qOrient * jt->qrot;
+		rotationMatrix = (jt->qOrient * jt->qrot).toRotationMatrix();
 		
 		// Ejes Locales
-		jt->twist = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
-
-		if(parentType > 0)
-		{
-			/*
-			// TwistComputation:
-			Vector3d fatherAxis = jt->translation - fatherJt->translation;
-			Vector3d childAxis = jt->rTranslation - fatherJt->rTranslation;
-			fatherAxis.normalize();
-			childAxis.normalize();
-
-			Quaterniond localRotationFather =  fatherJt->rotation;
-			Quaterniond localRotationChild =  jt->rotation;
-
-			Vector3d referenceRest = fatherJt->rotation._transformVector(fatherAxis);
-			Vector3d referenceCurr = fatherJt->rotation._transformVector(childAxis);
-
-			Quaterniond nonRollrotation;
-			nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
-
-			Quaterniond dif = localRotationChild*fatherJt->rRotation.inverse();
-
-			Quaterniond retwist = dif*nonRollrotation.inverse();
-
-			jt->twist *= retwist;
-			*/
-		}
+		jt->twist = localRotationChild*localRotationChildRest.inverse()*jt->nonRollRot.inverse();
 
 		Vector3d quatAxis(jt->twist.x(),jt->twist.y(),jt->twist.z());
 
@@ -638,6 +565,260 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 
 	return;
 }
+
+
+
+void DefGroup::saveRestPos(DefGroup* dg, DefGroup* father)
+{
+	Eigen::Matrix3d rotationMatrix;
+	joint* jt = dg->transformation;
+
+	jt->rTranslation = jt->translation;
+	jt->rRotation = jt->rRotation;
+
+	jt->rTwist = jt->twist;
+
+	jt->restPos = jt->pos;
+	jt->restOrient = jt->qOrient;
+	jt->restRot = jt->qrot;
+
+	rotationMatrix = ( jt->qOrient * jt->qrot ).toRotationMatrix();
+
+	Eigen::Matrix4f transformMatrix2;
+	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
+					   rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
+					   rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
+						0.0,				0.0,				0.0,			1.0;
+
+	transformMatrix2.transposeInPlace();
+	jt->iT = transformMatrix2.inverse().transpose();
+	jt->worldPosition = jt->rTranslation;
+
+	for(unsigned int i = 0; i< dg->relatedGroups.size(); i++)
+    {
+        saveRestPos(dg->relatedGroups[i], dg);
+    }
+
+	return;
+}
+
+void DefGroup::computeWorldPosNonRoll(DefGroup* dg, DefGroup* father)
+{
+	Eigen::Matrix3d rotationMatrix;
+	joint* jt = dg->transformation;
+
+	Vector3d origVector(0,1,0);
+
+	if(!father)
+	{
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
+
+		Vector3d refRestOrig = localRotationChildRest._transformVector(origVector);
+		Vector3d refCurrOrig = localRotationChild._transformVector(origVector);
+
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(refRestOrig, refCurrOrig);
+
+		jt->nonRollRot = nonRollrotation.normalized();
+		jt->translation = jt->pos;
+
+		jt->boneAxisRot.setFromTwoVectors(origVector,jt->pos);
+		jt->twist = Quaterniond::Identity();
+
+		// sistema normal
+		jt->rotation =  jt->qOrient * jt->qrot; 
+		rotationMatrix = jt->rotation.toRotationMatrix();
+
+		// Test for correctness
+		//jt->rotation =  jt->restOrient * jt->restRot * jt->nonRollRot*jt->twist;
+		//rotationMatrix = jt->rotation.toRotationMatrix();
+
+		//jt->parentRot = Eigen::Quaterniond::Identity();
+	}
+	else
+	{
+		joint* fatherJt = father->transformation;
+		jt->translation = fatherJt->translation + 
+						  fatherJt->AuxRotation._transformVector(jt->pos);
+		
+
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient * jt->restRot;
+
+		Vector3d refRestOrig = (fatherJt->AuxRotation*localRotationChildRest)._transformVector(origVector);
+		Vector3d refCurrOrig = (fatherJt->AuxRotation*localRotationChild)._transformVector(origVector);
+
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(refRestOrig, refCurrOrig);
+
+		// la rotation concatena la pos en rest con nonRollRot
+		jt->rotation =  fatherJt->rotation * jt->qOrient * jt->qrot;
+		rotationMatrix = jt->rotation.toRotationMatrix();
+
+		// Twist disgregation for twistDeformation
+		jt->nonRollRot = nonRollrotation.normalized();
+		jt->twist = fatherJt->rotation * jt->qOrient * jt->qrot * jt->rotation.inverse();
+
+		// Test para ver si twist es correcto.
+		//jt->rotation = jt->rotation * jt->twist;
+		//rotationMatrix = jt->rotation.toRotationMatrix();
+
+		/*
+		Vector3d quatAxis(jt->twist.x(),jt->twist.y(),jt->twist.z());
+
+		if(parentType == 0)
+		{
+			quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
+		}
+		else
+			quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
+		//quatAxis = father->qOrient._transformVector(quatAxis);
+		//quatAxis = (father->qOrient * father->qrot).inverse()._transformVector(quatAxis);
+	
+		jt->twist.x() = quatAxis.x();
+		jt->twist.y() = quatAxis.y();
+		jt->twist.z() = quatAxis.z();
+
+		Vector3d referencePoint = fatherJt->rotation.inverse()._transformVector(jt->translation - fatherJt->translation);
+		Quaterniond redir;
+		jt->parentRot = fatherJt->rotation * redir.setFromTwoVectors(Vector3d(1,0,0),referencePoint);	
+		*/
+
+	}
+	
+	//Eigen::Matrix3d rotationMatrix;
+	//rotationMatrix = jt->rRotation.toRotationMatrix();
+
+	Eigen::Matrix4f transformMatrix2;
+	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
+					    rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
+					    rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
+						0.0,				0.0,				0.0,			1.0;
+
+	transformMatrix2.transposeInPlace();
+	jt->world = transformMatrix2;
+
+	jt->worldPosition = jt->translation;
+	jt->W = transformMatrix2.transpose();
+	
+
+	for(unsigned int i = 0; i< dg->relatedGroups.size(); i++)
+    {
+        computeWorldPosNonRoll(dg->relatedGroups[i], dg);
+    }
+
+	return;
+}
+
+/*
+void DefGroup::computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg)
+{
+	Eigen::Matrix3d rotationMatrix;
+
+	joint* jt = dg->transformation;
+	joint* father = NULL;
+
+	if(fatherDg != NULL) 
+		father = fatherDg->transformation;
+
+	if(!fatherDg)
+	{
+		// Transformation computation
+		jt->translation = jt->pos;
+		jt->rotation =  jt->qOrient * jt->qrot;
+
+		jt->twist = Quaterniond::Identity();
+		jt->parentRot = Eigen::Quaterniond::Identity();
+
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient*jt->restRot;
+		Vector3d referenceRest = localRotationChildRest._transformVector(Vector3d(1,0,0));
+		Vector3d referenceCurr = localRotationChild._transformVector(Vector3d(1,0,0));
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+
+		// Guardamos la rotacion sin rolling
+		jt->nonRollRot = nonRollrotation;
+
+		// Deformation matrix
+		//rotationMatrix = jt->rotation.toRotationMatrix();
+		rotationMatrix = jt->nonRollRot.toRotationMatrix();
+	}
+	else
+	{
+		// Transformation rec construction
+		jt->translation = father->translation + 
+						  father->rotation._transformVector(jt->pos);
+		
+		jt->rotation =  father->rotation * jt->qOrient * jt->qrot;
+
+		// NonRollRotation
+		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
+		Quaterniond localRotationChildRest =  jt->restOrient*jt->restRot;
+
+		Vector3d axis = (jt->rTranslation - father->rTranslation).normalized();
+		Vector3d tempRestRot = father->rRotation.inverse()._transformVector(axis);
+
+		Vector3d referenceRest = localRotationChildRest._transformVector(tempRestRot);
+		Vector3d referenceCurr = localRotationChild._transformVector(tempRestRot);
+
+		Quaterniond nonRollrotation;
+		nonRollrotation.setFromTwoVectors(referenceRest, referenceCurr);
+
+		jt->nonRollRot = nonRollrotation;
+
+		// Deformation matrix
+		//rotationMatrix = ( jt->qOrient * jt->qrot).toRotationMatrix();
+		rotationMatrix = jt->nonRollRot.toRotationMatrix();
+
+
+		// TwistComputation:
+		// Ejes Locales
+		jt->twist = localRotationChild*localRotationChildRest.inverse()*nonRollrotation.inverse();
+
+		Vector3d quatAxis(jt->twist.x(),jt->twist.y(),jt->twist.z());
+		quatAxis = (localRotationChild).inverse()._transformVector(quatAxis);
+
+		//quatAxis = (jt->qrot).inverse()._transformVector(quatAxis);
+		//quatAxis = father->qOrient._transformVector(quatAxis);
+		//quatAxis = (father->qOrient * father->qrot).inverse()._transformVector(quatAxis);
+	
+		jt->twist.x() = quatAxis.x();
+		jt->twist.y() = quatAxis.y();
+		jt->twist.z() = quatAxis.z();
+
+		Vector3d referencePoint = father->rotation.inverse()._transformVector(jt->translation - father->translation);
+		Quaterniond redir;
+		jt->parentRot = father->rotation * redir.setFromTwoVectors(Vector3d(1,0,0),referencePoint);	
+
+	}
+	
+	//Eigen::Matrix3d rotationMatrix;
+	//rotationMatrix = jt->rRotation.toRotationMatrix();
+
+	Eigen::Matrix4f transformMatrix2;
+	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
+					    rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
+					    rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
+						0.0,				0.0,				0.0,			1.0;
+
+	transformMatrix2.transposeInPlace();
+	jt->world = transformMatrix2;
+
+	jt->worldPosition = jt->translation;
+	jt->W = transformMatrix2.transpose();
+	
+
+	for(unsigned int i = 0; i< dg->relatedGroups.size(); i++)
+    {
+        computeWorldPosRec(dg->relatedGroups[i], dg);
+    }
+
+	return;
+
+}
+*/
 
 void DefGroup::restorePoses(DefGroup* dg, DefGroup* father)
 {
@@ -753,6 +934,7 @@ bool DefGroup::dirtyByTransformation(bool alsoFather, bool hierarchically)
 					dependentGroups[dp]->deformers[dn].relPos = 
 									dependentGroups[dp]->transformation->rotation.inverse()._transformVector(dnPos);*/
 
+					dependentGroups[dp]->dirtyFlag = true;
 					dependentGroups[dp]->deformers[dn].dirtyFlag = true;
 					dependentGroups[dp]->dirtyTransformation = true;
 				}
@@ -760,6 +942,7 @@ bool DefGroup::dirtyByTransformation(bool alsoFather, bool hierarchically)
 		}
 	}
 
+	dirtyFlag = true;
 	dirtyTransformation = true;
 
 	// we set dirty all the deformers of this node

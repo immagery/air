@@ -51,28 +51,21 @@ void ComputationMgr::updateAllComputations()
 
 	// Preparing memory for allocate all the computations
 	int addedToComputationsCount = 0;
-	vector<int> noFreeNodes;
 	for(int ii = 0; ii < defNodesTotalSize; ii++)
 	{
 		DefNode* dn = rig->defRig.deformers[ii];
-		
-		if(!dn->addedToComputations) // It's not added yet to the computations
+		if(defNodeComputationReference.find(dn->nodeId) == defNodeComputationReference.end())
 		{
+			// This node is not in the computations
 			defNodeComputationReference[dn->nodeId] = firstPosToAdd+addedToComputationsCount;
 			dn->addedToComputations = true;
 			addedToComputationsCount++;
 		}
-
-		if(!dn->freeNode) // It's is a full computation node
-		{
-			noFreeNodes.push_back(ii);
-		}
 	}
 
 	int newSize = MatrixWeights.cols() + addedToComputationsCount;
-	assert(newSize >= noFreeNodes.size());
-
 	assert(newSize == defNodesTotalSize && newSize == defNodeComputationReference.size());
+
 	// Resize of temp computation structures if it is necesary.
 	if(MatrixWeights.cols() < defNodesTotalSize)
 	{
@@ -96,8 +89,8 @@ void ComputationMgr::updateAllComputations()
 
 	clock_t fin = clock();
 	
-	if(VERBOSE_PROCESS)
-	{
-		printf("\nProceso en: %fms\n", ((double)(fin-ini)));
-	}
+	//if(VERBOSE_PROCESS)
+	//{
+		printf("\nUpdate Computations: %fms\n", ((double)(fin-ini)));
+	//}
 }
