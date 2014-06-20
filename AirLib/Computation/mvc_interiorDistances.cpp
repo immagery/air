@@ -196,7 +196,7 @@ void mvcAllBindings(Vector3d& point, vector<double>& weights, Modelo& modelo)
 
 // PRE:
 // 1. weights is sized properly and initilized to zero
-void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo)
+void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surfaceIdx)
 {
     const float tresh1 = 0.000001;
     const float tresh2 = 0.00001;

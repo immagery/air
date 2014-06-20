@@ -126,6 +126,11 @@ void initData(Modelo& m, binding* bd,
 
 
 // Compute the skinning only with dirty nodes.
-void computeNodesOptimized(DefGraph& graph, Modelo& model, MatrixXf& MatrixWeights, MatrixXf& distancesTemp, map<int, int>& defNodeRef);
+void computeNodesOptimized( DefGraph& graph, 
+							Modelo& model, 
+							MatrixXf& MatrixWeights, 
+							MatrixXf& distancesTemp, 
+							map<int, int>& defNodeRef
+							int surfaceIdx = 0);
 
 #endif // AIR_SEGMENTATION_H

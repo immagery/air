@@ -1249,6 +1249,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 
 	bds->BihDistances.resize(bds->surfaces.size());
 	bds->A.resize(bds->surfaces.size());
+
 	for(int surf = 0; surf < bds->surfaces.size(); surf++)
 	{
 		// Computation indices
@@ -1272,7 +1273,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		
 		printf("antes de nada\n");
 		symMatrixLight dists;
-		bindingBD( model, bds, indices, dists, withPatches);
+		bindingBD( model, bds, &(bds->surfaces[surf]), indices, dists, withPatches);
 		double maxValue = 0;
 		for(int i = 0; i < dists.size; i++)
 		{
@@ -1795,13 +1796,14 @@ void computeNodesOptimized( DefGraph& graph,
 							Modelo& model, 
 							MatrixXf& MatrixWeights, 
 							MatrixXf& distancesTemp, 
-							map<int, int>& defNodeRef)
+							map<int, int>& defNodeRef,
+							int surfaceIdx)
 {
 	
 
 	// Inicialization
 	int defNodesSize = graph.deformers.size();
-	MatrixXf& A = model.bind->A[0];
+	MatrixXf& A = model.bind->A[surfaceIdx];
 	
 	auto total_ini = high_resolution_clock::now();
 
@@ -1982,7 +1984,7 @@ void computeNodesOptimized( DefGraph& graph,
 	for(int defId = 0; defId < defNodesToUpdate.size(); defId++ )
 	{
 		DefNode* df = graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]];
-		mvcOpt(df->pos, MatrixWeights, defNodesToUpdate[defId], model);
+		mvcOpt(df->pos, MatrixWeights, defNodesToUpdate[defId], model, surfaceIdx);
 	}	
 	auto fin1 = high_resolution_clock::now();
 		

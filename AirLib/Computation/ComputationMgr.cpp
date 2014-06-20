@@ -3,7 +3,7 @@
 #include "mvc_interiorDistances.h"
 
 
-void ComputationMgr::setModelForComputations(Modelo* m)
+void ComputationMgr::setModelForComputations(Modelo* m, int in_surfaceIdx)
 {
 	// Lo suyo sería hacer un preproceso para obtener piezas, grafos.
 	// Y calcular las distancias de la manera que quiera.
@@ -12,6 +12,8 @@ void ComputationMgr::setModelForComputations(Modelo* m)
 	// Por ahora suponemos que esta bien inicializado y construido
 	model = m;
 	bd = m->bind;
+
+	surfaceIdx = in_surfaceIdx;
 
 }
 
@@ -91,6 +93,6 @@ void ComputationMgr::updateAllComputations()
 	
 	//if(VERBOSE_PROCESS)
 	//{
-		printf("\nUpdate Computations: %fms\n", ((double)(fin-ini)));
+		printf("\n[%d]Update Computations: %fms\n", surfaceIdx, ((double)(fin-ini)));
 	//}
 }

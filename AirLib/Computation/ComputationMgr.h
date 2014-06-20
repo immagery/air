@@ -21,10 +21,12 @@ public:
 		bd = NULL;
 		state = ST_CREATED;
 		defNodeComputationReference.clear();
+
+		surfaceIdx = 0;
 	}
 
 	// Init data for computations
-	void setModelForComputations(Modelo* m);
+	void setModelForComputations(Modelo* m, int surfaceIdx = 0);
 
 	// Deprecated functions
 	void preprocessNodeCPU(DefNode* node);
@@ -37,6 +39,9 @@ public:
 
 	// Model to do computations
 	Modelo* model;
+
+	// Wich surface from the mode
+	int surfaceIdx;
 
 	// binding of the model
 	binding* bd;

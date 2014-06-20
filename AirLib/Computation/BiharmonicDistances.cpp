@@ -281,7 +281,7 @@ int computeBDBinding(Modelo& modelo, binding* bd, vector<int>& indices, MatrixXf
 	return 0;
 }
 
-int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixLight& dists, bool withPatches)
+int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<int>& indices, symMatrixLight& dists, bool withPatches)
 {
 
 	//FILE* fout2 = fopen("C:\\Users\\chus\\Documents\\dev\\Data\\models\\tempValues\\ADistances_old_revisited.txt", "w");
@@ -291,11 +291,8 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 
 	clock_t begin, end; begin = clock();
 
-	int nopts = bd->mainSurface->nodes.size(); // Numero de vertices del modelo
-	int notrg = bd->ntriangles = bd->mainSurface->triangles.size(); // Numero de tri‡ngulos del modelo
-
-	if(withPatches) 
-		notrg += bd->virtualTriangles.size();
+	int nopts = surf->nodes.size(); // Numero de vertices del modelo
+	int notrg = surf->triangles.size(); // Numero de tri‡ngulos del modelo
 
     assert(nopts > 0);
     assert(notrg > 0);
@@ -317,11 +314,11 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 	{
 		Vector3d pt1, pt2, pt3;
 		//Aseguramos que son todo triángulos.
-		assert(bd->mainSurface->triangles[findex]->verts.size() == 3);
+		assert(surf->triangles[findex]->verts.size() == 3);
 
-		pt1 = bd->mainSurface->triangles[findex]->verts[0]->position;
-		pt2 = bd->mainSurface->triangles[findex]->verts[1]->position;
-		pt3 = bd->mainSurface->triangles[findex]->verts[2]->position;
+		pt1 = surf->triangles[findex]->verts[0]->position;
+		pt2 = surf->triangles[findex]->verts[1]->position;
+		pt3 = surf->triangles[findex]->verts[2]->position;
 
         // Calculamos el area
         Vector3d trgx, trgy, trgz;
@@ -338,38 +335,12 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 		for(int trVert = 0; trVert < 3; trVert++)
 		{
 			// Ojo!... este id podria no ser correcto... si el binding no coincide con todos los puntos.
-			int vertIdx = bd->mainSurface->triangles[findex]->verts[trVert]->id;
+			int vertIdx = surf->triangles[findex]->verts[trVert]->pieceId;
+			//int vertIdx = surf->triangles[findex]->verts[trVert]->id;
 			AM(vertIdx) += area/3;
 		}
 
     }
-
-	if(withPatches) 
-	{
-		/*
-		for(int findex = 0; findex < bd->virtualTriangles.size(); findex++ ) 
-		{
-			Vector3d trgx, trgy, trgz;
-			Vector3d& pt1 = bd->virtualTriangles[findex].pts[0]->position;
-			Vector3d& pt2 = bd->virtualTriangles[findex].pts[1]->position;
-			Vector3d& pt3 = bd->virtualTriangles[findex].pts[2]->position;
-
-			trgx << pt1.X(), pt2.X(), pt3.X(); // Los valores de X
-			trgy << pt1.Y(), pt2.Y(), pt3.Y(); // Los valores de Y
-			trgz << pt1.Z(), pt2.Z(), pt3.Z(); // Los valores de Z
-
-			Matrix3d aa, bb, cc;
-			aa << trgx, trgy, bir;
-			bb << trgx, trgz, bir;
-			cc << trgy, trgz, bir;
-
-			double area = sqrt(pow(aa.determinant(),2)+pow(bb.determinant(),2)+pow(cc.determinant(),2))/2;
-			trgarea(idx) = area;
-
-			idx++;
-		}
-		*/
-	}
 
 
 	end = clock();
@@ -398,9 +369,9 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
                 int k = kk-1;
 				
 				Vector3d pti, ptj, ptk;
-				pti = bd->mainSurface->triangles[nFace]->verts[i]->position;
-				ptj = bd->mainSurface->triangles[nFace]->verts[j]->position;
-				ptk = bd->mainSurface->triangles[nFace]->verts[k]->position;
+				pti = surf->triangles[nFace]->verts[i]->position;
+				ptj = surf->triangles[nFace]->verts[j]->position;
+				ptk = surf->triangles[nFace]->verts[k]->position;
 
                 Vector3d e2; e2 << ptj.x()-ptk.x(), ptj.y()-ptk.y(), ptj.z()-ptk.z();
                 Vector3d e3; e3 << pti.x()-ptk.x(), pti.y()-ptk.y(), pti.z()-ptk.z();
@@ -410,8 +381,11 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
                 double cota = cosa/sina;
                 double w = 0.5*cota;
 
-                int v1 = bd->mainSurface->triangles[nFace]->verts[i]->id;
-                int v2 = bd->mainSurface->triangles[nFace]->verts[j]->id;
+                //int v1 = surf->triangles[nFace]->verts[i]->id;
+                //int v2 = surf->triangles[nFace]->verts[j]->id;
+
+				int v1 = surf->triangles[nFace]->verts[i]->pieceId;
+                int v2 = surf->triangles[nFace]->verts[j]->pieceId;
 
                 A.coeffRef(v1,v1) -= w;
                 A.coeffRef(v1,v2) += w;
@@ -423,50 +397,6 @@ int bindingBD(Modelo& modelo, binding* bd, std::vector<int>& indices, symMatrixL
 
 		if(nFace% 5000 == 0){ printf("Face %d.\n", nFace); fflush(0);}
     }
-
-
-	if(withPatches) 
-	{
-		/*
-		for(int findex = 0; findex < bd->virtualTriangles.size(); findex++ ) 
-		{
-			Vector3d trgx, trgy, trgz;
-			Vector3d pts[3];
-			pts[0] = bd->virtualTriangles[findex].pts[0]->position;
-			pts[1] = bd->virtualTriangles[findex].pts[1]->position;
-			pts[2] = bd->virtualTriangles[findex].pts[2]->position;
-
-			for(int ii = 1; ii <= 3; ii++)
-			{
-				for(int jj = (ii+1); jj <= 3; jj++)
-				{
-					int kk = 6 - ii -jj;
-
-					// indices reales
-					int i = ii-1;
-					int j = jj-1;
-					int k = kk-1;
-
-					Vector3d e2; e2 << pts[j].X()-pts[k].X(), pts[j].Y()-pts[k].Y(), pts[j].Z()-pts[k].Z();
-					Vector3d e3; e3 << pts[i].X()-pts[k].X(), pts[i].Y()-pts[k].Y(), pts[i].Z()-pts[k].Z();
-
-					double cosa = e2.dot(e3) / sqrt(e2.squaredNorm()*e3.squaredNorm());
-					double sina = sqrt(1-pow(cosa,2));
-					double cota = cosa/sina;
-					double w = 0.5*cota;
-
-					int v1 = modelo.modelVertexDataPoint[bd->virtualTriangles[findex].Idxs[i]];
-					int v2 = modelo.modelVertexDataPoint[bd->virtualTriangles[findex].Idxs[j]];
-
-					A.coeffRef(v1,v1) -= w;
-					A.coeffRef(v1,v2) += w;
-					A.coeffRef(v2,v2) -= w;
-					A.coeffRef(v2,v1) += w;
-				 }
-			}
-		}
-		*/
-	}
 
 	end = clock();
 	printf("Cotangents: %f segs.\n", timelapse(end,begin)); fflush(0);

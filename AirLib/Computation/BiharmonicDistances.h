@@ -16,7 +16,7 @@
 #include <Eigen/SuperLUSupport>
 
 // int biharmonicDistances(MyMesh& modelo, std::vector<int>& indices, Eigen::MatrixXd& dists);
-int bindingBD(Modelo& modelo, binding* bd, vector<int>& indices, symMatrixLight& dists, bool withPatches = false);
+int bindingBD(Modelo& modelo, binding* bd, SurfaceGraph* surf, vector<int>& indices, symMatrixLight& dists, bool withPatches = false);
 
 int computeBDBinding(Modelo& modelo, binding* bd, vector<int>& indices, MatrixXf& dists, bool withPatches = false);
 
