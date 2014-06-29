@@ -118,6 +118,14 @@ bool AirRig::loadFromFile(ifstream& in)
 	return true;
 }
 
+void AirRig::cleanDefNodesDirtyBit()
+{
+	for(int i = 0; i< defRig.deformers.size(); i++)
+	{
+		defRig.deformers[i]->segmentationDirtyFlag = false;
+	}
+}
+
 bool getBDEmbedding(Modelo* model)
 {	
 	bool success = false;
@@ -746,15 +754,17 @@ bool AirRig::changeSmoothValue(float value, int nodeId, bool update)
 
 void AirRig::highlight(int _nodeId, bool hl)
 {
+	printf("bone: %d - %s\n", _nodeId);
 	for(int i = 0; i< defRig.defGroups.size(); i++)
 	{
 		if(defRig.defGroups[i]->nodeId == _nodeId)
-			defRig.defGroups[i]->shading->highlight = hl;
+		{
+			defRig.defGroups[i]->shading->highlight = true;
+			printf("found: %s\n", defRig.defGroups[i]->sName);
+		}
 		else
 			defRig.defGroups[i]->shading->highlight = false;
 	}
-	
-
 }
 
 void BuildGroupTree(DefGraph& graph)

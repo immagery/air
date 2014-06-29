@@ -310,7 +310,7 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 
 	// Update Smooth propagation
 	clock_t ini5 = clock();
-	propagateHierarchicalSkinningOpt(model, model.bind, graph);
+	propagateHierarchicalSkinningOpt(model, model.bind, graph, 0);
 	clock_t fin5 = clock();
 
 	clock_t ini6 = clock();
@@ -489,7 +489,8 @@ void initSurfaceWeightsSmoothingOpt(Modelo& m,
 									vector<float>& weights,
 									vector<float>& weightsAux,
 									vector<unsigned int>& indicesToCompute,
-									int& lastIndex)
+									int& lastIndex,
+									int surfIdx)
 {
 
 	//auto ini00 = high_resolution_clock::now();
@@ -497,13 +498,14 @@ void initSurfaceWeightsSmoothingOpt(Modelo& m,
 	int totalElems = 0;
 	int totalPosElems = 0;
 
-	int length = bd->pointData.size();
+	int length = bd->surfaces[surfIdx].nodes.size();
+
 	// recorrer todo el modelo e inicializar los datos para la transmision
 	std::fill(weights.begin(), weights.end(), 0.0);
 	std::fill(weightsAux.begin(), weightsAux.end(), 0.0);
 	for(int idx = 0; idx < length; idx++ )
 	{	
-		PointData& pd = bd->pointData[idx];
+		PointData& pd = bd->pointData[bd->surfaces[surfIdx].nodes[idx]->id];
 		pd.node->visited = false;
 		if(pd.ownerLabel == nodeId)
 		{
@@ -513,43 +515,27 @@ void initSurfaceWeightsSmoothingOpt(Modelo& m,
 	}
 	//auto fin00 = high_resolution_clock::now();
 
-	
-
 	//auto ini01 = high_resolution_clock::now();
 	// Seleccionamos para procesar solo lo necesario.
 	for(int idx = 0; idx < length; idx++ )
 	{
 		float value = weights[idx]; 
-		PointData& pd = bd->pointData[idx];
+		PointData& pd = bd->pointData[bd->surfaces[surfIdx].nodes[idx]->id];
 
 		bool difValues = false;
 		for(int n=0; !difValues && n<pd.node->connections.size(); n++)
 		{
-			int neighId = pd.node->connections[n]->id;
+			int neighId = pd.node->connections[n]->pieceId;
 			difValues |= (value != weights[neighId]);
 		}
 
 		if(difValues)
 		{
 			pd.node->visited = true;
-			indicesToCompute[lastIndex] = idx;
+			indicesToCompute[lastIndex] = pd.node->id;
 			lastIndex++;
 		}
 	}
-	//auto fin01 = high_resolution_clock::now();
-
-	/*printf("[init] Hay %d elementos seleccionados de [%d,%d] elemems \n", 
-			lastIndex,
-			totalElems, 
-			totalPosElems);*/
-
-	//auto ticks00 = duration_cast<microseconds>(fin00-ini00) ;
-	//auto ticks01 = duration_cast<microseconds>(fin01-ini01) ;
-
-	//printf("Computo de inicializacion: bulce01->%f  bucle02->%f\n", 
-	//		(((double)ticks00.count())), 
-	//		(((double)ticks01.count()))); 
-	//fflush(0);
 }
 
 void initSurfaceWeightsSmoothing(Modelo& m, binding* bd, vector< int >& front, int nodeId)
@@ -625,38 +611,21 @@ PARAMS:
 */
 
 void SmoothFromSegmentOpt(Modelo& m, binding* bd, DefGroup* group, int frontId, 
-						  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute)
+						  vector<float>& weightsT1, vector<float>& weightsT2, 
+						  vector<unsigned int>& indicesToCompute, int surfIdx)
 {
 	int lastIndex = 0;
 
     // Init model for weights smoothing
-	//if(VERBOSE) printf("\n-- initCellWeightsSmoothing --\n");fflush(0);
-	//auto ini00 = high_resolution_clock::now();
-    initSurfaceWeightsSmoothingOpt(m, bd, frontId, weightsT1, weightsT2, indicesToCompute, lastIndex);
-	//auto fin00 = high_resolution_clock::now();
-
-    // Smoothing (sin corte jerárquico)
-	//if(VERBOSE) printf("-- Smoothing -- \n");fflush(0);
+    initSurfaceWeightsSmoothingOpt(m, bd, frontId, weightsT1, weightsT2, indicesToCompute, lastIndex, surfIdx);
 
 	// get the global or local smoothing value
 	int smoothingPasses = group->smoothingPasses;
 	float realSmooth = group->smoothPropagationRatio;
 
-	//auto ini02 = high_resolution_clock::now();
     weightsSmoothing_opt(m, bd, realSmooth, 
 						frontId, smoothingPasses, weightsT1, 
-						weightsT2, indicesToCompute, lastIndex);
-	//weightsNoSmooting(m, bd, front, frontId);
-
-	//auto fin02 = high_resolution_clock::now();
-
-	//auto ticks00 = duration_cast<microseconds>(fin00-ini00) ;
-	//auto ticks02 = duration_cast<microseconds>(fin02-ini02) ;
-
-	//printf("Valores de tiempo: preinit->%f  computo->%f\n", 
-	//		(((double)ticks00.count())/1000.0), 
-	//		(((double)ticks02.count())/1000.0)); 
-	//fflush(0);
+						weightsT2, indicesToCompute, lastIndex, surfIdx);
 
 }
 
@@ -743,7 +712,8 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 						  vector<float>& ptWT1_ini,
 						  vector<float>& ptWT2_ini,
 						  vector<unsigned int>& indicesToCompute,
-						  int& lastIndex)
+						  int& lastIndex,
+						  int surfIdx)
 
 {
     int iter = 0;
@@ -766,11 +736,15 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 		int tempLastIndex = lastIndex;
 
 		int numElemems = (tempLastIndex/threads);
+
 		#pragma omp for schedule(static, numElemems)
 		for(int ptIdx = 0; ptIdx < tempLastIndex; ptIdx++)
         {
 			int ownIdx = indicesToCompute[ptIdx];
 			PointData& pd = bd->pointData[ownIdx];
+
+			int localPdIdx = pd.node->pieceId;
+
 			float value = 0;
 
 			// Get the sum of values
@@ -778,8 +752,9 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 			// Para cada elemento del frente realizamos la expansión.
 			for(unsigned int neighboursIdx = 0; neighboursIdx < cn; neighboursIdx++)
 			{
+				int localNeighbourId = pd.node->connections[neighboursIdx]->pieceId;
 				int neighbourId = pd.node->connections[neighboursIdx]->id;
-				value += (*ptWT1)[neighbourId];
+				value += (*ptWT1)[localNeighbourId];
 
 				if(!pd.node->connections[neighboursIdx]->visited)
 				{
@@ -795,7 +770,7 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 			// Do the mean
 			if(cn > 0) value /= cn;
 
-			(*ptWT2)[ownIdx] = value;
+			(*ptWT2)[localPdIdx] = value;
         }
 
 		// Change of array to compute weights
@@ -805,11 +780,11 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
         iter++;
     }
 
-	int numElemems2 = (bd->pointData.size()/threads);
+	int numElemems2 = (bd->surfaces[surfIdx].nodes.size()/threads);
 	#pragma omp for schedule(static, numElemems2)
-	for(int ptIdx = 0; ptIdx < bd->pointData.size(); ptIdx++)
+	for(int ptIdx = 0; ptIdx < bd->surfaces[surfIdx].nodes.size(); ptIdx++)
     {
-		PointData& pd = bd->pointData[ptIdx];
+		PointData& pd = bd->pointData[bd->surfaces[surfIdx].nodes[ptIdx]->id];
 
 		if((*ptWT1)[ptIdx] > 0)
 		{
@@ -966,14 +941,14 @@ void weightsSmoothing(Modelo& m, binding* bd,
 	}
 }
 
-void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable)
+void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable, int surfIdx)
 {
     // Recorrer cada vertice de la maya con un iterador y clasificar los vertices.
-	for(int VertIdx = 0; VertIdx < bd->pointData.size(); VertIdx++ )
+	for(int VertIdx = 0; VertIdx < bd->surfaces[surfIdx].nodes.size(); VertIdx++ )
 	{
         // Assegurar que los indices guardados en los vertices de la maya estan bien.
         assert(VertIdx >= 0 && VertIdx < m.vn());
-        PointData& pd = bd->pointData[VertIdx];
+        PointData& pd = bd->pointData[bd->surfaces[surfIdx].nodes[VertIdx]->id];
 
         if(pd.segmentId>=0)
         {
@@ -1004,8 +979,12 @@ void traducePartialSegmentationOpt(Modelo& m, binding* bd, vector<int>& traducti
     }
 }
 
-void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group, int& times, 
-									  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute)
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, 
+									  DefGroup& group, int& times, 
+									  vector<float>& weightsT1, 
+									  vector<float>& weightsT2, 
+									  vector<unsigned int>& indicesToCompute,
+									  int surfaceIdx)
 {
 	times++;
 	// The process goes down from every root joint and triggers a family fight for the influence.  
@@ -1016,7 +995,7 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 	// 1. Domain initzialization for this process step
 	//if(VERBOSE)printf("1. Domain initzialization: ");fflush(0);
 
-	initDomainOpt(model, bd, group.nodeId);
+	initDomainOpt(model, bd, group.nodeId, surfaceIdx);
 
 	// 2. Establish every joint influence region
 	//if(VERBOSE)printf("2. Volume segmentation");
@@ -1043,90 +1022,36 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 
 	// 2.c. We translate all the cells according to its node influencer.
 	//if(VERBOSE)printf("2.c Translation\n");fflush(0);
-	traducePartialSegmentation(model, bd, traductionTable);
+	traducePartialSegmentation(model, bd, traductionTable, surfaceIdx);
 	traductionTable.clear();
 
 	for(unsigned int i = 0; i< segmentationIds.size(); i++)
 	{
 		//SmoothFromSegment(model, bd, graph.defGroupsRef[segmentationIds[i]], segmentationIds[i]);
-		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], segmentationIds[i], weightsT1, weightsT2, indicesToCompute);
+		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], 
+							 segmentationIds[i], weightsT1, weightsT2, indicesToCompute, surfaceIdx);
 	}
 
 	// 5. Normalización de pesos basados en el dominio
 	// Se basa en los vectores auxInfluences.
 	//if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
-    normalizeWeightsByDomain(bd);
+    normalizeWeightsByDomain(bd, surfaceIdx);
 
 	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
 	{
 		//propagateHierarchicalSkinning(model,  bd, graph, *group.relatedGroups[i]);
-		propagateHierarchicalSkinningOpt(model,  bd, graph, *group.relatedGroups[i], times, weightsT1, weightsT2, indicesToCompute);
+		propagateHierarchicalSkinningOpt(model,  bd, graph, *group.relatedGroups[i], 
+										 times, weightsT1, weightsT2, indicesToCompute, surfaceIdx);
 	}
 }
 
-void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group)
-{
-	// The process goes down from every root joint and triggers a family fight for the influence.  
-	clock_t begin, end;
-
-	if (group.relatedGroups.size() == 0) return;
-
-	// 1. Domain initzialization for this process step
-	if(VERBOSE)printf("1. Domain initzialization: ");fflush(0);
-
-	initDomain(model, bd, group.nodeId);
-
-	// 2. Establish every joint influence region
-	if(VERBOSE)printf("2. Volume segmentation");
-	map<int, int> traductionTable;
-	vector<int> segmentationIds;
-
-	for(unsigned int id = 0; id < graph.deformers.size(); id++)
-		traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
-
-	// Adding the father to the fight
-	//createTraductionTable(&group, traductionTable, group.nodeId, true);
-	//segmentationIds.push_back(group.nodeId);
-
-	// Adding the childs to the fight
-	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
-	{
-		// Preparamos la traduccion para el grid.
-		createTraductionTable(group.relatedGroups[i], traductionTable, group.relatedGroups[i]->nodeId);
-        segmentationIds.push_back(group.relatedGroups[i]->nodeId);
-	}
-
-	// 2.b. Add also the father for fighting (TODEBUG IN TEST-TIME)
-	createTraductionTable(&group, traductionTable, group.nodeId, true);
-
-	// 2.c. We translate all the cells according to its node influencer.
-	if(VERBOSE)printf("2.c Translation\n");fflush(0);
-	traducePartialSegmentation(model, bd, traductionTable);
-	traductionTable.clear();
-
-	for(unsigned int i = 0; i< segmentationIds.size(); i++)
-	{
-		SmoothFromSegment(model, bd, graph.defGroupsRef[segmentationIds[i]], segmentationIds[i]);
-	}
-
-	// 5. Normalización de pesos basados en el dominio
-	// Se basa en los vectores auxInfluences.
-	if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
-    normalizeWeightsByDomain(bd);
-
-	for(unsigned int i = 0; i< group.relatedGroups.size(); i++)
-	{
-		propagateHierarchicalSkinning(model,  bd, graph, *group.relatedGroups[i]);
-	}
-}
-
-void clearOlderComputations(Modelo& m)
+void clearOlderComputations(Modelo& m, int surfIdx)
 {
 	// Clear all older computed influences
 
-	for(int ptIdx = 0; ptIdx< m.bind->pointData.size(); ptIdx++)
+	for(int ptIdx = 0; ptIdx< m.bind->surfaces[surfIdx].nodes.size(); ptIdx++)
 	{
-		PointData& pd = m.bind->pointData[ptIdx];
+		PointData& pd = m.bind->pointData[m.bind->surfaces[surfIdx].nodes[ptIdx]->id];
 
 		pd.influences.clear();
 		pd.auxInfluences.clear();
@@ -1193,52 +1118,40 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
     }
 }
 
-void initDomainOpt(Modelo& m, binding* bd, int domainId_init)
+void initDomainOpt(Modelo& m, binding* bd, int domainId_init, int surfaceIdx)
 {
     // Assegurar que los indices guardados en los vertices de la maya estan bien.
-	int length = bd->pointData.size();
-	//int numThreads = omp_get_max_threads();
-	//int range = (length/numThreads)+1;
-
-	int VertIdx = 0;
-	//#pragma omp parallel shared(bd, domainId_init) private(VertIdx)
+	for(int VertIdx = 0; VertIdx < bd->surfaces[surfaceIdx].nodes.size(); VertIdx++ )
 	{
-		//#pragma omp for schedule(static,range) nowait
-		for(VertIdx = 0; VertIdx < length; VertIdx++ )
+		PointData& pd = bd->pointData[bd->surfaces[surfaceIdx].nodes[VertIdx]->id];
+
+		// These are the temporary data structures for this iteration.
+		pd.auxInfluences.clear();
+		pd.ownerLabel = -1;
+
+		// We set the domain parameters for this iteration
+		if(domainId_init < 0)
 		{
-			PointData& pd = bd->pointData[VertIdx];
-
-			// These are the temporary data structures for this iteration.
-			pd.auxInfluences.clear();
-			pd.ownerLabel = -1;
-
-			// We set the domain parameters for this iteration
-			if(domainId_init < 0)
+			// This is the base case, there is no domain restriction.
+			pd.domain = 1;
+			pd.domainId = domainId_init;
+		}
+		else
+		{
+			int idx = findWeight(pd.influences, domainId_init);
+			if(idx >= 0)
 			{
-				// This is the base case, there is no domain restriction.
-				pd.domain = 1;
+				// In this case there is influence over this cell from domainId node.
+				pd.domain = pd.influences[idx].weightValue;
 				pd.domainId = domainId_init;
 			}
 			else
 			{
-				int idx = findWeight(pd.influences, domainId_init);
-				if(idx >= 0)
-				{
-					// In this case there is influence over this cell from domainId node.
-					pd.domain = pd.influences[idx].weightValue;
-					pd.domainId = domainId_init;
-				}
-				else
-				{
-					// In this case there is NO influence over this cell from domainId node
-					// and it is not battled by the childs
-					pd.domain = 0;
-					pd.domainId = domainId_init;
-				}
+				// In this case there is NO influence over this cell from domainId node
+				// and it is not battled by the childs
+				pd.domain = 0;
+				pd.domainId = domainId_init;
 			}
-
-			//pd.itPass = 0;
-			//pd.auxInfluences.clear();
 		}
 	}
 }
@@ -1259,7 +1172,7 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		{
 			//indices.push_back(idx);
 			//indices.push_back(bds[bind]->pointData[idx].node->id);
-			indices[idx] = bds->surfaces[surf].nodes[idx]->id;
+			indices[idx] = bds->surfaces[surf].nodes[idx]->pieceId;
 		}
 
 		printf("\n\nCalculo de A para embeding: [%d puntos]\n", bds->surfaces[surf].nodes.size());
@@ -1279,6 +1192,9 @@ bool ComputeEmbeddingWithBD(Modelo& model, bool withPatches)
 		{
 			for(int j = i; j< dists.size; j++)
 			{
+				if(dists.get(i,j) != dists.get(i,j))
+					int pararseme = 0;
+
 				maxValue = max(maxValue, dists.get(i,j));
 			}
 		}
@@ -1357,15 +1273,15 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 	return true;
 }
 
-void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph)
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, int surfIdx)
 {
 	//clock_t ini00 = clock();
-	clearOlderComputations(model);
+	clearOlderComputations(model, surfIdx);
 
 	// 1. Establecemos el dominio
 	//if(VERBOSE) printf("1. Domain initzialization\n");fflush(0);
 
-	initDomainOpt(model, model.bind, FIRST_ITERATION);
+	initDomainOpt(model, model.bind, FIRST_ITERATION, surfIdx);
 
 	// 2. Segmentamos para todos los esqueletos en la escena
 	//if(VERBOSE)printf("2. Volume segmentation\n");fflush(0);
@@ -1374,18 +1290,12 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 
 	vector<int> segmentationIds;
 	map<int, int> traductionTable;
-	//vector<int> traductionTable(idsSize);
-	//printf("Def Size:%d y %d nodos usados\n", graph.deformers.size(), scene::defNodeIds);
 	
 	for(unsigned int id = 0; id < idsSize; id++)
 	{
 		int tempId = graph.deformers[id]->nodeId;//%CROP_NODE_ID;
 		traductionTable[tempId] = graph.deformers[id]->boneId;
 	}
-
-	//map<int, int> traductionTable;
-	//for(unsigned int id = 0; id < graph.deformers.size(); id++)
-	//	traductionTable[graph.deformers[id]->nodeId] = graph.deformers[id]->boneId;
 
 	for(unsigned int i = 0; i< graph.roots.size(); i++)
 	{
@@ -1396,7 +1306,7 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 	//clock_t fin03 = clock();
 
 	//clock_t ini04 = clock();
-	traducePartialSegmentation(model, bd, traductionTable);
+	traducePartialSegmentation(model, bd, traductionTable, surfIdx);
     traductionTable.clear();
 	//clock_t fin04 = clock();
 
@@ -1407,7 +1317,8 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 	vector<float> weightsT2;
 	vector<unsigned int> indicesToCompute;
 	
-	int numOfPoints = model.vn();
+	//int numOfPoints = model.vn();
+	int numOfPoints = bd->surfaces[surfIdx].nodes.size();
 
 	// Inicialización de datos.
 	weightsT1.resize(numOfPoints,0);
@@ -1419,42 +1330,21 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 	{
 		//printf("Segmentation %d of %d\n", i, segmentationIds.size());
 		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], 
-							segmentationIds[i], weightsT1, weightsT2, indicesToCompute);
+							segmentationIds[i], weightsT1, weightsT2, indicesToCompute, surfIdx);
 	}
-	//clock_t fin05 = clock();
 
-	// 5. Normalización de pesos basados en el dominio
-	// Se basa en los vectores auxInfluences.
-	/*
-	if(VERBOSE)
-	{
-		printf("5. Weights Normalization By Domain\n");
-		fflush(0);
-	}
-	*/
-
-	//clock_t ini06 = clock();
-    normalizeWeightsByDomain(bd);
-	//clock_t fin06 = clock();
-
-	/*
-	if(VERBOSE)
-	{
-		printf("6. Clean zero influences\n");
-		fflush(0);
-	}
-	*/
-
-	//clock_t ini07 = clock();
+    normalizeWeightsByDomain(bd, surfIdx);
 	cleanZeroInfluences(bd);
-	//clock_t fin07 = clock();
 
 	int times = 1;
 
 	//clock_t ini08 = clock();
 	for(unsigned int i = 0; i< graph.roots.size(); i++)
 	{
-        propagateHierarchicalSkinningOpt( model,  bd, graph, *graph.roots[i], times, weightsT1, weightsT2, indicesToCompute);
+        propagateHierarchicalSkinningOpt( model,  bd, graph, 
+										  *graph.roots[i], times, 
+										  weightsT1, weightsT2, 
+										  indicesToCompute, surfIdx);
 	}
 	//clock_t fin08 = clock();
 
@@ -1473,9 +1363,14 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 
 }
 
+void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& dg)
+{
+
+}
+
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
 {
-	clearOlderComputations(model);
+	clearOlderComputations(model, 0);
 
 	// 1. Establecemos el dominio
 	if(VERBOSE) printf("1. Domain initzialization\n");fflush(0);
@@ -1497,7 +1392,7 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
         segmentationIds.push_back(graph.roots[i]->nodeId);
 	}
 
-	traducePartialSegmentation(model, bd, traductionTable);
+	traducePartialSegmentation(model, bd, traductionTable, 0);
     traductionTable.clear();
 
 	// 3. Smooth entre hijos cortando según el dominio
@@ -1511,7 +1406,7 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph)
 	// 5. Normalización de pesos basados en el dominio
 	// Se basa en los vectores auxInfluences.
 	if(VERBOSE)printf("5. Weights Normalization By Domain\n");fflush(0);
-    normalizeWeightsByDomain(bd);
+    normalizeWeightsByDomain(bd, 0);
 
 	cleanZeroInfluences(bd);
 
@@ -1526,23 +1421,27 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 									binding* bd, 
 									DefGraph& graph, 
 									MatrixXf& subDistances, 
+									map<int, double>& precompDistancesMap,
 									map<int, int>& matrixDefReference,
+									map<int, bool>& defNodeDirtyBit,
 									vector<int>& lastPostions,
 									MatrixXf& computedDistances,
-									int computationSize)
+									int computationSize,
+									int surfIdx)
 {
     // m, bb->intPoints, bb->embeddedPoints
 	vector< DefNode* >& deformers = graph.deformers;
 	map<int, bool> dirtyDeformers;
 
 	// Ensure data consistency
-	assert(bd->pointData.size() == model.vn());
+	//assert(bd->pointData.size() == model.vn());
 
 	// Get wich deformers needs to be updated
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
-		dirtyDeformers[deformers[deformerId]->nodeId] =  deformers[deformerId]->segmentationDirtyFlag &&
-														!deformers[deformerId]->freeNode;
+		dirtyDeformers[deformers[deformerId]->nodeId] = defNodeDirtyBit[deformers[deformerId]->nodeId] &&
+														!deformers[deformerId]->freeNode &&
+														precompDistancesMap[deformers[deformerId]->nodeId] >= 0;
 	}
 
 	int time1  = 0; int time2 = 0; int times = 0;
@@ -1554,7 +1453,7 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	{
 		int nodeId = deformers[i]->nodeId;
 		int matrixCol = matrixDefReference[nodeId];
-		precomputedDistances[matrixCol] = deformers[i]->precomputedDistances;
+		precomputedDistances[matrixCol] = precompDistancesMap[nodeId];
 		defExpansion[matrixCol] = deformers[i]->expansion;
 	}
 
@@ -1562,10 +1461,12 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	// Evaluacion de filas
 	//#pragma omp parallel for
 	
+	SurfaceGraph& surfGraph = bd->surfaces[surfIdx];
+
 	// Marcamos los puntos que deben recalcularse
-	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
+	for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
     {
-		PointData& pd = bd->pointData[pointId];
+		PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
 		if(pd.segmentId > 0 && (dirtyDeformers[pd.segmentId] || graph.defNodesRef[pd.segmentId]->freeNode))
 		{
 			pd.assigned = false;
@@ -1583,11 +1484,11 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 		if(dirtyDeformers[deformers[deformerId]->nodeId])
 		{
 			float expansion = def->expansion;
-			float precompDist = def->precomputedDistances;
+			float precompDist = precompDistancesMap[def->nodeId];
 
 			int realDefId = matrixDefReference[deformers[deformerId]->nodeId];
 
-			VectorXf tempValues(model.vn());
+			VectorXf tempValues(surfGraph.nodes.size());
 			tempValues.fill(precomputedDistances[realDefId]);
 
 			VectorXf newDistances = (((subDistances.col(realDefId)*-2)+tempValues)/expansion)*-1;
@@ -1595,9 +1496,9 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			//computedDistances.row(realDefId) = newDistances;
 
 			// este nodo tiene que pelear por todos los puntos.
-			for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
+			for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
 			{
-				PointData& pd = bd->pointData[pointId];
+				PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
 				float nd = newDistances[pointId];								
 														 
 				if(pd.segmentId < 0 || nd < pd.segmentDistance)
@@ -1609,20 +1510,20 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			}
 		}
 
-		def->segmentationDirtyFlag = false;
+		defNodeDirtyBit[deformers[deformerId]->nodeId] = false;
 	}
 
 
-	for(int pointId = 0; pointId < bd->pointData.size(); pointId++ )
+	for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
     {
-		PointData& pd = bd->pointData[pointId];
+		PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
 		if(!pd.assigned)
 		{
-			DefNode* def = graph.defNodesRef[pd.segmentId];
+			//DefNode* def = graph.defNodesRef[pd.segmentId];
 			// El punto debe ser debatido entre todos los deformadores.
 			float distance = 99999999999;
 			int newSegmentId = -1;
-			float preCompDistance = def->precomputedDistances;
+			//float preCompDistance = def->precomputedDistances;
 
 			VectorXf subDistRow = subDistances.row(pointId).segment(0, computationSize);
 			subDistRow *= -2;
@@ -1651,6 +1552,9 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 // TODEBUG: ensure the process of disconect deformers from the process.
 void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph)
 {
+	// REMOVE FUNCTION
+	assert(false);
+
     // m, bb->intPoints, bb->embeddedPoints
 	vector< DefNode* >& deformers = graph.deformers;
 	map<int, bool> dirtyDeformers;
@@ -1795,16 +1699,16 @@ bool getDefomersfromBranch( DefGroup* defGroup, vector<DefNode*>& deformers)
 void computeNodesOptimized( DefGraph& graph, 
 							Modelo& model, 
 							MatrixXf& MatrixWeights, 
-							MatrixXf& distancesTemp, 
+							MatrixXf& distancesTemp,
+							map<int, double>& precompDistances, 
 							map<int, int>& defNodeRef,
+							map<int, bool>& defNodeDirtyBit,
 							int surfaceIdx)
 {
 	
 
 	// Inicialization
-	int defNodesSize = graph.deformers.size();
-	MatrixXf& A = model.bind->A[surfaceIdx];
-	
+	int defNodesSize = graph.deformers.size();	
 	auto total_ini = high_resolution_clock::now();
 
 	// Place all the dirty computations at the end
@@ -1832,8 +1736,8 @@ void computeNodesOptimized( DefGraph& graph,
 	while(idx2 > idx1)
 	{
 		// We move the indexes
-		while(idx1 < lastPostions.size() && !graph.defNodesRef[lastPostions[idx1]]->segmentationDirtyFlag) idx1++;
-		while(idx2 >= 0 && graph.defNodesRef[lastPostions[idx2]]->segmentationDirtyFlag) idx2--;
+		while(idx1 < lastPostions.size() && !defNodeDirtyBit[graph.defNodesRef[lastPostions[idx1]]->nodeId]) idx1++;
+		while(idx2 >= 0 && defNodeDirtyBit[graph.defNodesRef[lastPostions[idx2]]->nodeId]) idx2--;
 		
 		if(idx1 == lastPostions.size() || idx2< 0 || idx2 < idx1) break;
 
@@ -1860,8 +1764,9 @@ void computeNodesOptimized( DefGraph& graph,
 	}
 
 
-	// 2. Just working over the right hand group, We allocate all the dirty nodes in the left hand and free ones in the right
-	// With this we only compute the dirty nodes and do all the computations over this submatrix
+	// 2. Just working over the right hand group, We allocate all the dirty nodes in the left hand 
+	// and free ones in the right. With this we only compute the dirty nodes and do all the 
+	// computations over this submatrix
 	idx1 = -1;
 	for(int i = 0; i < lastPostions.size(); i++)
 	{
@@ -1930,7 +1835,7 @@ void computeNodesOptimized( DefGraph& graph,
 			DefNode* defNode = graph.defNodesRef[lastPostions[i]];
 			printf("%d - [%d, %d] ->", 
 					defNode->nodeId,
-					defNode->segmentationDirtyFlag, 
+					defNodeDirtyBit[defNode->nodeId], 
 					defNode->freeNode);
 
 			printf("%d, (%f, %f, %f)\n", 
@@ -1950,7 +1855,7 @@ void computeNodesOptimized( DefGraph& graph,
 			idx2 = i;
 		}
 
-		if(idx1 < 0 && graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag)
+		if(idx1 < 0 && defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId])
 		{
 			idx1 = i;
 		}
@@ -1968,7 +1873,7 @@ void computeNodesOptimized( DefGraph& graph,
 	
 	for(int i = 0 ; i < lastPostions.size(); i++ )
 	{
-		if(graph.defNodesRef[lastPostions[i]]->segmentationDirtyFlag)
+		if(defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId])
 		{
 			if(!graph.defNodesRef[lastPostions[i]]->freeNode)
 				defNodesToUpdate.push_back(i);
@@ -1994,6 +1899,9 @@ void computeNodesOptimized( DefGraph& graph,
 	auto ini2 = high_resolution_clock::now();
 
 	int blockSize = idx2-idx1;
+		
+	MatrixXf& A = model.bind->A[surfaceIdx];
+	SurfaceGraph& surfGraf = model.bind->surfaces[surfaceIdx];
 
 	if(defNodesToUpdate.size() > 0 )
 	{
@@ -2007,8 +1915,8 @@ void computeNodesOptimized( DefGraph& graph,
 			A*MatrixWeights.block(0, minValue, model.vn(), defNodesToUpdate.size());
 			*/
 
-			distancesTemp.block(0, idx1, model.vn(), blockSize) =  
-			A*MatrixWeights.block(0, idx1, model.vn(), blockSize);
+			distancesTemp.block(0, idx1, surfGraf.nodes.size(), blockSize) =  
+			A*MatrixWeights.block(0, idx1, surfGraf.nodes.size(), blockSize);
 
 			/*
 			#pragma omp parallel for
@@ -2031,38 +1939,47 @@ void computeNodesOptimized( DefGraph& graph,
 	}
 	auto fin2 = high_resolution_clock::now();
 	
+	for(int defId = 0; defId < defNodesToUpdate.size(); defId++ )
+	{
+		DefNode* df = graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]];
+		precompDistances[df->nodeId] = -1;
+	}
+
 	auto ini3 = high_resolution_clock::now();
 	#pragma omp parallel for
 	for(int defId = 0; defId < defNodesToUpdate.size(); defId++ )
 	{
 		float value = distancesTemp.col(defNodesToUpdate[defId]).transpose()*MatrixWeights.col(defNodesToUpdate[defId]);
-
-		graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]]->precomputedDistances = value;
+		DefNode* df = graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]];
+		precompDistances[df->nodeId] = value;
+		
+		//if(precompDistances[df->nodeId] < 0) precompDistances[df->nodeId] = 99999999999;
+		//graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]]->precomputedDistances = value;
 	}
 	auto fin3 = high_resolution_clock::now();
-
+	
 	// This will be removed or solved... by now...rest in peace.
 	MatrixXf computedDistances;
-	//MatrixXf computedDistances(defNodeRef.size(), model.vn());
 
 	int computationSize = idx2;
 	if(computationSize < 0) computationSize = defNodeRef.size();
 
 	auto ini4 = high_resolution_clock::now();
 
-	segmentModelFromDeformersOpt(model, model.bind, graph, distancesTemp, defNodeRef, 
-								 lastPostions, computedDistances, computationSize);
+	segmentModelFromDeformersOpt(model, model.bind, graph, distancesTemp, precompDistances, defNodeRef, defNodeDirtyBit,
+								 lastPostions, computedDistances, computationSize, surfaceIdx);
 
 	auto fin4 = high_resolution_clock::now();
 	
+	// Lo saco fuera para unficar la expansion y demás
 	auto ini5 = high_resolution_clock::now();
 	// Update Smooth propagation
-	propagateHierarchicalSkinningOpt(model, model.bind, graph);	
+	propagateHierarchicalSkinningOpt(model, model.bind, graph, surfaceIdx);	
 	auto fin5 = high_resolution_clock::now();
 		
 	auto ini6 = high_resolution_clock::now();
 	// Compute Secondary weights ... by now compute all the sec. weights
-	computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, false);
+	computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, surfaceIdx, false);
 
 	if(VERBOSE_PROCESS)
 	{
@@ -2074,8 +1991,8 @@ void computeNodesOptimized( DefGraph& graph,
 		auto ticks02 = duration_cast<microseconds>(fin2-ini2) ;
 		auto ticks03 = duration_cast<microseconds>(fin3-ini3) ;
 		auto ticks04 = duration_cast<microseconds>(fin4-ini4) ;
-		auto ticks05 = duration_cast<microseconds>(fin5-ini5) ;
-		auto ticks06 = duration_cast<microseconds>(fin6-ini6) ;
+		//auto ticks05 = duration_cast<microseconds>(fin5-ini5) ;
+		//auto ticks06 = duration_cast<microseconds>(fin6-ini6) ;
 		auto total = duration_cast<microseconds>(total_fin-total_ini) ;
 
 		printf("1. MVC: %fms -> media: %fms\n", 
@@ -2089,18 +2006,23 @@ void computeNodesOptimized( DefGraph& graph,
 									(double)ticks03.count()/1000.0/defNodesToUpdate.size());
 		printf("4. Segmentation: %fms\n", 
 									(double)ticks04.count()/1000.0);
-		printf("5. Weights propagation: %fms\n", 
-									(double)ticks05.count()/1000.0);
-		printf("6. Secondary weights: %fms\n", 
-									(double)ticks06.count()/1000.0);
+		//printf("5. Weights propagation: %fms\n", 
+		//							(double)ticks05.count()/1000.0);
+		//printf("6. Secondary weights: %fms\n", 
+		//							(double)ticks06.count()/1000.0);
 
 		printf("\nTOTAL!!!: %fms\n\n", (double)total.count()/1000.0);
 	}
 
 }
 
-void computeSecondaryWeightsOpt(Modelo& model, binding* bd, DefGraph& graph, MatrixXf& subdistances, 
-								map<int, int>& idxOrder, MatrixXf& computedDistances, bool wideValueComputation)
+void computeSecondaryWeightsOpt(Modelo& model, binding* bd, 
+								DefGraph& graph, 
+								MatrixXf& subdistances, 
+								map<int, int>& idxOrder, 
+								MatrixXf& computedDistances, 
+								int surfIdx, 
+								bool wideValueComputation)
 {
     // No hay ningun binding
     if(!bd ) return;

@@ -149,6 +149,8 @@ public:
 
 	virtual bool isSelectable(int element);
 
+	void cleanDefNodesDirtyBit();
+
 
 };
 

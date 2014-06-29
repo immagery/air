@@ -202,8 +202,13 @@ void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surf
     const float tresh2 = 0.00001;
     const float tresh3 = 0.0001;
 
+	// Get the corresponding surface
+	assert(surfaceIdx >= 0 && surfaceIdx <= modelo.bind->surfaces.size());
+	SurfaceGraph& graph = modelo.bind->surfaces[surfaceIdx];
+
 	// We use all the model
-    int nopts = modelo.vn();
+    int nopts = graph.nodes.size();
+	
     if(nopts == 0)
     {
         printf("ERROR!: El modelo no está bien inicializado!\n");
@@ -214,14 +219,14 @@ void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surf
     vector< Vector3f> unitVectors2(nopts);
     vector<float> normas2(nopts);
 
-	for(int vertIt = 0; vertIt < modelo.nodes.size(); vertIt++ )
+	for(int vertIt = 0; vertIt < graph.nodes.size(); vertIt++ )
 	{
-		float dirX = modelo.nodes[vertIt]->position.x() - point.x();
-		float dirY = modelo.nodes[vertIt]->position.y() - point.y();
-		float dirZ = modelo.nodes[vertIt]->position.z() - point.z();
+		float dirX = graph.nodes[vertIt]->position.x() - point.x();
+		float dirY = graph.nodes[vertIt]->position.y() - point.y();
+		float dirZ = graph.nodes[vertIt]->position.z() - point.z();
 
         float norm2 = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
-		int idVert = modelo.nodes[vertIt]->id;
+		int idVert = graph.nodes[vertIt]->pieceId;
 
         assert(idVert >= 0 && idVert < nopts);
 		
@@ -242,14 +247,14 @@ void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surf
     }
 
     float totalW = 0;
-	for(int fj = 0; fj < modelo.triangles.size(); fj++ )
+	for(int fj = 0; fj < graph.triangles.size(); fj++ )
 	{
          Vector3d O, c, s, l;
          Vector3i idVerts;
 
-		idVerts[0] = modelo.triangles[fj]->verts[0]->id;
-		idVerts[1] = modelo.triangles[fj]->verts[1]->id;
-		idVerts[2] = modelo.triangles[fj]->verts[2]->id;
+		idVerts[0] = graph.triangles[fj]->verts[0]->pieceId;
+		idVerts[1] = graph.triangles[fj]->verts[1]->pieceId;
+		idVerts[2] = graph.triangles[fj]->verts[2]->pieceId;
 
 
         for(int i = 0; i<3; i++)

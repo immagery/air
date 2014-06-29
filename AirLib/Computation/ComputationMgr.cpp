@@ -63,6 +63,8 @@ void ComputationMgr::updateAllComputations()
 			dn->addedToComputations = true;
 			addedToComputationsCount++;
 		}
+
+		defNodeDirtyBit[dn->nodeId] = dn->segmentationDirtyFlag;
 	}
 
 	int newSize = MatrixWeights.cols() + addedToComputationsCount;
@@ -72,10 +74,10 @@ void ComputationMgr::updateAllComputations()
 	if(MatrixWeights.cols() < defNodesTotalSize)
 	{
 		// Matrix weights for comutations
-		MatrixWeights.resize(model->vn(), newSize);
+		MatrixWeights.resize(model->bind->surfaces[surfaceIdx].nodes.size(), newSize);
 
 		// Init subDistances
-		distancesTemp.resize(model->vn(), newSize);
+		distancesTemp.resize(model->bind->surfaces[surfaceIdx].nodes.size(), newSize);
 	}
 
 	if(VERBOSE_PROCESS)
@@ -87,12 +89,26 @@ void ComputationMgr::updateAllComputations()
 	}
 
 	//Compute per node data, with optimized code.
-	computeNodesOptimized(rig->defRig, *model, MatrixWeights, distancesTemp, defNodeComputationReference);
+	computeNodesOptimized(rig->defRig, *model, MatrixWeights, 
+						  distancesTemp, precomputedDistances, 
+						  defNodeComputationReference, defNodeDirtyBit, surfaceIdx);
+
+	/*
+	//auto ini5 = high_resolution_clock::now();
+	// Update Smooth propagation
+	propagateHierarchicalSkinningOpt(model, model->bind, rig->defRig);	
+	//auto fin5 = high_resolution_clock::now();
+		
+	//auto ini6 = high_resolution_clock::now();
+	// Compute Secondary weights ... by now compute all the sec. weights
+	computeSecondaryWeightsOpt(*model, model->bind, rig->defRig, distancesTemp, 
+								defNodeComputationReference, distancesTemp, false);
+				*/
 
 	clock_t fin = clock();
 	
 	//if(VERBOSE_PROCESS)
 	//{
-		printf("\n[%d]Update Computations: %fms\n", surfaceIdx, ((double)(fin-ini)));
+		printf("\n[Surf->%d] Update Computations: %fms\n", surfaceIdx, ((double)(fin-ini)));
 	//}
 }

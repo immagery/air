@@ -53,14 +53,20 @@ public:
 	MatrixXf MatrixWeights;
 	MatrixXf distancesTemp;
 
-	// queue of work to do
+	// Preprocess for compute internal distances
+	map<int, double> precomputedDistances;
+
+	// Queue of work to do
 	vector<DefNode*> defNodes;
 
-	// queue of segmentation to do
+	// Queue of segmentation to do
 	map<int, DefNode*> defNodeReferences;
 
 	// Position of eachNode in mem for computation
 	map<int, int> defNodeComputationReference;
+
+	// If the node needs to be updated
+	map<int, bool> defNodeDirtyBit;
 
 	// how many defNodes are in the computations
 	int defNodesCount;

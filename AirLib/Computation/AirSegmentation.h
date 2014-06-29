@@ -36,10 +36,13 @@ void segmentModelFromDeformers(Modelo& model, binding* bd, DefGraph& graph);
 
 void segmentModelFromDeformersOpt(  Modelo& model, binding* bd, DefGraph& graph, 
 									MatrixXf& subDistances, 
+									map<int, double>& precompDistancesMap,
 									map<int, int>& matrixDefReference,
+									map<int, bool>& defNodeDirtyBit,
 									vector<int>& lastPostions,
                                     MatrixXf& computedDistances,
-									int computationSize);
+									int computationSize,
+									int surfIdx);
 
 // Compute the hierarchical skinning using computed segmentation
 void propagateHierarchicalSkinning(Modelo& model, binding* bd);
@@ -47,9 +50,13 @@ void propagateHierarchicalSkinning(Modelo& model, binding* bd);
 void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int idNode, bool onlyRoot = false);
 void createTraductionTableOpt(DefGroup* group, vector<int>& traductionTable, int idNode, bool onlyRoot = false);
 
-void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph);
-void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group, int& times, 
-									  vector<float>& weightsT1, vector<float>& weightsT2, vector<unsigned int>& indicesToCompute);
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, int surfIdx);
+void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, 
+									  DefGroup& group, int& times, 
+									  vector<float>& weightsT1, 
+									  vector<float>& weightsT2, 
+									  vector<unsigned int>& indicesToCompute,
+									  int surfaceIdx);
 
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph);
 void propagateHierarchicalSkinning(Modelo& model, binding* bd, DefGraph& graph, DefGroup& group);
@@ -62,14 +69,15 @@ void computeSecondaryWeightsOpt(Modelo& model, binding* bd,
                                 DefGraph& graph, MatrixXf& subdistances, 
                                 map<int, int>& idxOrder,
                                 MatrixXf& computedDistances,
+								int surfIdx,
 								bool wideValueComputation);
 
 int indexOfNode(int nodeId, vector<DefNode>& nodes);
 
-void clearOlderComputations(Modelo& m);
+void clearOlderComputations(Modelo& m, int surfIdx);
 
 void initDomain(Modelo& m, binding* bd, int domainId_init);
-void initDomainOpt(Modelo& m, binding* bd, int domainId_init);
+void initDomainOpt(Modelo& m, binding* bd, int domainId_init, int surfaceIdx);
 
 bool LoadEmbeddings(Modelo& m, char* bindingFileName);
 
@@ -94,7 +102,7 @@ void insertInThisPos(vector<double>& valuesOrdered, vector<int>& weightsIndirect
 
 void SaveEmbeddings(Modelo& model, char* fileName, bool ascii = false);
 
-void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable);
+void traducePartialSegmentation(Modelo& m, binding* bd, map<int, int>& traductionTable, int surfIdx);
 void traducePartialSegmentationOpt(Modelo& m, binding* bd, vector<int>& traductionTable);
 
 void weightsSmoothing(Modelo& m, binding* bd,
@@ -110,7 +118,8 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
 						  vector<float>& ptWT1,
 						  vector<float>& ptWT2,
 						  vector<unsigned int>& indicesToCompute,
-						  int& lastIndex);
+						  int& lastIndex,
+						  int surfIdx);
 
 void initData(Modelo& m, binding* bd,
                       vector< int >& front,
@@ -129,8 +138,10 @@ void initData(Modelo& m, binding* bd,
 void computeNodesOptimized( DefGraph& graph, 
 							Modelo& model, 
 							MatrixXf& MatrixWeights, 
-							MatrixXf& distancesTemp, 
-							map<int, int>& defNodeRef
+							MatrixXf& distancesTemp,
+							map<int, double>& precompDistances,  
+							map<int, int>& defNodeRef,
+							map<int, bool>& defNodeDirtyBit,
 							int surfaceIdx = 0);
 
 #endif // AIR_SEGMENTATION_H

@@ -14,6 +14,8 @@ using Eigen::Vector3d;
 #include "DataStructures/Modelo.h"
 #include "DataStructures/SurfaceData.h"
 
+#define distMax 999999999
+
 int computeBDBinding(Modelo& modelo, binding* bd, vector<int>& indices, MatrixXf& dists, bool withPatches)
 {
 	
@@ -342,7 +344,6 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
 
     }
 
-
 	end = clock();
 	printf("Triangle area computation: %f segs.\n", timelapse(end,begin)); fflush(0);
 	begin = clock();
@@ -448,6 +449,7 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
     double diagonalValue = 1.0-(1.0/nopts);
     double restValue = -(1.0/nopts);
 	int percent = 0;
+
     for(unsigned int col = 0; col< indices.size(); col++)
     {
         Gaux.setZero(nopts);
@@ -516,32 +518,34 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
 	printf("Resolucion del sistema: %f segs.\n", timelapse(end,begin)); fflush(0);
 	begin = clock();
 
+	bool patched = false;
     //compute dists; this is a vectorization of d^2 = g(i,i)+g(j,j)-2g(i,j)
     for(int row = 0; row< nopts; row++)
     {
         for(int col = row; col< nopts; col++)
         {
-			double value = sqrt(Gdiag(row)+Gdiag(col)-2*dists.get(row,col));
+			double intValue = Gdiag(row)+Gdiag(col)-2*dists.get(row,col);
+
+			// Ponemos distancia max
+			double value = distMax;
+			if(intValue >=  0)
+			{
+				value = sqrt(intValue);
+			}
+			else
+				patched = true;
+
             dists.set(row,col,value);
         }
     }
+
+	if(patched)
+		printf("Esta modelo ha dado valores incorrectos de distancias.... porque?, piezas desconectas?\n");
 
 	end = clock();
 	printf("Guardar valores(podriamos considerarla simetrica): %f segs.\n", timelapse(end,begin)); fflush(0);
 	begin = clock();
 
-	/*
-	for(int i = 0; i< nopts; i++)
-	{
-		for(int j = 0; j< nopts; j++)
-		{
-			fprintf(fout2, "%5.10f\n", dists.get(i,j));
-		}
-	}
-
-
-	fclose(fout2);
-	*/
 	return 0;
 }
 
