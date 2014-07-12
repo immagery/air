@@ -8,7 +8,7 @@
 
 #include <DataStructures/Scene.h>
 
-#include <cuda/cudaMgr.cuh>
+//#include <cuda/cudaMgr.cuh>
 
 #include <algorithm>
 
@@ -370,6 +370,8 @@ void getCompactRepresentationSegm(cudaModel& model, Modelo& m)
 
 void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
 {
+	/*
+
 	// Test with MVC
 	//---------------
 	// Inicio init CUDA
@@ -439,6 +441,8 @@ void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
 
 	clock_t fin = clock();
 	printf("Calculo de pesos total: %f ms\n", timelapse(fin,ini)*1000); fflush(0);
+
+	*/
 	
 }
 
