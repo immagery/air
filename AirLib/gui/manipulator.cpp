@@ -190,9 +190,19 @@ void manipulator::startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool w
 			u = Vector3d(0,0,1);
 		}
 		
-		u = currentframe.rotation._transformVector(u);
-		v = u.cross(rayDir);
-		v.normalize();
+		if (axis == AXIS_VIEW)
+		{
+			//
+			Vector3d rayView = rayOrigin - currentframe.position;
+			u = Vector3d(rayView.y(), - rayView.x(), 0);
+			v = u.cross(rayView);
+		}
+		else
+		{
+			u = currentframe.rotation._transformVector(u);
+			v = u.cross(rayDir);
+			v.normalize();
+		}
 
 		Vector3d I; 
 		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position,  v, u, I);

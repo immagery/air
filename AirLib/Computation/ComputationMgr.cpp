@@ -51,20 +51,35 @@ void ComputationMgr::updateAllComputations()
 	int defNodesTotalSize = rig->defRig.deformers.size();
 	int firstPosToAdd = MatrixWeights.cols();
 
+	int insideNodes = 0;
+
 	// Preparing memory for allocate all the computations
 	int addedToComputationsCount = 0;
-	for(int ii = 0; ii < defNodesTotalSize; ii++)
+	for (int ii = 0; ii < defNodesTotalSize; ii++)
 	{
 		DefNode* dn = rig->defRig.deformers[ii];
-		if(defNodeComputationReference.find(dn->nodeId) == defNodeComputationReference.end())
+		// Test if the node is inside the model
+
+		// debug: Test if the cell is in the grid
+		Vector3i nodeCell = model->grid->cellId(dn->pos);
+		if (!model->grid->isContained(nodeCell, ii))
+		{
+			dn->freeNode = true;
+		}
+		else
+			insideNodes++;
+
+		if (defNodeComputationReference.find(dn->nodeId) == defNodeComputationReference.end())
 		{
 			// This node is not in the computations
-			defNodeComputationReference[dn->nodeId] = firstPosToAdd+addedToComputationsCount;
+			defNodeComputationReference[dn->nodeId] = firstPosToAdd + addedToComputationsCount;
 			dn->addedToComputations = true;
 			addedToComputationsCount++;
 		}
 
 		defNodeDirtyBit[dn->nodeId] = dn->segmentationDirtyFlag;
+
+		//}
 	}
 
 	int newSize = MatrixWeights.cols() + addedToComputationsCount;
@@ -86,6 +101,7 @@ void ComputationMgr::updateAllComputations()
 		printf("1. Computation matrices: %d row x %d cols\n", MatrixWeights.rows(), MatrixWeights.cols());
 		printf("2. Added to the computations: %d nodes\n", addedToComputationsCount);
 		printf("3. Total nodes allocated: %d nodes\n", defNodesTotalSize);
+		printf("4. Nodes inside this surface: %d\n", insideNodes);
 	}
 
 	//Compute per node data, with optimized code.

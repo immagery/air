@@ -10,6 +10,8 @@
 
 //#include <cuda/cudaMgr.cuh>
 
+#include <omp.h>
+
 #include <algorithm>
 
 #define LOCAL_COMP_DEBUG true
@@ -328,6 +330,7 @@ void updateAirSkinning(DefGraph& graph, Modelo& model)
 
 
 // Temp. debería estar unificado... porque hay código repetido.
+/*
 void getCompactRepresentationSegm(cudaModel& model, Modelo& m)
 {
 	// Load constants
@@ -367,6 +370,8 @@ void getCompactRepresentationSegm(cudaModel& model, Modelo& m)
 	}
 
 }
+
+*/
 
 void updateAirSkinningWithCuda(DefGraph& graph, Modelo& model)
 {
