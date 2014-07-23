@@ -52,6 +52,7 @@ public:
 	// Runtime temporal sub-computations
 	MatrixXf MatrixWeights;
 	MatrixXf distancesTemp;
+	MatrixXf computedDistances;
 
 	// Preprocess for compute internal distances
 	map<int, double> precomputedDistances;
@@ -67,6 +68,9 @@ public:
 
 	// If the node needs to be updated
 	map<int, bool> defNodeDirtyBit;
+
+	// If the node needs to be updated
+	map<int, bool> defNodeIsInside;
 
 	// how many defNodes are in the computations
 	int defNodesCount;

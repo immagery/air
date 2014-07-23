@@ -345,6 +345,9 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions)
 
 bool updateDefNodesFromStick(DefGroup* group )
 {
+
+	//printf("updating defGroup:%d\n", group->nodeId);
+
 	vector<DefGroup*>& relatedGroups = group->relatedGroups;
 
 	joint* jt = group->transformation;
@@ -489,7 +492,7 @@ bool propagateExpansion(DefGroup& gr)
 		if(child == NULL)
 		{
 			gr.deformers[group].expansion = gr.expansion;
-			gr.deformers[group].segmentationDirtyFlag = true;
+			gr.deformers[group].expansionDirtyFlag = true;
 			continue;
 		}
 
@@ -510,7 +513,7 @@ bool propagateExpansion(DefGroup& gr)
 
 		//gr.deformers[group].expansion = newValue;
 		gr.deformers[group].expansion = gr.expansion;
-		gr.deformers[group].segmentationDirtyFlag = true;
+		gr.deformers[group].expansionDirtyFlag = true;
 	}
 
 	return true;
@@ -754,13 +757,13 @@ bool AirRig::changeSmoothValue(float value, int nodeId, bool update)
 
 void AirRig::highlight(int _nodeId, bool hl)
 {
-	printf("bone: %d - %s\n", _nodeId);
+	//printf("bone: %d\n", _nodeId);
 	for(int i = 0; i< defRig.defGroups.size(); i++)
 	{
 		if(defRig.defGroups[i]->nodeId == _nodeId)
 		{
 			defRig.defGroups[i]->shading->highlight = true;
-			printf("found: %s\n", defRig.defGroups[i]->sName);
+			//printf("found: %s\n", defRig.defGroups[i]->sName);
 		}
 		else
 			defRig.defGroups[i]->shading->highlight = false;

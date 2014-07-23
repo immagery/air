@@ -39,6 +39,7 @@ void segmentModelFromDeformersOpt(  Modelo& model, binding* bd, DefGraph& graph,
 									map<int, double>& precompDistancesMap,
 									map<int, int>& matrixDefReference,
 									map<int, bool>& defNodeDirtyBit,
+									map<int, bool>& defNodeisInside,
 									vector<int>& lastPostions,
                                     MatrixXf& computedDistances,
 									int computationSize,
@@ -51,6 +52,7 @@ void createTraductionTable(DefGroup* group, map<int, int>& traductionTable, int 
 void createTraductionTableOpt(DefGroup* group, vector<int>& traductionTable, int idNode, bool onlyRoot = false);
 
 void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, int surfIdx);
+
 void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, 
 									  DefGroup& group, int& times, 
 									  vector<float>& weightsT1, 
@@ -139,9 +141,23 @@ void computeNodesOptimized( DefGraph& graph,
 							Modelo& model, 
 							MatrixXf& MatrixWeights, 
 							MatrixXf& distancesTemp,
+							MatrixXf& computedDistances,
 							map<int, double>& precompDistances,  
 							map<int, int>& defNodeRef,
 							map<int, bool>& defNodeDirtyBit,
+							map<int, bool>& defNodeIsInside,
 							int surfaceIdx = 0);
+
+// An optimized segmentation computations just only updating expansion 
+void computeNodesOptimized_justExpansion(DefGraph& graph,
+										Modelo& model,
+										MatrixXf& MatrixWeights,
+										MatrixXf& distancesTemp,
+										MatrixXf& computedDistances,
+										map<int, double>& precompDistances,
+										map<int, int>& defNodeRef,
+										map<int, bool>& defNodeDirtyBit,
+										map<int, bool>& defNodeIsInside,
+										int surfaceIdx);
 
 #endif // AIR_SEGMENTATION_H

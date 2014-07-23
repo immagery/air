@@ -66,6 +66,7 @@ public:
 	bool dirtyCreation;
 	bool dirtyTransformation;
 	bool dirtySegmentation;
+	bool dirtySmooth;
 
 	DefGroupType type; 
 

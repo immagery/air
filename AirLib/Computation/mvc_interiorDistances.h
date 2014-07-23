@@ -13,6 +13,13 @@
 
 #include "utils/util.h"
 
+struct PointStr
+{
+	float x;
+	float y;
+	float z;
+};
+
 using namespace std;
 
 //void mvcEmbedPoint( Vector3d& point, vector<double>& embeddedPoint, vector< vector<double> >& V, MyMesh& modelo);
@@ -22,4 +29,6 @@ void mvc_weights(vector< Vector3d>& auxPoints, vector< vector<double> >& embedde
 void mvcSingleBinding( Vector3d& point, vector<double>& embeddedPoint, binding* bd, Modelo& modelo);
 void mvcAllBindings( Vector3d& point, vector<double>& embeddedPoint, Modelo& modelo);
 void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surfaceIdx);
+
+void mvcOpt_ext(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surfaceIdx, vector<PointStr>& vertexes);
 #endif // UTILGL_H

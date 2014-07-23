@@ -450,7 +450,7 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
     double restValue = -(1.0/nopts);
 	int percent = 0;
 
-    for(unsigned int col = 0; col< indices.size(); col++)
+    for(int col = 0; col< indices.size(); col++)
     {
         Gaux.setZero(nopts);
         int idx = indices[col];
@@ -477,12 +477,12 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
 		//		fprintf(fout2, "- %f\n", Gaux(colTT));
 		//}	
 
-        //NORMALIZACION -> centramos segœn la media.
+        //NORMALIZACION -> centramos segun la media.
         //shift the solution so that add up to zero, but weighted
         double media = 0;
         for(int row = 0; row< nopts; row++)
 		{
-            // Pongo i porque la matriz es del tama–o indices.
+            // Pongo i porque la matriz es del tamano indices.
             //G(j,i) = Gaux(j);
 			dists.set(row,col, Gaux(row));
 			
@@ -527,13 +527,16 @@ int bindingBD(Modelo& modelo, binding* bd_new, SurfaceGraph* surf, std::vector<i
 			double intValue = Gdiag(row)+Gdiag(col)-2*dists.get(row,col);
 
 			// Ponemos distancia max
-			double value = distMax;
+			double value = 0.0;
 			if(intValue >=  0)
 			{
 				value = sqrt(intValue);
 			}
 			else
+			{
 				patched = true;
+				printf(">>> Hay inestabilidad en el cálculo (%d %d)\n.", row, col);
+			}
 
             dists.set(row,col,value);
         }

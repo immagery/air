@@ -193,7 +193,7 @@ void manipulator::startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool w
 		if (axis == AXIS_VIEW)
 		{
 			//
-			Vector3d rayView = rayOrigin - currentframe.position;
+			Vector3d rayView = cameraPos - currentframe.position;
 			u = Vector3d(rayView.y(), - rayView.x(), 0);
 			v = u.cross(rayView);
 		}
@@ -357,10 +357,20 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 		{
 			u = Vector3d(0,0,1);
 		}
-		
-		u = currentframe.rotation._transformVector(u);
-		v = u.cross(rayDir);
-		v.normalize();
+		if (axis == AXIS_VIEW)
+		{
+			//
+			Vector3d rayView = rayOrigin - currentframe.position;
+			u = Vector3d(rayView.y(), -rayView.x(), 0);
+			v = u.cross(rayView);
+		}
+		else
+		{
+			u = currentframe.rotation._transformVector(u);
+			v = u.cross(rayDir);
+			v.normalize();
+		}
+
 
 		Vector3d I; 
 		int intersecFlag = intersect3D_RayPlane(rayOrigin, rayDir, previousframe.position, v, u, I);
@@ -467,12 +477,15 @@ void manipulator::drawFuncNames()
 		glDisable(GL_LIGHTING);
 
 		glLineWidth(6);
-		//glPushName(0);
-		glPointSize(15);
-		glBegin(GL_POINT);
+		glPushName(0);
+
 		glColor3f(1.0,1.0,1.0);
-		glVertex3d(0,0,0);
-		glEnd();
+		GLUquadricObj* quadric;
+		quadric = gluNewQuadric();
+		gluQuadricDrawStyle(quadric, GLU_FILL);
+		gluSphere(quadric, size / 5.0, 36, 18);
+		gluDeleteQuadric(quadric);
+
 		glPopName();
 
 		glPushName(1);
@@ -710,6 +723,13 @@ void manipulator::drawFunc()
 		else
 			glLineWidth(3);
 
+		glColor3f(1.0, 1.0, 1.0);
+		GLUquadricObj* quadric;
+		quadric = gluNewQuadric();
+		gluQuadricDrawStyle(quadric, GLU_FILL);
+		gluSphere(quadric, size/5.0, 36, 18);
+		gluDeleteQuadric(quadric);
+
 		glPointSize(8);
 		glBegin(GL_POINTS);
 		glColor3f(1,1,0);
@@ -741,7 +761,7 @@ void manipulator::drawFunc()
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
 		glColor3f(1.0,0,0);
-		drawCircle(CURVE_RES, size);
+		drawOpaqueCircle(CURVE_RES, size);
 
 		if(axis== AXIS_Z)
 			glLineWidth(tempSize);
@@ -750,7 +770,7 @@ void manipulator::drawFunc()
 
 		glRotatef(90, 0,1,0); // rotar en y
 		glColor3f(0,0.0,1.0);
-		drawCircle(CURVE_RES, size);
+		drawOpaqueCircle(CURVE_RES, size);
 		glPopMatrix();
 
 		if(axis== AXIS_Y)
@@ -761,7 +781,7 @@ void manipulator::drawFunc()
 		glPushMatrix();
 		glColor3f(0,1.0,0.0); // rotar en x
 		glRotatef(90, 0,0,1);
-		drawCircle(CURVE_RES, size);
+		drawOpaqueCircle(CURVE_RES, size);
 		glPopMatrix();
 		glEnable(GL_LIGHTING);
 	}

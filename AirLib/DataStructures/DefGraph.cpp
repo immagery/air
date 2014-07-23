@@ -101,3 +101,18 @@ bool DefGraph::loadFromFile(ifstream& in, airRigSerialization* sData)
 
 	return true;
 }
+
+bool DefGraph::cleanDefNodes()
+{
+	for (int i = 0; i < deformers.size(); i++)
+	{
+		deformers[i]->dirtyFlag = false;
+		
+		deformers[i]->creationDirtyFlag = false;
+		deformers[i]->segmentationDirtyFlag = false;
+		deformers[i]->expansionDirtyFlag = false;
+		deformers[i]->smoothDirtyFlag = false;
+	}
+
+	return true;
+}

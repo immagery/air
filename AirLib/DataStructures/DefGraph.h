@@ -27,6 +27,8 @@ public:
 	bool saveToFile(FILE* fout);
 	bool loadFromFile(ifstream& in, airRigSerialization* sData);
 
+	bool cleanDefNodes();
+
 };
 
 #endif // DEFGRAPH_H

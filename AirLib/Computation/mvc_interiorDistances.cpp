@@ -317,6 +317,136 @@ void mvcOpt(Vector3d& point, MatrixXf& weights, int id, Modelo& modelo, int surf
 }
 
 
+// unitVectors2
+// normas2
+
+// positions
+// pieceId
+
+// PRE:
+// MVC con instrucciones desplegadas
+void mvcOpt_ext(Vector3d& point, MatrixXf& weights, int id, 
+				Modelo& modelo, int surfaceIdx, vector<PointStr>& vertexes)
+{
+	const float tresh1 = 0.000001;
+	const float tresh2 = 0.00001;
+	const float tresh3 = 0.0001;
+
+	// Get the corresponding surface
+	assert(surfaceIdx >= 0 && surfaceIdx <= modelo.bind->surfaces.size());
+	SurfaceGraph& graph = modelo.bind->surfaces[surfaceIdx];
+
+	// We use all the model
+	int nopts = graph.nodes.size();
+
+	if (nopts == 0)
+	{
+		printf("ERROR!: El modelo no está bien inicializado!\n");
+		return;
+	}
+
+	// temporal data.
+	vector< Vector3f> unitVectors2(nopts);
+	vector< float> normas2(nopts);
+
+	for (int vertIt = 0; vertIt < graph.nodes.size(); vertIt++)
+	{
+		float dirX = vertexes[vertIt].x - point.x();
+		float dirY = vertexes[vertIt].y - point.y();
+		float dirZ = vertexes[vertIt].z - point.z();
+
+		float norm2 = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+		int idVert = graph.nodes[vertIt]->pieceId;
+
+		assert(idVert >= 0 && idVert < nopts);
+
+		normas2[idVert] = norm2 / 1000.0;
+
+		if (norm2 < tresh1)
+		{
+			weights.col(id)[idVert] = 1.0 * W_FACTOR;
+			unitVectors2[idVert] = Vector3f(0, 0, 0);
+			return;
+		}
+		else
+		{
+			unitVectors2[idVert].x() = dirX / norm2;
+			unitVectors2[idVert].y() = dirY / norm2;
+			unitVectors2[idVert].z() = dirZ / norm2;
+		}
+	}
+
+	float totalW = 0;
+	for (int fj = 0; fj < graph.triangles.size(); fj++)
+	{
+		Vector3d O, c, s, l;
+		Vector3i idVerts;
+
+		idVerts[0] = graph.triangles[fj]->verts[0]->pieceId;
+		idVerts[1] = graph.triangles[fj]->verts[1]->pieceId;
+		idVerts[2] = graph.triangles[fj]->verts[2]->pieceId;
+
+		l[0] = (double)(unitVectors2[idVerts[1]] - unitVectors2[idVerts[2]]).norm();
+		l[1] = (double)(unitVectors2[idVerts[2]] - unitVectors2[idVerts[0]]).norm();
+		l[2] = (double)(unitVectors2[idVerts[0]] - unitVectors2[idVerts[1]]).norm();
+		
+		O[0] = 2 * asin(l[0] / 2);
+		O[1] = 2 * asin(l[1] / 2);
+		O[2] = 2 * asin(l[2] / 2);
+
+		double h = (O[0] + O[1] + O[2]) / 2;
+
+		Vector3f w; float w_sum = 0; // espacio para coordenadas y la suma
+
+		if (M_PI - h < tresh2) // x esta sobre el triangulo t, usar coords bar 2D.
+		{
+			w[0] = sin(O[0])*l[2] * l[1];
+			w[1] = sin(O[1])*l[0] * l[2];
+			w[2] = sin(O[2])*l[1] * l[0];
+
+			w_sum = (w[0] + w[1] + w[2]) / W_FACTOR;
+
+			weights.col(id)[idVerts[0]] = (w[0] / w_sum);
+			weights.col(id)[idVerts[1]] = (w[1] / w_sum);
+			weights.col(id)[idVerts[2]] = (w[2] / w_sum);
+
+			return; // Acabamos
+		}
+
+		float determ = det(unitVectors2[idVerts[0]], unitVectors2[idVerts[1]], unitVectors2[idVerts[2]]);
+
+		c[0] = 2 * sin(h)*sin(h - O[0]) / (sin(O[1])*sin(O[2])) - 1.0;
+		s[0] = sign(determ)*sqrt(1 - c[0] * c[0]);
+			
+		c[1] = 2 * sin(h)*sin(h - O[1]) / (sin(O[2])*sin(O[0])) - 1.0;
+		s[1] = sign(determ)*sqrt(1 - c[1] * c[1]);	
+
+		c[2] = 2 * sin(h)*sin(h - O[2]) / (sin(O[0])*sin(O[1])) - 1.0;
+		s[2] = sign(determ)*sqrt(1 - c[2] * c[2]);
+			
+		bool okValues = (fabs(s[0]) > tresh3) && (fabs(s[1]) > tresh3) && (fabs(s[2]) > tresh3);
+			
+
+		if (!okValues)
+			continue;
+
+		weights.col(id)[idVerts[0]] += (float)((O[0] - c[1] * O[2] - c[2] * O[1]) /
+			((double)normas2[idVerts[0]] * sin(O[1])*s[2])) * W_FACTOR;
+
+		weights.col(id)[idVerts[1]] += (float)((O[1] - c[2] * O[0] - c[0] * O[2]) /
+			((double)normas2[idVerts[1]] * sin(O[2])*s[0])) * W_FACTOR;
+
+		weights.col(id)[idVerts[2]] += (float)((O[2] - c[0] * O[1] - c[1] * O[0]) /
+			((double)normas2[idVerts[2]] * sin(O[0])*s[1])) * W_FACTOR;
+	}
+
+	// Suma de pesos y normalización
+	double sum2 = weights.col(id).sum();
+	double reduced_factor = sum2 / W_FACTOR;
+	weights.col(id) /= reduced_factor;
+
+}
+
 
 // Computes mvc for each binding.
 void mvcSingleBinding( Vector3d& point, vector<double>& weights, binding* bd, Modelo& modelo)

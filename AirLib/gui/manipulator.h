@@ -53,6 +53,9 @@ public:
 
 	Vector3d orig, dir, selectedPoint, projectedPoint, projectedPoint2;
 
+	// For VIEW mode interaction
+	Vector3d cameraPos;
+
 	float size;
 	virtual void drawFunc();
 	virtual void drawFuncNames();

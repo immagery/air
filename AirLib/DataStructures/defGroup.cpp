@@ -31,6 +31,7 @@ DefGroup::DefGroup(int nodeId) : object(nodeId)
 
 	// To perform bulge effect
 	bulgeEffect = false;
+	dirtySmooth = false;
 
 	references = NULL;
 }
@@ -61,6 +62,8 @@ DefGroup::DefGroup(int nodeId, joint* jt) : object(nodeId)
 
 	// To perform bulge effect
 	bulgeEffect = false;
+
+	dirtySmooth = false;
 }
 
 bool DefGroup::selectRec(bool bToogle)
@@ -81,7 +84,9 @@ bool DefGroup::update()
 		if(dependentGroups.size() > 0)
 		{
 			//computeWorldPosNonRoll(this, dependentGroups[0]);
-			computeWorldPos(this, dependentGroups[0]);
+			// TO_DEBUG
+			if (dependentGroups[0]->dirtyFlag)
+				computeWorldPos(this, dependentGroups[0]);
 		}
 		else
 		{
@@ -112,7 +117,7 @@ bool DefGroup::update()
         
 		for(int i = 0; i< relatedGroups.size(); i++)
 		{
-			relatedGroups[i]->dirtyFlag = true;
+			//relatedGroups[i]->dirtyFlag = true;
 			relatedGroups[i]->update();
 		}
 		
@@ -153,7 +158,7 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			dirtyByTransformation(false);
 
 		*/
-
+		//printf("actual_pos -> (%f %f %f)\n", transformation->pos.x(), transformation->pos.y(), transformation->pos.z());
 		Vector3d increment;
 		if(dependentGroups.size() == 0)
 		{
@@ -170,18 +175,14 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			Vector3d despl = Vector3d(tx, ty, tz)-dependentGroups[0]->getTranslation(false);
 			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
 			increment = despl - transformation->pos;
-
-			//despl = transformation->qOrient.inverse()._transformVector(despl);
 			transformation->pos = despl;
 		}
 
 		for(int i = 0; i < relatedGroups.size(); i++)
 		{
-			// tengo que calcular algo mas... a ver que toca
-			Vector3d tempPt = relatedGroups[i]->transformation->pos;
-			tempPt = (transformation->qOrient*transformation->qrot).inverse()._transformVector(tempPt);
-			tempPt -= increment;
-			tempPt = (transformation->qOrient*transformation->qrot)._transformVector(tempPt);
+			// replace the other joints in the correct place.
+			Vector3d despl = relatedGroups[i]->getTranslation(false) - Vector3d(tx, ty, tz); /* it's the last world position*/
+			Vector3d tempPt = transformation->rotation.inverse()._transformVector(despl);
 			relatedGroups[i]->transformation->pos = tempPt; 
 		}
 
@@ -190,14 +191,9 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 
 		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 			dirtyByTransformation(true, false);
-
-		//printf("Modificacion en local\n");
-
 	}
 	else
 	{
-		//printf("Modificacion jerarquica\n");
-
 		if(dependentGroups.size() == 0)
 		{
 			// The in quaternion is expressed in global coords.
@@ -209,19 +205,15 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			// The in quaternion is expressed in global coords.
 			// We need to do transformation to bring it to local coords.
 			Vector3d despl = Vector3d(tx, ty, tz)-dependentGroups[0]->getTranslation(false);
-
 			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
-			//despl = transformation->qOrient.inverse()._transformVector(despl);
 			transformation->pos = despl;
 		}
-
 		
 		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
 			transformation->restPos = transformation->pos;
 
 		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
 			dirtyByTransformation(true, true);
-
 	}
 }
 
@@ -574,7 +566,7 @@ void DefGroup::saveRestPos(DefGroup* dg, DefGroup* father)
 	joint* jt = dg->transformation;
 
 	jt->rTranslation = jt->translation;
-	jt->rRotation = jt->rRotation;
+	jt->rRotation = jt->rotation;
 
 	jt->rTwist = jt->twist;
 
@@ -586,8 +578,8 @@ void DefGroup::saveRestPos(DefGroup* dg, DefGroup* father)
 
 	Eigen::Matrix4f transformMatrix2;
 	transformMatrix2 << rotationMatrix(0,0) , rotationMatrix(0,1) , rotationMatrix(0,2), jt->pos[0],
-					   rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
-					   rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
+					    rotationMatrix(1,0) , rotationMatrix(1,1) , rotationMatrix(1,2), jt->pos[1],
+					    rotationMatrix(2,0) , rotationMatrix(2,1) , rotationMatrix(2,2), jt->pos[2],
 						0.0,				0.0,				0.0,			1.0;
 
 	transformMatrix2.transposeInPlace();

@@ -744,43 +744,55 @@ void weightsSmoothing_opt(Modelo& m, binding* bd,
     {		
 		int tempLastIndex = lastIndex;
 
-		int numElemems = (tempLastIndex/threads);
+		//int numElemems = (tempLastIndex/threads);
+		//#pragma omp for schedule(static, numElemems)
 
-		#pragma omp for schedule(static, numElemems)
-		for(int ptIdx = 0; ptIdx < tempLastIndex; ptIdx++)
-        {
-			int ownIdx = indicesToCompute[ptIdx];
-			PointData& pd = bd->pointData[ownIdx];
+		int numBlocks = 8;
+		int elementsPerBlock = (int)ceil((float)tempLastIndex / (float)numBlocks);
 
-			int localPdIdx = pd.node->pieceId;
+		#pragma omp parallel for
+		for (int blockIdx = 0; blockIdx < numBlocks; blockIdx++)
+		{
+			int iniBlock = blockIdx * elementsPerBlock;
+			int finBlock = iniBlock + elementsPerBlock;
 
-			float value = 0;
-
-			// Get the sum of values
-			int cn = pd.node->connections.size();
-			// Para cada elemento del frente realizamos la expansión.
-			for(unsigned int neighboursIdx = 0; neighboursIdx < cn; neighboursIdx++)
+			//for (int ptIdx = 0; ptIdx < tempLastIndex; ptIdx++)
+			for (int ptIdx = iniBlock; ptIdx < finBlock && ptIdx < tempLastIndex; ptIdx++)
 			{
-				int localNeighbourId = pd.node->connections[neighboursIdx]->pieceId;
-				int neighbourId = pd.node->connections[neighboursIdx]->id;
-				value += (*ptWT1)[localNeighbourId];
+				int ownIdx = indicesToCompute[ptIdx];
+				PointData& pd = bd->pointData[ownIdx];
 
-				if(!pd.node->connections[neighboursIdx]->visited)
+				int localPdIdx = pd.node->pieceId;
+
+				float value = 0;
+
+				// Get the sum of values
+				int cn = pd.node->connections.size();
+				// Para cada elemento del frente realizamos la expansión.
+				for (unsigned int neighboursIdx = 0; neighboursIdx < cn; neighboursIdx++)
 				{
-					pd.node->connections[neighboursIdx]->visited = true;
+					int localNeighbourId = pd.node->connections[neighboursIdx]->pieceId;
+					int neighbourId = pd.node->connections[neighboursIdx]->id;
+					value += (*ptWT1)[localNeighbourId];
+
 					#pragma omp critical
 					{
-						indicesToCompute[lastIndex] = neighbourId;
-						lastIndex++;
+						if (!pd.node->connections[neighboursIdx]->visited)
+						{
+							pd.node->connections[neighboursIdx]->visited = true;
+							indicesToCompute[lastIndex] = neighbourId;
+							lastIndex++;
+						}
 					}
 				}
+
+				// Do the mean
+				if (cn > 0) value /= cn;
+
+				(*ptWT2)[localPdIdx] = value;
 			}
 
-			// Do the mean
-			if(cn > 0) value /= cn;
-
-			(*ptWT2)[localPdIdx] = value;
-        }
+		}
 
 		// Change of array to compute weights
 		vector<float>* tempVectPtr = ptWT1;
@@ -1057,27 +1069,41 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 void clearOlderComputations(Modelo& m, int surfIdx)
 {
 	// Clear all older computed influences
+	int totalValues = m.bind->surfaces[surfIdx].nodes.size();
+	int blocks = 8;
+	int valuesPerBlock = (int)ceil((float)totalValues / (float)blocks);
 
-	for(int ptIdx = 0; ptIdx< m.bind->surfaces[surfIdx].nodes.size(); ptIdx++)
+	#pragma opm parallel for
+	for (int blockIdx = 0; blockIdx < blocks; blockIdx++)
 	{
-		PointData& pd = m.bind->pointData[m.bind->surfaces[surfIdx].nodes[ptIdx]->id];
+		int iniBlock = blockIdx*valuesPerBlock;
+		int finBlock = (blockIdx+1)*valuesPerBlock;
 
-		pd.influences.clear();
-		pd.auxInfluences.clear();
-		
-		for(int i = 0; i< pd.secondInfluences.size(); i++)
-			pd.secondInfluences[i].clear();
-		pd.secondInfluences.clear();
-		
-		pd.domain = 0;
-		pd.domainId = -1;
-		pd.ownerLabel = -1;
-		pd.ownerWeight = 0;
-		pd.tempOwnerWeight = 0;
+		for (int ptIdx = iniBlock; ptIdx < finBlock; ptIdx++)
+		{
+			if (ptIdx >= m.bind->surfaces[surfIdx].nodes.size()) continue;
 
-		pd.itPass = 0;
-		pd.validated = false;
-		pd.assigned = false;
+			PointData& pd = m.bind->pointData[m.bind->surfaces[surfIdx].nodes[ptIdx]->id];
+
+			pd.influences.clear();
+			pd.auxInfluences.clear();
+
+			for (int i = 0; i < pd.secondInfluences.size(); i++)
+				pd.secondInfluences[i].clear();
+
+			pd.secondInfluences.clear();
+
+			pd.domain = 0;
+			pd.domainId = -1;
+			pd.ownerLabel = -1;
+			pd.ownerWeight = 0;
+			pd.tempOwnerWeight = 0;
+
+			pd.itPass = 0;
+			pd.validated = false;
+			pd.assigned = false;
+		}
+
 	}
 	
 
@@ -1130,36 +1156,50 @@ void initDomain(Modelo& m, binding* bd, int domainId_init)
 void initDomainOpt(Modelo& m, binding* bd, int domainId_init, int surfaceIdx)
 {
     // Assegurar que los indices guardados en los vertices de la maya estan bien.
-	for(int VertIdx = 0; VertIdx < bd->surfaces[surfaceIdx].nodes.size(); VertIdx++ )
+	// Clear all older computed influences
+	int totalValues = bd->surfaces[surfaceIdx].nodes.size();
+	int blocks = 8;
+	int valuesPerBlock = (int)ceil((float)totalValues / (float)blocks);
+
+	#pragma opm parallel for
+	for (int blockIdx = 0; blockIdx < blocks; blockIdx++)
 	{
-		PointData& pd = bd->pointData[bd->surfaces[surfaceIdx].nodes[VertIdx]->id];
+		int iniBlock = blockIdx*valuesPerBlock;
+		int finBlock = (blockIdx + 1)*valuesPerBlock;
 
-		// These are the temporary data structures for this iteration.
-		pd.auxInfluences.clear();
-		pd.ownerLabel = -1;
+		for (int VertIdx = iniBlock; VertIdx < finBlock; VertIdx++)
+		{
+			if (VertIdx >= bd->surfaces[surfaceIdx].nodes.size()) continue;
 
-		// We set the domain parameters for this iteration
-		if(domainId_init < 0)
-		{
-			// This is the base case, there is no domain restriction.
-			pd.domain = 1;
-			pd.domainId = domainId_init;
-		}
-		else
-		{
-			int idx = findWeight(pd.influences, domainId_init);
-			if(idx >= 0)
+			PointData& pd = bd->pointData[bd->surfaces[surfaceIdx].nodes[VertIdx]->id];
+
+			// These are the temporary data structures for this iteration.
+			pd.auxInfluences.clear();
+			pd.ownerLabel = -1;
+
+			// We set the domain parameters for this iteration
+			if (domainId_init < 0)
 			{
-				// In this case there is influence over this cell from domainId node.
-				pd.domain = pd.influences[idx].weightValue;
+				// This is the base case, there is no domain restriction.
+				pd.domain = 1;
 				pd.domainId = domainId_init;
 			}
 			else
 			{
-				// In this case there is NO influence over this cell from domainId node
-				// and it is not battled by the childs
-				pd.domain = 0;
-				pd.domainId = domainId_init;
+				int idx = findWeight(pd.influences, domainId_init);
+				if (idx >= 0)
+				{
+					// In this case there is influence over this cell from domainId node.
+					pd.domain = pd.influences[idx].weightValue;
+					pd.domainId = domainId_init;
+				}
+				else
+				{
+					// In this case there is NO influence over this cell from domainId node
+					// and it is not battled by the childs
+					pd.domain = 0;
+					pd.domainId = domainId_init;
+				}
 			}
 		}
 	}
@@ -1284,17 +1324,21 @@ bool LoadEmbeddings(Modelo& m, char* bindingFileName)
 
 void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& graph, int surfIdx)
 {
-	//clock_t ini00 = clock();
+	clock_t ini00_ini = clock();
 	clearOlderComputations(model, surfIdx);
+	clock_t ini00_fin = clock();
 
 	// 1. Establecemos el dominio
 	//if(VERBOSE) printf("1. Domain initzialization\n");fflush(0);
 
+	clock_t ini01_ini = clock();
 	initDomainOpt(model, model.bind, FIRST_ITERATION, surfIdx);
+	clock_t ini01_fin = clock();
 
 	// 2. Segmentamos para todos los esqueletos en la escena
 	//if(VERBOSE)printf("2. Volume segmentation\n");fflush(0);
 
+	clock_t ini02_ini = clock();
 	int idsSize = graph.deformers.size();
 
 	vector<int> segmentationIds;
@@ -1312,21 +1356,19 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 		createTraductionTable(graph.roots[i], traductionTable, graph.roots[i]->nodeId);
         segmentationIds.push_back(graph.roots[i]->nodeId);
 	}
-	//clock_t fin03 = clock();
 
-	//clock_t ini04 = clock();
 	traducePartialSegmentation(model, bd, traductionTable, surfIdx);
     traductionTable.clear();
-	//clock_t fin04 = clock();
+	clock_t ini02_fin = clock();
 
 	// 3. Smooth entre hijos cortando según el dominio
 	//if(VERBOSE){printf("3. Segments smoothing\n");fflush(0);}
 
+	clock_t ini03_ini = clock();
 	vector<float> weightsT1;
 	vector<float> weightsT2;
 	vector<unsigned int> indicesToCompute;
-	
-	//int numOfPoints = model.vn();
+
 	int numOfPoints = bd->surfaces[surfIdx].nodes.size();
 
 	// Inicialización de datos.
@@ -1334,20 +1376,28 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 	weightsT2.resize(numOfPoints,0);
 	indicesToCompute.resize(numOfPoints, -1);
 
-	//clock_t ini05 = clock();
+	clock_t ini03_fin = clock();
+
+	clock_t ini033_ini = clock();
 	for(unsigned int i = 0; i< segmentationIds.size(); i++)
 	{
 		//printf("Segmentation %d of %d\n", i, segmentationIds.size());
 		SmoothFromSegmentOpt(model, bd, graph.defGroupsRef[segmentationIds[i]], 
 							segmentationIds[i], weightsT1, weightsT2, indicesToCompute, surfIdx);
 	}
+	clock_t ini033_fin = clock();
 
+	clock_t ini04_ini = clock();
     normalizeWeightsByDomain(bd, surfIdx);
+	clock_t ini04_fin = clock();
+
+	clock_t ini044_ini = clock();
 	cleanZeroInfluences(bd);
+	clock_t ini044_fin = clock();
 
 	int times = 1;
 
-	//clock_t ini08 = clock();
+	clock_t ini05_ini = clock();
 	for(unsigned int i = 0; i< graph.roots.size(); i++)
 	{
         propagateHierarchicalSkinningOpt( model,  bd, graph, 
@@ -1355,20 +1405,25 @@ void propagateHierarchicalSkinningOpt(Modelo& model, binding* bd, DefGraph& grap
 										  weightsT1, weightsT2, 
 										  indicesToCompute, surfIdx);
 	}
-	//clock_t fin08 = clock();
+	clock_t ini05_fin = clock();
 
+	clock_t ini06_ini = clock();
 	weightsT1.clear();
 	weightsT2.clear();
 	indicesToCompute.clear();
+	clock_t ini06_fin = clock();
 
-	//printf("\n\n\nA. Tiempos de propagate hierarchicaly\n");
-	//printf("B. Calculo de inicializacion %f\n", ((double)(fin03-ini00))/CLOCKS_PER_SEC);
-	//printf("C. Traduce segmentation %f\n", ((double)(fin04-ini04))/CLOCKS_PER_SEC);
-	//printf("D. Smooth from segment %f\n", ((double)(fin05-ini05))/CLOCKS_PER_SEC);
-	//printf("E. normalize by domain %f\n", ((double)(fin06-ini06))/CLOCKS_PER_SEC);
-	//printf("F. clean zero influences %f\n", ((double)(fin07-ini07))/CLOCKS_PER_SEC);
-	//printf("G. propagateHierarchicalSkinning %f\n", ((double)(fin08-ini08))/CLOCKS_PER_SEC);
-	//printf("H. Veces: %d, en media: %f\n\n\n", times, ((double)(fin08-ini08))/CLOCKS_PER_SEC/times);
+	printf("\n\n\nA. Tiempos de propagate hierarchicaly\n");
+	printf("B. Clean old data %f\n", ((double)-(ini00_ini - ini00_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("C. initDomain %f\n", ((double)-(ini01_ini - ini01_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("D. Traduce vectors %f\n", ((double)-(ini02_ini - ini02_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("E. resize vectors %f\n", ((double)-(ini03_ini - ini03_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("E. Smooth from segment %f\n", ((double)-(ini033_ini - ini033_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("F. normalize by domain %f\n", ((double)-(ini04_ini - ini04_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("F. clean zero influences %f\n", ((double)-(ini044_ini - ini044_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("G. propagateHierarchicalSkinning %f\n", ((double)-(ini05_ini - ini05_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("H. Veces: %d, en media: %f del total de:%f\n\n\n", times, ((double)-(ini05_ini - ini05_fin)) / CLOCKS_PER_SEC * 1000 / times, ((double)-(ini05_ini - ini05_fin)) / CLOCKS_PER_SEC * 1000);
+	printf("G. clear %f\n", ((double)-(ini06_ini - ini06_fin)) / CLOCKS_PER_SEC * 1000);
 
 }
 
@@ -1433,6 +1488,7 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 									map<int, double>& precompDistancesMap,
 									map<int, int>& matrixDefReference,
 									map<int, bool>& defNodeDirtyBit,
+									map<int, bool>& defNodeisInside,
 									vector<int>& lastPostions,
 									MatrixXf& computedDistances,
 									int computationSize,
@@ -1440,6 +1496,8 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 {
     // m, bb->intPoints, bb->embeddedPoints
 	vector< DefNode* >& deformers = graph.deformers;
+	SurfaceGraph& surfGraph = bd->surfaces[surfIdx];
+	
 	map<int, bool> dirtyDeformers;
 
 	// Ensure data consistency
@@ -1448,12 +1506,9 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	// Get wich deformers needs to be updated
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
-		dirtyDeformers[deformers[deformerId]->nodeId] = defNodeDirtyBit[deformers[deformerId]->nodeId] &&
-														!deformers[deformerId]->freeNode &&
-														precompDistancesMap[deformers[deformerId]->nodeId] >= 0;
+		int defIdx = deformers[deformerId]->nodeId;
+		dirtyDeformers[defIdx] = defNodeDirtyBit[defIdx] && !deformers[deformerId]->freeNode && defNodeisInside[defIdx];
 	}
-
-	int time1  = 0; int time2 = 0; int times = 0;
 	
 	VectorXf precomputedDistances(matrixDefReference.size());
 	VectorXf defExpansion(matrixDefReference.size());
@@ -1467,26 +1522,33 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	}
 
 	// Updates all the points that were linked to a dirty deformer
-	// Evaluacion de filas
-	//#pragma omp parallel for
-	
-	SurfaceGraph& surfGraph = bd->surfaces[surfIdx];
-
 	// Marcamos los puntos que deben recalcularse
-	for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
-    {
+	int countPointsUpdate = 0;
+	int countProblematic = 0;
+	//#pragma omp parallel for
+	for (int pointId = 0; pointId < surfGraph.nodes.size(); pointId++)
+	{
 		PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
-		if(pd.segmentId > 0 && (dirtyDeformers[pd.segmentId] || graph.defNodesRef[pd.segmentId]->freeNode))
+		if (pd.segmentId >= 0)
 		{
-			pd.assigned = false;
-			pd.segmentDistance = 99999999;
-			pd.segmentId = -1;
+			if (dirtyDeformers[pd.segmentId] || graph.defNodesRef[pd.segmentId]->freeNode)
+			{
+				pd.segmentDistance = 99999999;
+				pd.segmentId = -1;
+
+				countPointsUpdate++;
+			}
 		}
+
+		pd.assigned = false;
 	}
+
+	printf("Tenemos que actualizar %d vertices, pero ups... %d vert no estan bien.\n", countPointsUpdate, countProblematic);
 	
 	// Updates all the points comparing with all the dirty deformers
 	// Evaluacion de columnas... hay calculos que no se han guardado y podrian valer
 	//#pragma omp parallel for
+	int countDeformersComputation = 0; 
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
 		DefNode* def = deformers[deformerId];
@@ -1500,9 +1562,14 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			VectorXf tempValues(surfGraph.nodes.size());
 			tempValues.fill(precomputedDistances[realDefId]);
 
-			VectorXf newDistances = (((subDistances.col(realDefId)*-2)+tempValues)/expansion)*-1;
+			computedDistances.col(realDefId) = ((subDistances.col(realDefId)*2) - tempValues);
+			VectorXf newDistances = computedDistances.col(realDefId) / expansion;
 
-			//computedDistances.row(realDefId) = newDistances;
+			//VectorXf newDistances = (((subDistances.col(realDefId)*-2)+tempValues)/expansion)*-1;
+			//VectorXf newDistances = (((subDistances.col(realDefId)*-2) + tempValues) / expansion);
+			
+			// TODO: compact code - Save new distances
+			//computedDistances.col(realDefId) = newDistances;
 
 			// este nodo tiene que pelear por todos los puntos.
 			for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
@@ -1512,21 +1579,34 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 														 
 				if(pd.segmentId < 0 || nd < pd.segmentDistance)
 				{
+					if (pd.segmentId < 0)
+					{
+						pd.assigned = true;
+					}
+
 					pd.segmentDistance = nd;
 					pd.segmentId = def->nodeId;
-					pd.assigned = true;
 				}
 			}
+
+			countDeformersComputation++;
 		}
 
 		defNodeDirtyBit[deformers[deformerId]->nodeId] = false;
 	}
 
+	printf("Hemos evaluado %d columnas\n", countDeformersComputation);
 
+	// Evaluate the rest of the points that are not assigned
+	// Evaluacion por filas
+	int countRestPoints = 0;
+	int countSpecialCases = 0;
+	int changesInlastPoint = 0;
+	//#pragma omp parallel for
 	for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++ )
     {
 		PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
-		if(!pd.assigned)
+		if (pd.segmentId < 0)
 		{
 			//DefNode* def = graph.defNodesRef[pd.segmentId];
 			// El punto debe ser debatido entre todos los deformadores.
@@ -1534,16 +1614,35 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			int newSegmentId = -1;
 			//float preCompDistance = def->precomputedDistances;
 
+			// CONFIGURACION QUE FUNCIONA SEGURO
+			/*
 			VectorXf subDistRow = subDistances.row(pointId).segment(0, computationSize);
 			subDistRow *= -2;
 			subDistRow += precomputedDistances.segment(0, computationSize);
 
+			//VectorXf tempDistance = subDistRow.cwiseQuotient(defExpansion.segment(0, computationSize))*-1;
 			VectorXf tempDistance = subDistRow.cwiseQuotient(defExpansion.segment(0, computationSize))*-1;
+			distance = tempDistance.minCoeff(&newSegmentId);
 
-			//TODEBUG... podemos compactarlo.
-			//computedDistances.col(pointId) = tempDistance;
+			computedDistances.row(pointId) = tempDistance;
+			*/
+
+			VectorXf subDistRow = subDistances.row(pointId).segment(0, computationSize);
+			subDistRow *= 2;
+			computedDistances.row(pointId) = subDistRow - precomputedDistances.segment(0, computationSize);
+
+			// TO_DEBUG
+			VectorXf tempDistance(computedDistances.row(pointId).size());
+			for (int tempDistanceIdx = 0; tempDistanceIdx < tempDistance.size(); tempDistanceIdx++)
+			{
+				tempDistance[tempDistanceIdx] = computedDistances(pointId, tempDistanceIdx) / defExpansion[tempDistanceIdx];
+			}
 
 			distance = tempDistance.minCoeff(&newSegmentId);
+
+			//TODO: compact code
+			//computedDistances.row(pointId) = subDistRow.cwiseQuotient(defExpansion.segment(0, computationSize))*-1;
+			//distance = computedDistances.row(pointId).minCoeff(&newSegmentId);
 
 			if(newSegmentId >= 0)
 			{
@@ -1551,9 +1650,13 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 				pd.segmentDistance = distance;
 			}
 
-			pd.assigned = true;
+			countRestPoints++;
 		}
 	}
+
+	printf("Al final hemos tenido que evaluar tambien %d puntos\n", countRestPoints);
+	printf("Special cases al poder %d\n", countSpecialCases);
+	printf("ChangesInLastPoint %d\n", changesInlastPoint);
 
 }
 
@@ -1704,17 +1807,163 @@ bool getDefomersfromBranch( DefGroup* defGroup, vector<DefNode*>& deformers)
 }
 
 
+
+// The comptation of a node, paralellized by OMP...
+void computeNodesOptimized_justExpansion(DefGraph& graph,
+										Modelo& model,
+										MatrixXf& MatrixWeights,
+										MatrixXf& distancesTemp,
+										MatrixXf& computedDistances,
+										map<int, double>& precompDistances,
+										map<int, int>& defNodeRef,
+										map<int, bool>& defNodeDirtyBit,
+										map<int, bool>& defNodeIsInside,
+										int surfaceIdx)
+{
+	printf("  --  EXPANSION ONLY MODE  --\n");
+
+	// Inicialization
+	int defNodesSize = graph.deformers.size();
+
+	// Place all the dirty computations at the end
+	vector<int> lastPostions(defNodeRef.size());
+	VectorXf defExpansion(defNodeRef.size());
+
+	map<int, int>::iterator it = defNodeRef.begin();
+	while (it != defNodeRef.end())
+	{
+		int nodeId = it->second;
+		if (nodeId > defNodeRef.size())
+		{
+			printf("hay algun problema de indices\n");
+			assert(false);
+		}
+
+		lastPostions[nodeId] = it->first;
+		defExpansion[nodeId] = graph.defNodesRef[it->first]->expansion;
+
+		it++;
+	}
+
+	map<int, bool> dirtyDeformers;
+
+	int computationSize;
+
+	for (int i = 0; i < lastPostions.size(); i++)
+	{
+		if (defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId])
+		{
+			if (!graph.defNodesRef[lastPostions[i]]->freeNode && defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId])
+				dirtyDeformers[graph.defNodesRef[lastPostions[i]]->nodeId] = true;
+		}
+
+		if (!graph.defNodesRef[lastPostions[i]]->freeNode && defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId])
+			computationSize++;
+	}
+
+	vector< DefNode* >& deformers = graph.deformers;
+	MatrixXf& A = model.bind->A[surfaceIdx];
+	SurfaceGraph& surfGraph = model.bind->surfaces[surfaceIdx];
+
+	// Updates all the points that were linked to a dirty deformer
+	// Marcamos los puntos que deben recalcularse
+	//#pragma omp parallel for
+
+	// Clean values
+	for (int pointId = 0; pointId < surfGraph.nodes.size(); pointId++)
+	{
+		PointData& pd = model.bind->pointData[surfGraph.nodes[pointId]->id];
+		pd.assigned = true;
+		if (pd.segmentId >= 0)
+		{
+			if (dirtyDeformers[pd.segmentId] || graph.defNodesRef[pd.segmentId]->freeNode)
+			{
+				pd.segmentDistance = 99999999999;
+				pd.segmentId = -1;
+				pd.assigned = false;
+			}
+		}
+	}
+
+	//Assign new points to the nodes
+	int countDeformersComputation = 0;
+	for (int deformerId = 0; deformerId < deformers.size(); deformerId++)
+	{
+		DefNode* def = deformers[deformerId];
+		int nodeId = def->nodeId;
+		if (dirtyDeformers[nodeId])
+		{
+			float expansion = def->expansion;
+			int realDefId = defNodeRef[nodeId];
+
+			VectorXf newDistances = computedDistances.col(realDefId) / expansion;
+
+			// este nodo tiene que pelear por todos los puntos.
+			for (int pointId = 0; pointId < surfGraph.nodes.size(); pointId++)
+			{
+				PointData& pd = model.bind->pointData[surfGraph.nodes[pointId]->id];
+				float nd = newDistances[pointId];
+
+				if (nd <= pd.segmentDistance || pd.segmentId < 0)
+				{
+					pd.segmentDistance = nd;
+					pd.segmentId = nodeId;
+				}
+			}
+
+			countDeformersComputation++;
+			dirtyDeformers[nodeId] = false;
+		}
+	}
+
+	// Evaluate the rest of the points that are not assigned
+	// Evaluacion por filas
+	for(int pointId = 0; pointId < surfGraph.nodes.size(); pointId++)
+	{
+		PointData& pd = model.bind->pointData[surfGraph.nodes[pointId]->id];
+		if (!pd.assigned || pd.segmentId < 0)
+		{
+			// El punto debe ser debatido entre todos los deformadores.
+			float distance = 99999999999;
+			int newSegmentId = -1;
+
+			//VectorXf tempDistance = computedDistances.row(pointId).segment(0, computationSize).cwiseQuotient(defExpansion.segment(0, computationSize));
+			VectorXf tempDistance = computedDistances.row(pointId);
+			for (int tempDistanceIdx = 0; tempDistanceIdx < tempDistance.size(); tempDistanceIdx++)
+			{
+				tempDistance[tempDistanceIdx] /= defExpansion[tempDistanceIdx];
+			}
+				
+			distance = tempDistance.minCoeff(&newSegmentId);
+
+			if (newSegmentId >= 0)
+			{
+				pd.segmentId = lastPostions[newSegmentId];
+				pd.segmentDistance = distance;
+			}
+		}
+	}
+
+	// Update Smooth propagation
+	propagateHierarchicalSkinningOpt(model, model.bind, graph, surfaceIdx);
+
+}
+
 // The comptation of a node, paralellized by OMP...
 void computeNodesOptimized( DefGraph& graph, 
 							Modelo& model, 
 							MatrixXf& MatrixWeights, 
 							MatrixXf& distancesTemp,
+							MatrixXf& computedDistances,
 							map<int, double>& precompDistances, 
 							map<int, int>& defNodeRef,
 							map<int, bool>& defNodeDirtyBit,
+							map<int, bool>& defNodeIsInside,
 							int surfaceIdx)
 {
 	
+
+	auto ini_t00 = high_resolution_clock::now();
 
 	// Inicialization
 	int defNodesSize = graph.deformers.size();	
@@ -1736,6 +1985,9 @@ void computeNodesOptimized( DefGraph& graph,
 		it++;
 	}
 
+	auto fin_t00 = high_resolution_clock::now();
+
+	auto ini_t01 = high_resolution_clock::now();
 	// Swap the elements, no matter the sort, just dirty in one hand and computed in the other
 	// 1. We allocate all the dirty anf free nodes in the right hand, and computed ones in the left
 	int idx1 = 0;
@@ -1760,6 +2012,9 @@ void computeNodesOptimized( DefGraph& graph,
 		// Matrix of subdistances
 		distancesTemp.col(idx1).swap(distancesTemp.col(idx2));
 
+		// Matrix of distances
+		computedDistances.col(idx1).swap(computedDistances.col(idx2));
+
 		// References
 		defNodeRef[defNodeId002] = idx1;
 		defNodeRef[defNodeId001] = idx2;
@@ -1771,15 +2026,16 @@ void computeNodesOptimized( DefGraph& graph,
 
 		swapCount1++;
 	}
+	auto fin_t01 = high_resolution_clock::now();
 
-
+	auto ini_t02 = high_resolution_clock::now();
 	// 2. Just working over the right hand group, We allocate all the dirty nodes in the left hand 
 	// and free ones in the right. With this we only compute the dirty nodes and do all the 
 	// computations over this submatrix
 	idx1 = -1;
 	for(int i = 0; i < lastPostions.size(); i++)
 	{
-		if(graph.defNodesRef[lastPostions[i]]->freeNode)
+		if (graph.defNodesRef[lastPostions[i]]->freeNode || !defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId])
 		{
 			idx1 = i;
 			break;
@@ -1792,8 +2048,8 @@ void computeNodesOptimized( DefGraph& graph,
 	while(idx2 > idx1)
 	{
 		// We move the indexes
-		while(idx1 < lastPostions.size() && !graph.defNodesRef[lastPostions[idx1]]->freeNode) idx1++;
-		while(idx2 >= 0 && graph.defNodesRef[lastPostions[idx2]]->freeNode) idx2--;
+		while (idx1 < lastPostions.size() && !(graph.defNodesRef[lastPostions[idx1]]->freeNode || !defNodeIsInside[graph.defNodesRef[lastPostions[idx1]]->nodeId]) ) idx1++;
+		while (idx2 >= 0 && (graph.defNodesRef[lastPostions[idx2]]->freeNode || !defNodeIsInside[graph.defNodesRef[lastPostions[idx2]]->nodeId])) idx2--;
 		
 		if(idx1 == lastPostions.size() || idx2< 0 || idx2 < idx1) break;
 
@@ -1807,6 +2063,9 @@ void computeNodesOptimized( DefGraph& graph,
 		// Matrix of subdistances
 		distancesTemp.col(idx1).swap(distancesTemp.col(idx2));
 
+		// Matrix of distances
+		computedDistances.col(idx1).swap(computedDistances.col(idx2));
+
 		// References
 		defNodeRef[defNodeId002] = idx1;
 		defNodeRef[defNodeId001] = idx2;
@@ -1818,9 +2077,9 @@ void computeNodesOptimized( DefGraph& graph,
 
 		swapCount2++;
 	}
-
+	auto fin_t02 = high_resolution_clock::now();
 	
-	if( VERBOSE_PROCESS)
+	if( false /*VERBOSE_PROCESS*/)
 	{
 		printf("Ha habido %d swaps para dirty y %d swaps para noFree\n", swapCount1, swapCount2);
 		printf("DefGroups!!!\n");
@@ -1842,6 +2101,7 @@ void computeNodesOptimized( DefGraph& graph,
 		for(int i = 0; i < lastPostions.size(); i++)
 		{
 			DefNode* defNode = graph.defNodesRef[lastPostions[i]];
+			
 			printf("%d - [%d, %d] ->", 
 					defNode->nodeId,
 					defNodeDirtyBit[defNode->nodeId], 
@@ -1855,11 +2115,13 @@ void computeNodesOptimized( DefGraph& graph,
 		}
 	}
 
+	auto ini_t03 = high_resolution_clock::now();
+
 	idx1 = -1; // first index: change from computed to not computed
 	idx2 = -1; // second index: change from not free to free ones.
 	for(int i = 0; i < lastPostions.size(); i++)
 	{
-		if(idx2 < 0 && graph.defNodesRef[lastPostions[i]]->freeNode)
+		if (idx2 < 0 && (graph.defNodesRef[lastPostions[i]]->freeNode || !defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId]))
 		{
 			idx2 = i;
 		}
@@ -1872,6 +2134,9 @@ void computeNodesOptimized( DefGraph& graph,
 	if(idx2 < 0) idx2 = lastPostions.size();
 	if(idx1 < 0) idx1 = lastPostions.size();
 
+	auto fin_t03 = high_resolution_clock::now();
+
+	auto ini_t04 = high_resolution_clock::now();
 	if( VERBOSE_PROCESS )
 	{
 		printf("Computar desde %d a %d\n", idx1, idx2);
@@ -1880,38 +2145,70 @@ void computeNodesOptimized( DefGraph& graph,
 
 	vector<int> defNodesToUpdate;
 	
+	int dirtyCountTest = 0;
+	int freeNodesTest = 0;
+	int insideNodesTest = 0;
+
 	for(int i = 0 ; i < lastPostions.size(); i++ )
 	{
-		if(defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId])
+		if (defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId]) dirtyCountTest++;
+		if (graph.defNodesRef[lastPostions[i]]->freeNode) freeNodesTest++;
+		if (defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId]) insideNodesTest++;
+
+		if (defNodeDirtyBit[graph.defNodesRef[lastPostions[i]]->nodeId])
 		{
-			if(!graph.defNodesRef[lastPostions[i]]->freeNode)
+			if (!graph.defNodesRef[lastPostions[i]]->freeNode && defNodeIsInside[graph.defNodesRef[lastPostions[i]]->nodeId])
 				defNodesToUpdate.push_back(i);
 
-			MatrixWeights.col(i).fill(0);
+			//MatrixWeights.col(i).fill(0);
 		}
 	}
 
+	auto fin_t04 = high_resolution_clock::now();
+
+	//printf("Dirty:%d, free:%d, Inside:%d\n", dirtyCountTest, freeNodesTest, insideNodesTest);
+	//printf("Nodes to update:%d\n", defNodesToUpdate.size());
+
 	auto ini1 = high_resolution_clock::now();
 
+	auto ini_t05 = high_resolution_clock::now();
+	int modelPoints = model.bind->surfaces[surfaceIdx].nodes.size();
+	vector<PointStr> vertexes(modelPoints);
+
+	for (int i = 0; i < vertexes.size(); i++)
+	{
+		vertexes[i].x = model.bind->surfaces[surfaceIdx].nodes[i]->position.x();
+		vertexes[i].y = model.bind->surfaces[surfaceIdx].nodes[i]->position.y();
+		vertexes[i].z = model.bind->surfaces[surfaceIdx].nodes[i]->position.z();
+	}
+
+	auto fin_t05 = high_resolution_clock::now();
+
+	auto ini_t06 = high_resolution_clock::now();
 	// MVC - MULTI-THREAD
 	#pragma omp parallel for
 	for(int defId = 0; defId < defNodesToUpdate.size(); defId++ )
 	{
 		DefNode* df = graph.defNodesRef[lastPostions[defNodesToUpdate[defId]]];
-		mvcOpt(df->pos, MatrixWeights, defNodesToUpdate[defId], model, surfaceIdx);
+		
+		// Optimized version for CPU computation
+		mvcOpt_ext(df->pos, MatrixWeights, defNodesToUpdate[defId], model, surfaceIdx, vertexes);
+		//mvcOpt(df->pos, MatrixWeights, defNodesToUpdate[defId], model, surfaceIdx);
 	}	
 	auto fin1 = high_resolution_clock::now();
+
+	auto fin_t06 = high_resolution_clock::now();
 		
-	if(VERBOSE_PROCESS)
-		printf("Computamos %d nodos\n", defNodesToUpdate.size());
+	if(VERBOSE_PROCESS) printf("Computamos %d nodos\n", defNodesToUpdate.size());
 
 	auto ini2 = high_resolution_clock::now();
+
 
 	int blockSize = idx2-idx1;
 		
 	MatrixXf& A = model.bind->A[surfaceIdx];
 	SurfaceGraph& surfGraf = model.bind->surfaces[surfaceIdx];
-
+	
 	if(defNodesToUpdate.size() > 0 )
 	{
 		// Dos estrategias de calculo dependiendo de si vale la pena uno u otro
@@ -1947,6 +2244,15 @@ void computeNodesOptimized( DefGraph& graph,
 		}
 	}
 	auto fin2 = high_resolution_clock::now();
+
+	/*
+	printf("\n\n---------------------------------------------------------------------------\n\n");
+
+	for (int pruebaColA = 0; pruebaColA < distancesTemp.rows()  && pruebaColA < 100; pruebaColA++)
+	{
+			printf("(%d, %f) ", pruebaColA, distancesTemp(pruebaColA, 0));
+	}
+	*/
 	
 	for(int defId = 0; defId < defNodesToUpdate.size(); defId++ )
 	{
@@ -1968,27 +2274,25 @@ void computeNodesOptimized( DefGraph& graph,
 	auto fin3 = high_resolution_clock::now();
 	
 	// This will be removed or solved... by now...rest in peace.
-	MatrixXf computedDistances;
-
 	int computationSize = idx2;
 	if(computationSize < 0) computationSize = defNodeRef.size();
 
 	auto ini4 = high_resolution_clock::now();
 
 	segmentModelFromDeformersOpt(model, model.bind, graph, distancesTemp, precompDistances, defNodeRef, defNodeDirtyBit,
-								 lastPostions, computedDistances, computationSize, surfaceIdx);
+								 defNodeIsInside, lastPostions, computedDistances, computationSize, surfaceIdx);
 
 	auto fin4 = high_resolution_clock::now();
 	
 	// Lo saco fuera para unficar la expansion y demás
 	auto ini5 = high_resolution_clock::now();
 	// Update Smooth propagation
-	propagateHierarchicalSkinningOpt(model, model.bind, graph, surfaceIdx);	
+	propagateHierarchicalSkinningOpt(model, model.bind, graph, surfaceIdx);
 	auto fin5 = high_resolution_clock::now();
 		
 	auto ini6 = high_resolution_clock::now();
 	// Compute Secondary weights ... by now compute all the sec. weights
-	computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, surfaceIdx, false);
+	//computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, surfaceIdx, false);
 
 	if(VERBOSE_PROCESS)
 	{
