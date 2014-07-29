@@ -306,6 +306,7 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions)
 	map <unsigned int,unsigned int> jointIndexes;	
 	
 	//defRig.defGroups.resize(skt->joints.size());
+	map<int, int> jointToDefGroup;
 	for(int jointIdx = 0; jointIdx < skt->joints.size(); jointIdx++)
 	{
 		int currentDefgroup = defRig.defGroups.size();
@@ -334,10 +335,13 @@ bool processSkeleton(skeleton* skt, DefGraph& defRig, float subdivisions)
 			defRig.relations.back()->weight = 1.0;
 			relatedGroups.push_back(defRig.relations.back()->child);
 		}
-		proposeDefNodesFromStick(*defRig.defGroups[jointIdx], relatedGroups);
 
-		for(int defId = 0; defId < defRig.defGroups[jointIdx]->deformers.size(); defId++)
-			defRig.deformers.push_back(&defRig.defGroups[jointIdx]->deformers[defId]);
+		int defGroupId = jointIndexes[skt->joints[jointIdx]->nodeId];
+
+		proposeDefNodesFromStick(*defRig.defGroups[defGroupId], relatedGroups);
+
+		for (int defId = 0; defId < defRig.defGroups[defGroupId]->deformers.size(); defId++)
+			defRig.deformers.push_back(&defRig.defGroups[defGroupId]->deformers[defId]);
 	}
 
 	return true;
@@ -807,12 +811,31 @@ void BuildGroupTree(DefGraph& graph)
 	}
 }
 
+bool AirRig::saveRestPosesSimple()
+{
+	for (int j = 0; j < defRig.roots.size(); j++)
+	{
+		defRig.roots[j]->saveRestPosSimple(defRig.roots[j]);
+		//defRig.roots[j]->computeRestPos(defRig.roots[j]);
+	}
+	return true;
+}
+
 bool AirRig::saveRestPoses()
 {
 	for(int j = 0; j < defRig.roots.size(); j++) 
 	{
 		defRig.roots[j]->saveRestPos(defRig.roots[j]);
 		//defRig.roots[j]->computeRestPos(defRig.roots[j]);
+	}
+	return true;
+}
+
+bool AirRig::restorePosesSimple()
+{
+	for (int j = 0; j < defRig.roots.size(); j++)
+	{
+		defRig.roots[j]->restorePoses(defRig.roots[j]);
 	}
 	return true;
 }

@@ -81,12 +81,13 @@ bool DefGroup::update()
         return true;
     else
 	{
+		bool localUpdated = false;
 		if(dependentGroups.size() > 0)
 		{
 			//computeWorldPosNonRoll(this, dependentGroups[0]);
 			// TO_DEBUG
-			if (dependentGroups[0]->dirtyFlag)
-				computeWorldPos(this, dependentGroups[0]);
+			dependentGroups[0]->update();
+			computeWorldPos(this, dependentGroups[0]);
 		}
 		else
 		{
@@ -106,7 +107,7 @@ bool DefGroup::update()
 		*/
 
 		// Reconstruir el esquema de deformadores.
-		if(type == DEF_STICK)
+		if(type == DEF_STICK && AirRig::mode != MODE_ANIM)
 		{
 			updateDefNodesFromStick(this);
 		}
@@ -140,25 +141,47 @@ void DefGroup::addTranslation(double tx, double ty, double tz)
 {
 }
 
+void DefGroup::setTranslationOnRest(double tx, double ty, double tz, bool local)
+{
+	//printf("actual_pos -> (%f %f %f)\n", transformation->pos.x(), transformation->pos.y(), transformation->pos.z());
+	Vector3d increment;
+	if (dependentGroups.size() == 0)
+	{
+		// The in quaternion is expressed in global coords.
+		// We need to do transformation to bring it to local coords.
+		Vector3d despl = Vector3d(tx, ty, tz) - transformation->restPos;
+		transformation->restPos = Vector3d(tx, ty, tz);
+		increment = despl;
+	}
+	else
+	{
+		// The in quaternion is expressed in global coords.
+		// We need to do transformation to bring it to local coords.
+		Vector3d despl = Vector3d(tx, ty, tz) - dependentGroups[0]->transformation->rTranslation;
+		despl = dependentGroups[0]->transformation->rRotation.inverse()._transformVector(despl);
+		increment = despl - transformation->restPos;
+		transformation->restPos = despl;
+	}
+
+	for (int i = 0; i < relatedGroups.size(); i++)
+	{
+		// replace the other joints in the correct place.
+		Vector3d despl = relatedGroups[i]->transformation->rTranslation - Vector3d(tx, ty, tz); /* it's the last world position*/
+		Vector3d tempPt = transformation->rRotation.inverse()._transformVector(despl);
+		relatedGroups[i]->transformation->restPos = tempPt;
+	}
+
+	//if (AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+	//	transformation->restPos = transformation->pos;
+
+	if (AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
+		dirtyByTransformation(true, false);
+}
+
 void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 {
 	if(local)
 	{
-		// Como se hacia antes.. a pinon, pero se trata de restaurar la jerarquia.
-		/*
-		// The in quaternion is expresed in local coords.
-		// we can assign it directly.
-		transformation->pos = Vector3d(tx, ty, tz);
-
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
-				transformation->restPos = transformation->pos;
-
-	    // parent and all the childs
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
-			dirtyByTransformation(false);
-
-		*/
-		//printf("actual_pos -> (%f %f %f)\n", transformation->pos.x(), transformation->pos.y(), transformation->pos.z());
 		Vector3d increment;
 		if(dependentGroups.size() == 0)
 		{
@@ -185,12 +208,6 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			Vector3d tempPt = transformation->rotation.inverse()._transformVector(despl);
 			relatedGroups[i]->transformation->pos = tempPt; 
 		}
-
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
-			transformation->restPos = transformation->pos;
-
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
-			dirtyByTransformation(true, false);
 	}
 	else
 	{
@@ -208,13 +225,13 @@ void DefGroup::setTranslation(double tx, double ty, double tz, bool local)
 			despl = dependentGroups[0]->transformation->rotation.inverse()._transformVector(despl);
 			transformation->pos = despl;
 		}
-		
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
-			transformation->restPos = transformation->pos;
-
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE)
-			dirtyByTransformation(true, true);
 	}
+
+	if (AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+		transformation->restPos = transformation->pos;
+
+	if (AirRig::mode == MODE_RIG || AirRig::mode == MODE_CREATE || AirRig::mode == MODE_TEST)
+		dirtyByTransformation(true, !local);
 }
 
 void DefGroup::addRotation(double rx, double ry, double rz)
@@ -238,7 +255,7 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 		// The defgraph is in this rig
 		transformation->setRotation(q);
 
-		if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+		if(AirRig::mode == MODE_RIG /*|| AirRig::mode == MODE_TEST*/ || AirRig::mode == MODE_CREATE)
 			transformation->restRot = transformation->qrot;
 
 		 // not parent but all the childs
@@ -256,7 +273,7 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 			// The defgraph is in this rig
 			transformation->setRotation(transformation->qOrient.inverse()*q);
 
-			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+			if(AirRig::mode == MODE_RIG /*|| AirRig::mode == MODE_TEST*/ || AirRig::mode == MODE_CREATE)
 				transformation->restRot = transformation->qrot;
 
 			// not parent but all the childs
@@ -269,7 +286,7 @@ void DefGroup::setRotation(Eigen::Quaternion<double> q, bool local)
 			newq.normalize();
 			transformation->setRotation(newq);
 
-			if(AirRig::mode == MODE_RIG || AirRig::mode == MODE_TEST || AirRig::mode == MODE_CREATE)
+			if(AirRig::mode == MODE_RIG /*|| AirRig::mode == MODE_TEST*/ || AirRig::mode == MODE_CREATE)
 				transformation->restRot = transformation->qrot;
 
 			// not parent but all the childs
@@ -463,6 +480,12 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 	Eigen::Matrix3d rotationMatrix;
 	joint* jt = dg->transformation;
 
+	if (!jt) 
+	{
+		printf("Hay algun problema con la estructura de datos: transform de DefGroup %d.\n", dg->nodeId);
+		return;
+	}
+
 	if(!father)
 	{
 		Quaterniond localRotationChild =  jt->qOrient * jt->qrot;
@@ -558,7 +581,15 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 	return;
 }
 
+void DefGroup::saveRestPosSimple(DefGroup* dg, DefGroup* father)
+{
+	Eigen::Matrix3d rotationMatrix;
+	joint* jt = dg->transformation;
 
+	jt->rTranslation = jt->translation;
+
+	return;
+}
 
 void DefGroup::saveRestPos(DefGroup* dg, DefGroup* father)
 {
@@ -916,16 +947,6 @@ bool DefGroup::dirtyByTransformation(bool alsoFather, bool hierarchically)
 			{
 				if(dependentGroups[dp]->deformers[dn].childBoneId == nodeId)
 				{
-					// Rotate de defGroup to repositionate.
-					/*Vector3d dnPos = dependentGroups[dp]->deformers[dn].pos - 
-									 dependentGroups[dp]->transformation->translation;
-					Quaterniond q;
-					q.setFromTwoVectors(dnPos.normalized(), dir);
-					dnPos = q._transformVector(dnPos);
-					dependentGroups[dp]->deformers[dn].pos = dependentGroups[dp]->transformation->translation + dnPos;
-					dependentGroups[dp]->deformers[dn].relPos = 
-									dependentGroups[dp]->transformation->rotation.inverse()._transformVector(dnPos);*/
-
 					dependentGroups[dp]->dirtyFlag = true;
 					dependentGroups[dp]->deformers[dn].dirtyFlag = true;
 					dependentGroups[dp]->dirtyTransformation = true;
@@ -940,30 +961,12 @@ bool DefGroup::dirtyByTransformation(bool alsoFather, bool hierarchically)
 	// we set dirty all the deformers of this node
 	for(int dn = 0; dn < deformers.size(); dn++)
 	{
-		/*
-		int childId = deformers[dn].childBoneId;
-
-		if(childId < 0) continue;
-
-		Vector3d dirToChild = ((*references)[childId]->transformation->translation -  transformation->translation).normalized();
-
-		// Rotate de defGroup to repositionate.
-		Vector3d dnPos = transformation->translation - deformers[dn].pos;
-
-		Quaterniond q;
-		q.setFromTwoVectors(dnPos.normalized(), dirToChild);
-
-		dnPos = q._transformVector(dnPos);
-		deformers[dn].pos = transformation->translation + dnPos;
-		deformers[dn].relPos = transformation->rotation.inverse()._transformVector(dnPos);
-		*/
-
 		deformers[dn].dirtyFlag = true;
 		deformers[dn].segmentationDirtyFlag = true;
 	}
 
 	// Propagate over all the dependant relations
-	if(hierarchically)
+	if(true)//hierarchically)
 	{
 		for(int i = 0; i< relatedGroups.size(); i++)
 			relatedGroups[i]->dirtyByTransformation(true, hierarchically);

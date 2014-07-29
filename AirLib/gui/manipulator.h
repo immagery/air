@@ -53,6 +53,11 @@ public:
 
 	Vector3d orig, dir, selectedPoint, projectedPoint, projectedPoint2;
 
+	Vector3d generalPurpousePoint001, generalPurpousePoint002;
+
+	vector<Vector3d > jointsPoints;
+	vector<Vector3d > jointsColors;
+
 	// For VIEW mode interaction
 	Vector3d cameraPos;
 

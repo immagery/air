@@ -124,8 +124,13 @@ public:
 	// Guardar todas las posiciones de reposo para calculos de deformacion
 	bool saveRestPoses();
 
+	bool saveRestPosesSimple();
+
 	// Vuelve a poner las poses que teniamos antes de la animacion para seguir riggeando.
 	bool restorePoses();
+
+	// Just copy data
+	bool restorePosesSimple();
 
 	// This functions changes de values and propagates the 
 	// dirty flag properly.

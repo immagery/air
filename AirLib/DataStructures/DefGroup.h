@@ -85,6 +85,7 @@ public:
 	
 	virtual void addTranslation(double tx, double ty, double tz);
 	virtual void setTranslation(double tx, double ty, double tz, bool local);
+	void setTranslationOnRest(double tx, double ty, double tz, bool local);
 	virtual void addRotation(double rx, double ry, double rz);
 	virtual void addRotation(Eigen::Quaternion<double> q, bool local = true);
 	virtual void setRotation(Eigen::Quaternion<double> q, bool local = true);
@@ -100,6 +101,8 @@ public:
 	bool dirtyBySmoothing();
 
 	void saveRestPos(DefGroup* dg, DefGroup* father = NULL);
+	void saveRestPosSimple(DefGroup* dg, DefGroup* father = NULL);
+
 	void computeRestPos(DefGroup* dg, DefGroup* father = NULL);
 	
 	void computeWorldPos(DefGroup* dg, DefGroup* father = NULL);

@@ -188,12 +188,12 @@ void manipulator::startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool w
 		else if(axis == AXIS_Z)
 		{
 			u = Vector3d(0,0,1);
-		}
-		
+		}		
+		Vector3d rayView;
 		if (axis == AXIS_VIEW)
 		{
 			//
-			Vector3d rayView = cameraPos - currentframe.position;
+			rayView = (cameraPos - currentframe.position).normalized();
 			u = Vector3d(rayView.y(), - rayView.x(), 0);
 			v = u.cross(rayView);
 		}
@@ -209,10 +209,24 @@ void manipulator::startManipulator(Vector3d& rayOrigin, Vector3d& rayDir, bool w
 		if(intersecFlag != 1) 
 			return; 
 
-		// Whe save the offset for better user interaction.
-		previousframe.posOffset = (I-previousframe.position).dot(u)*u;
+		if (axis == AXIS_VIEW)
+		{
+			previousframe.posOffset = I - previousframe.position;
+		}
+		else
+		{
+			// Whe save the offset for better user interaction.
+			previousframe.posOffset = (I - previousframe.position).dot(u)*u;
+		}
 		
+
 		selectedPoint = previousframe.posOffset + previousframe.position;
+
+		printf("\nCamera Pos: %f %f %f\n", cameraPos.x(), cameraPos.y(), cameraPos.z());
+		printf("I: %f %f %f\n", I.x(), I.y(), I.z());
+		printf("dir: %f %f %f --- \nu: %f %f %f  --- \nv: %f %f %f \n",
+					rayView.x(), rayView.y(), rayView.z(),
+					u.x(), u.y(), u.z(), v.x(), v.y(), v.z());
 
 	}
 	else if(type == MANIP_ROT)
@@ -360,7 +374,7 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 		if (axis == AXIS_VIEW)
 		{
 			//
-			Vector3d rayView = rayOrigin - currentframe.position;
+			Vector3d rayView = (rayOrigin - currentframe.position).normalized();
 			u = Vector3d(rayView.y(), -rayView.x(), 0);
 			v = u.cross(rayView);
 		}
@@ -379,7 +393,11 @@ void manipulator::moveManipulator(Vector3d& rayOrigin, Vector3d& rayDir)
 			return;
 
 		Vector3d applyIncrement = I - previousframe.position;
-		applyIncrement = applyIncrement.dot(u.normalized())*u;
+		
+		if (axis != AXIS_VIEW)
+		{
+			applyIncrement = applyIncrement.dot(u.normalized())*u;
+		}
 
 		currentframe.position = previousframe.position + applyIncrement - previousframe.posOffset;
 
@@ -624,6 +642,24 @@ void manipulator::drawFunc()
 			//glColor3f(0.5,0.5,0.9);
 			//glVertex3d(projectedPoint.x(),projectedPoint.y(),projectedPoint.z());
 			glEnd();
+			
+			 // Analisis porpouse
+			glPointSize(10);
+			glBegin(GL_POINTS);
+			glColor3f(0.9, 0.1, 0.1);
+			glVertex3d(generalPurpousePoint001.x(), generalPurpousePoint001.y(), generalPurpousePoint001.z());
+			glColor3f(0.1, 0.9, 0.1);
+			glVertex3d(generalPurpousePoint002.x(), generalPurpousePoint002.y(), generalPurpousePoint002.z());
+			
+			glColor3f(0.1, 0.1, 0.9);
+			for (int i = 0; i < jointsPoints.size(); i++)
+			{
+				glColor3d(jointsColors[i].x(), jointsColors[i].y(), jointsColors[i].z());
+				glVertex3d(jointsPoints[i].x(), jointsPoints[i].y(), jointsPoints[i].z());
+			}
+			glEnd();
+			
+			
 		}
 		else if(type == MANIP_ROT)
 		{

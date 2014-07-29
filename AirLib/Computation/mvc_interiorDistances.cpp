@@ -346,8 +346,8 @@ void mvcOpt_ext(Vector3d& point, MatrixXf& weights, int id,
 	}
 
 	// temporal data.
-	vector< Vector3f> unitVectors2(nopts);
-	vector< float> normas2(nopts);
+	vector< Vector3f> unitVectors2(nopts, Vector3f(0,0,0));
+	vector< float> normas2(nopts, 0);
 
 	for (int vertIt = 0; vertIt < graph.nodes.size(); vertIt++)
 	{
@@ -417,7 +417,7 @@ void mvcOpt_ext(Vector3d& point, MatrixXf& weights, int id,
 
 		c[0] = 2 * sin(h)*sin(h - O[0]) / (sin(O[1])*sin(O[2])) - 1.0;
 		s[0] = sign(determ)*sqrt(1 - c[0] * c[0]);
-			
+
 		c[1] = 2 * sin(h)*sin(h - O[1]) / (sin(O[2])*sin(O[0])) - 1.0;
 		s[1] = sign(determ)*sqrt(1 - c[1] * c[1]);	
 
