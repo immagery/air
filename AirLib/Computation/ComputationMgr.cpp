@@ -97,7 +97,8 @@ void ComputationMgr::updateAllComputations()
 			bExpansionComputationNeeded |= dn->expansionDirtyFlag && defNodeIsInside[dn->nodeId];
 
 			if (defNodeDirtyBit[dn->nodeId]) dirtyCount++;
-			bSmoothingComputationNeeded |= it->second->dirtySmooth || defNodeDirtyBit[dn->nodeId];
+
+			bSmoothingComputationNeeded |= (it->second->dirtySmooth && defNodeIsInside[dn->nodeId]) || bSegmentationComputationNeeded || bExpansionComputationNeeded;
 		}
 		it++;
 	}
@@ -166,7 +167,9 @@ void ComputationMgr::updateAllComputations()
 
 	// Testing calcular solo smoothing
 	if (bSmoothingComputationNeeded)
+	{
 		propagateHierarchicalSkinningOpt(*model, model->bind, rig->defRig, surfaceIdx);
+	}
 
 	// Compute Secondary weights ... by now compute all the sec. weights
 	//computeSecondaryWeightsOpt(model, model.bind, graph, distancesTemp, defNodeRef, computedDistances, surfaceIdx, false);
@@ -184,18 +187,23 @@ void ComputationMgr::updateAllComputations()
 				*/
 
 	clock_t fin = clock();
-	//printf("\n\n---------- TIEMPOS GENERALES -------------------------- \n");
-	//printf("A. Ver que hay de nuevo:  %f\n", ((double)(fin00 - ini00))/CLOCKS_PER_SEC*1000);
-	//printf("   >>> Bucle:  %f, mean: %f\n", ((double)(fin00_00 - ini00_00)) / CLOCKS_PER_SEC * 1000, ((double)(fin00_00 - ini00_00)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
-	//printf("		>>> Bucle in0 :  %f\n", ((double)(fin00_00_00 - ini00_00_00)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
-	//printf("		>>> Bucle in1 :  %f\n", ((double)(fin00_00_01 - ini00_00_01)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
-	//printf("		>>> Bucle in2 :  %f\n", ((double)(fin00_00_02 - ini00_00_02)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
-	//printf("		>>> Bucle in3 :  %f\n", ((double)(fin00_00_03 - ini00_00_03)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
-	//printf("   >>> 2o Bucle:  %f, mean: %f\n", ((double)(fin00_01 - ini00_01)) / CLOCKS_PER_SEC * 1000, ((double)(fin00_01 - ini00_01)) / CLOCKS_PER_SEC * 1000 / rig->defRig.defGroupsRef.size());
-	//printf("B. Inicializar datos acordemente:  %f\n", ((double)(fin01 - ini01)) / CLOCKS_PER_SEC * 1000);
-	//printf("C. El calculo propiamente: %f\n", ((double)(fin02 - ini02)) / CLOCKS_PER_SEC * 1000);
-	//printf("D. Limpieza: %f\n", ((double)(fin03 - ini03)) / CLOCKS_PER_SEC * 1000);
-	printf("\n TOTAL: %f\n", ((double)(fin - ini)) / CLOCKS_PER_SEC * 1000);
-	//printf("------------------------------------------------------------");
+	if (VERBOSE_PROCESS)
+	{
+		printf("\n\n---------- TIEMPOS GENERALES -------------------------- \n");
+		printf("PIEZA: %d\n", surfaceIdx);
+		
+		//printf("A. Ver que hay de nuevo:  %f\n", ((double)(fin00 - ini00))/CLOCKS_PER_SEC*1000);
+		//printf("   >>> Bucle:  %f, mean: %f\n", ((double)(fin00_00 - ini00_00)) / CLOCKS_PER_SEC * 1000, ((double)(fin00_00 - ini00_00)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
+		//printf("		>>> Bucle in0 :  %f\n", ((double)(fin00_00_00 - ini00_00_00)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
+		//printf("		>>> Bucle in1 :  %f\n", ((double)(fin00_00_01 - ini00_00_01)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
+		//printf("		>>> Bucle in2 :  %f\n", ((double)(fin00_00_02 - ini00_00_02)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
+		//printf("		>>> Bucle in3 :  %f\n", ((double)(fin00_00_03 - ini00_00_03)) / CLOCKS_PER_SEC * 1000 / defNodesTotalSize);
+		//printf("   >>> 2o Bucle:  %f, mean: %f\n", ((double)(fin00_01 - ini00_01)) / CLOCKS_PER_SEC * 1000, ((double)(fin00_01 - ini00_01)) / CLOCKS_PER_SEC * 1000 / rig->defRig.defGroupsRef.size());
+		//printf("B. Inicializar datos acordemente:  %f\n", ((double)(fin01 - ini01)) / CLOCKS_PER_SEC * 1000);
+		//printf("C. El calculo propiamente: %f\n", ((double)(fin02 - ini02)) / CLOCKS_PER_SEC * 1000);
+		//printf("D. Limpieza: %f\n", ((double)(fin03 - ini03)) / CLOCKS_PER_SEC * 1000);
+		printf("\n TOTAL: %f\n", ((double)(fin - ini)) / CLOCKS_PER_SEC * 1000);
+		printf("------------------------------------------------------------");
+	}
 
 }

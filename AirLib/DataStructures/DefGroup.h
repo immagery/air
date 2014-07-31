@@ -117,6 +117,8 @@ public:
 	virtual bool select(bool bToogle, unsigned int id);
 	virtual bool selectRec(bool bToogle);
 
+	virtual bool getBoundingBox(Vector3d& minAuxPt, Vector3d& maxAuxPt);
+
 	//void computeWorldPosRec(DefGroup* dg, DefGroup* fatherDg);
 
 };

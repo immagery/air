@@ -224,6 +224,20 @@ bool AirRig::update()
 		{
 			//defRig.roots[i]->transformation->computeWorldPos();
 			defRig.defGroups[i]->update();
+			defRig.defGroups[i]->dependentGroups.clear();
+		}
+
+		// Establecer las relaciones
+		for (int i = 0; i< defRig.defGroups.size(); i++)
+		{
+			//defRig.roots[i]->transformation->computeWorldPos();
+			defRig.defGroups[i]->update();
+
+			for (int j = 0; j < defRig.defGroups[i]->relatedGroups.size(); j++)
+			{
+				DefGroup* child = defRig.defGroups[i]->relatedGroups[j];
+				child->dependentGroups.push_back(defRig.defGroups[i]);
+			}
 		}
 
 		//Reconstruimos la lista de nodos.
@@ -390,6 +404,8 @@ bool updateDefNodesFromStick(DefGroup* group )
 		cleanDeformers.push_back(i);
 	}
 
+	//printf("Node:%d -> subdivision ratio:%f\n", group->nodeId, group->subdivisionRatio);
+
 	// We propose new defNodes for each branch
 	vector<DefNode> deformersProposal;
 	for(int i = 0; i < group->relatedGroups.size(); i++)
@@ -422,6 +438,7 @@ bool updateDefNodesFromStick(DefGroup* group )
 		group->deformers[cleanDeformers[i]].copyKeyInfoFrom(deformersProposal[i]);
 		group->deformers[cleanDeformers[i]].freeNode = false;
 		group->deformers[cleanDeformers[i]].segmentationDirtyFlag = true;
+		group->deformers[cleanDeformers[i]].relPos = group->deformers[cleanDeformers[i]].pos - jt->translation;
 	}
 
 	for(int i = 0; i < jt->getChildCount(); i++)
@@ -613,6 +630,7 @@ int subdivideStick_FPMethod(Vector3d origen, Vector3d fin, int defGorupIdx, int 
 int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefGorupIdx,
 				   vector< DefNode >& nodePoints, float subdivisionRatio, bool noNewId)
 {
+
 	//float subdivisionRatio = subdivisionRatio_DEF;
 	//Vector3d origen =  parent->getWorldPosition();
 	//Vector3d fin = child->getWorldPosition();
@@ -621,8 +639,11 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 	double longitud= (float)((fin-origen).norm());
 	double endChop = longitud*endChop_DEF;
 
-	if(longitud == 0)
+	if (longitud == 0)
+	{
+		//printf("No subdivide\n");
 		return 0;
+	}
 
 	Vector3d dir = (fin-origen)/longitud;
 	longitud = longitud - endChop;
@@ -659,6 +680,8 @@ int subdivideStick(Vector3d origen, Vector3d fin, int defGorupIdx, int childDefG
 			fflush(0);
 		}
 	}
+
+	//printf("Subdivide elements: %d of ratio %f\n", numDivisions+1, subdivisionRatio);
 
 	return numDivisions+1;
 }

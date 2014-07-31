@@ -1591,7 +1591,7 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 	for(int deformerId = 0; deformerId < deformers.size(); deformerId++ )
 	{
 		DefNode* def = deformers[deformerId];
-		if (dirtyDeformers[deformers[deformerId]->nodeId] && defNodeisInside[def->nodeId]/*!defNodeisInside[def->nodeId]*/)
+		if (dirtyDeformers[def->nodeId] && defNodeisInside[def->nodeId]/*!defNodeisInside[def->nodeId]*/)
 		{
 			float expansion = def->expansion;
 			float precompDist = precompDistancesMap[def->nodeId];
@@ -1611,6 +1611,12 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 				{
 					PointData& pd = bd->pointData[surfGraph.nodes[pointId]->id];
 					float nd = newDistances[pointId];
+
+					if (nd < 0)
+					{
+						//printf("\n\n\n\n\nUna distancia negativa... no es normal!\n\n\n\n\n");
+						continue;
+					}
 
 					if (pd.segmentId < 0 || nd < pd.segmentDistance)
 					{
@@ -1678,6 +1684,12 @@ void segmentModelFromDeformersOpt(  Modelo& model,
 			}
 
 			distance = tempDistance.minCoeff(&newSegmentId);
+
+			if (distance < 0)
+			{
+				//printf("\n\n\n\n\nUna distancia negativa... no es normal!\n\n\n\n\n\n");
+				continue;
+			}
 
 			if(newSegmentId >= 0)
 			{

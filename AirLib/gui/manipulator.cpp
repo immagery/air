@@ -45,7 +45,7 @@ manipulator::manipulator()
 
 	projectedPoint = Vector3d(0,0,0);
 
-	mode = TM_HIERARCHY;
+	mode = TM_SINGLE;
 }
 
 
@@ -530,13 +530,13 @@ void manipulator::drawFuncNames()
 		glEnd();
 		glPopName();
 
-		glLineWidth(1.0);
+		glLineWidth(1);
 
 		glEnable(GL_LIGHTING);
 	}
 	else if(type == MANIP_ROT)
 	{
-		glLineWidth(8);
+		glLineWidth(6);
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
 		//glColor3f(1.0,0,0);
@@ -615,7 +615,7 @@ void manipulator::drawFunc()
 
 		int tempSize = (int)ceil(size);
 
-		glPointSize(tempSize);
+		glPointSize(3);
 		glBegin(GL_POINTS);
 		glColor3f(0.5,0.5,0.5);
 		glVertex3d(0,0,0);
@@ -626,25 +626,28 @@ void manipulator::drawFunc()
 		if(type == MANIP_MOVE)
 		{
 			glPointSize(1);
-			glLineWidth(1);
 			glBegin(GL_LINES);
 			glColor3f(0.5,0.5,0.5);
 			glVertex3d(projectedPoint2.x(),projectedPoint2.y(),projectedPoint2.z());
 			glVertex3d(selectedPoint.x(),selectedPoint.y(),selectedPoint.z());
 			glEnd();
 
+			/*
 			glPointSize(tempSize*8);
 			glBegin(GL_POINTS);
 			glColor3f(0.9,0.5,0.5);
 			glVertex3d(projectedPoint2.x(),projectedPoint2.y(),projectedPoint2.z());
 			glColor3f(0.9,0.5,0.9);
 			glVertex3d(selectedPoint.x(),selectedPoint.y(),selectedPoint.z());
+			*/
+
+
 			//glColor3f(0.5,0.5,0.9);
 			//glVertex3d(projectedPoint.x(),projectedPoint.y(),projectedPoint.z());
-			glEnd();
+			//glEnd();
 			
 			 // Analisis porpouse
-			glPointSize(10);
+			/*glPointSize(10);
 			glBegin(GL_POINTS);
 			glColor3f(0.9, 0.1, 0.1);
 			glVertex3d(generalPurpousePoint001.x(), generalPurpousePoint001.y(), generalPurpousePoint001.z());
@@ -658,6 +661,7 @@ void manipulator::drawFunc()
 				glVertex3d(jointsPoints[i].x(), jointsPoints[i].y(), jointsPoints[i].z());
 			}
 			glEnd();
+			*/
 			
 			
 		}
@@ -675,7 +679,7 @@ void manipulator::drawFunc()
 				int parar = 0;
 
 
-			glPointSize(tempSize*2);
+			glPointSize(6);
 			glDisable(GL_LIGHTING);
 			glBegin(GL_LINES);
 			glColor3f(0.7,0.7,0.7);
@@ -719,12 +723,11 @@ void manipulator::drawFunc()
 	else if(type == MANIP_MOVE)
 	{
 		glDisable(GL_LIGHTING);
-		glLineWidth(tempSize);
 		
 		if(axis== AXIS_X)
-			glLineWidth(5);
-		else
 			glLineWidth(3);
+		else
+			glLineWidth(1);
 
 		glBegin(GL_LINES);
 		glColor3f(1.0,0,0);
@@ -733,9 +736,9 @@ void manipulator::drawFunc()
 		glEnd();
 
 		if(axis== AXIS_Y)
-			glLineWidth(5);
-		else
 			glLineWidth(3);
+		else
+			glLineWidth(1);
 
 		glBegin(GL_LINES);
 		glColor3f(0,1.0,0);
@@ -744,9 +747,9 @@ void manipulator::drawFunc()
 		glEnd();
 
 		if(axis== AXIS_Z)
-			glLineWidth(5);
-		else
 			glLineWidth(3);
+		else
+			glLineWidth(1);
 
 		glBegin(GL_LINES);
 		glColor3f(0,0,1.0);
@@ -755,9 +758,9 @@ void manipulator::drawFunc()
 		glEnd();
 
 		if(axis== AXIS_VIEW)
-			glLineWidth(5);
-		else
 			glLineWidth(3);
+		else
+			glLineWidth(1);
 
 		glColor3f(1.0, 1.0, 1.0);
 		GLUquadricObj* quadric;
@@ -766,13 +769,13 @@ void manipulator::drawFunc()
 		gluSphere(quadric, size/5.0, 36, 18);
 		gluDeleteQuadric(quadric);
 
-		glPointSize(8);
+		glPointSize(5);
 		glBegin(GL_POINTS);
 		glColor3f(1,1,0);
 		glVertex3d(0,0,0);
 		glEnd();
 
-		glLineWidth(1.0);
+		glLineWidth(1);
 
 		/*
 		glPointSize(3);
@@ -790,9 +793,9 @@ void manipulator::drawFunc()
 	{
 
 		if(axis== AXIS_X)
-			glLineWidth(tempSize);
+			glLineWidth(2);
 		else
-			glLineWidth(tempSize*2);
+			glLineWidth(4);
 
 		glDisable(GL_LIGHTING);
 		glPushMatrix();
@@ -800,9 +803,9 @@ void manipulator::drawFunc()
 		drawOpaqueCircle(CURVE_RES, size);
 
 		if(axis== AXIS_Z)
-			glLineWidth(tempSize);
+			glLineWidth(2);
 		else
-			glLineWidth(tempSize*2);
+			glLineWidth(4);
 
 		glRotatef(90, 0,1,0); // rotar en y
 		glColor3f(0,0.0,1.0);
@@ -810,9 +813,9 @@ void manipulator::drawFunc()
 		glPopMatrix();
 
 		if(axis== AXIS_Y)
-			glLineWidth(tempSize);
+			glLineWidth(2);
 		else
-			glLineWidth(tempSize*2);
+			glLineWidth(4);
 
 		glPushMatrix();
 		glColor3f(0,1.0,0.0); // rotar en x
@@ -820,6 +823,8 @@ void manipulator::drawFunc()
 		drawOpaqueCircle(CURVE_RES, size);
 		glPopMatrix();
 		glEnable(GL_LIGHTING);
+
+		glLineWidth(1);
 	}
 	else if(type == MANIP_SCL)
 	{

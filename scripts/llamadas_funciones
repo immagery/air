@@ -26,3 +26,6 @@ ioAir.subdivideSkeleton(desiredSeparation=4)
 
 ioAir.exportSkeletonNodes(filename="D:\\phd_dev\\Data\\models\\cilinder2_interior_points.txt")
 ioAir.exportSkeletonHierarchy( filename = "C:\\Users\\chus\\Documents\\dev\\Data\\models\\010_snake_files\\snake_skeleton.txt")
+
+ioAir.exportSkeletonHierarchy( filename="C:\\dev\\DATA\\models\\040_dragon_files\\dragon_skeleton.txt")
+ioAir.exportOFFMesh(filename="C:\\dev\\DATA\\models\\040_dragon_files\\dragon.off")

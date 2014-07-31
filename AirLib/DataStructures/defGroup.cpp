@@ -75,6 +75,39 @@ bool DefGroup::selectRec(bool bToogle)
 	return true;
 }
 
+bool DefGroup::getBoundingBox(Vector3d& minAuxPt, Vector3d& maxAuxPt)
+{
+	minAuxPt = transformation->worldPosition;
+	maxAuxPt = transformation->worldPosition;
+
+	for (int i = 0; i < dependentGroups.size(); i++)
+	{
+		Vector3d np = dependentGroups[i]->transformation->worldPosition;
+		minAuxPt.x() = min(minAuxPt.x(), np.x()); 
+		minAuxPt.y() = min(minAuxPt.y(), np.y());
+		minAuxPt.z() = min(minAuxPt.z(), np.z());
+
+		maxAuxPt.x() = max(maxAuxPt.x(), np.x());
+		maxAuxPt.y() = max(maxAuxPt.y(), np.y());
+		maxAuxPt.z() = max(maxAuxPt.z(), np.z());
+	}
+
+	for (int i = 0; i < relatedGroups.size(); i++)
+	{
+		Vector3d np = relatedGroups[i]->transformation->worldPosition;
+		minAuxPt.x() = min(minAuxPt.x(), np.x());
+		minAuxPt.y() = min(minAuxPt.y(), np.y());
+		minAuxPt.z() = min(minAuxPt.z(), np.z());
+
+		maxAuxPt.x() = max(maxAuxPt.x(), np.x());
+		maxAuxPt.y() = max(maxAuxPt.y(), np.y());
+		maxAuxPt.z() = max(maxAuxPt.z(), np.z());
+	}
+
+	return true;
+
+}
+
 bool DefGroup::update()
 {
     if(!dirtyFlag)
@@ -94,17 +127,6 @@ bool DefGroup::update()
 			//computeWorldPosNonRoll(this, NULL);
 			computeWorldPos(this, NULL);
 		}
-
-		/*
-		if(dirtyTransformation)
-		{
-			// En este caso tengo que actualizar tambien el padre.
-			for(int i = 0; i< dependentGroups.size(); i++)
-			{
-				updateDefNodesFromStick(dependentGroups[i]);
-			}
-		}
-		*/
 
 		// Reconstruir el esquema de deformadores.
 		if(type == DEF_STICK && AirRig::mode != MODE_ANIM)
@@ -551,9 +573,13 @@ void DefGroup::computeWorldPos(DefGroup* dg, DefGroup* father)
 		jt->twist.y() = quatAxis.y();
 		jt->twist.z() = quatAxis.z();
 
-		Vector3d referencePoint = fatherJt->rotation.inverse()._transformVector(jt->translation - fatherJt->translation);
 		Quaterniond redir;
-		jt->parentRot = fatherJt->rotation * redir.setFromTwoVectors(Vector3d(1,0,0),referencePoint);	
+		Vector3d referencePoint = fatherJt->rotation.inverse()._transformVector(jt->translation - fatherJt->translation);
+		
+		if (referencePoint.norm() == 0)
+			jt->parentRot = fatherJt->parentRot;
+		else
+			jt->parentRot = fatherJt->rotation * redir.setFromTwoVectors(Vector3d(1, 0, 0), referencePoint);
 
 	}
 	
