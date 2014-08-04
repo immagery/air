@@ -2202,7 +2202,7 @@ void computeNodesOptimized( DefGraph& graph,
 
 	}
 
-	printf("DefNodes to update: %d \n", defNodesToUpdate.size());
+	//printf("DefNodes to update: %d \n", defNodesToUpdate.size());
 
 	int modelPoints = model.bind->surfaces[surfaceIdx].nodes.size();
 	vector<PointStr> vertexes(modelPoints);
